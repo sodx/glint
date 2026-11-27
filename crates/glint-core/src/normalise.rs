@@ -1,21 +1,35 @@
+use std::sync::Arc;
+
 use chrono::{DateTime, Utc};
 use glint_protocol::{Envelope, IncomingEnvelope, PROTOCOL_VERSION};
 use serde_json::Value;
 use ulid::Generator;
 
 use crate::project::{ProjectResolver, folder_name};
+use crate::redact::Redactor;
 
 /// Fills in what a client left out. Server-assigned ids are monotonic ULIDs, so they sort
-/// in arrival order.
-#[derive(Default)]
+/// in arrival order. Secrets are redacted here, so nothing downstream ever sees them.
 pub struct Normaliser {
     ids: Generator,
     projects: ProjectResolver,
+    redactor: Arc<Redactor>,
+}
+
+impl Default for Normaliser {
+    fn default() -> Self {
+        Self { ids: Generator::default(), projects: ProjectResolver::default(), redactor: Redactor::shared_default() }
+    }
 }
 
 impl Normaliser {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Replaces the redaction rules for the events that follow.
+    pub fn set_redactor(&mut self, r: Arc<Redactor>) {
+        self.redactor = r;
     }
 
     pub fn normalise(&mut self, mut e: IncomingEnvelope, now: DateTime<Utc>) -> Envelope {
@@ -68,6 +82,11 @@ impl Normaliser {
             .or_else(|| resolved.map(|r| r.project))
             .or_else(|| e.origin.cwd.as_deref().and_then(folder_name))
             .unwrap_or_else(|| "default".to_owned());
+        // `meta.redacted` tells the window how many values were hidden.
+        let hidden = self.redactor.redact(&e.kind, &mut e.payload, &mut e.meta, &mut e.origin);
+        if hidden > 0 {
+            e.meta.extra.insert("redacted".to_owned(), Value::from(hidden));
+        }
         Envelope {
             v: PROTOCOL_VERSION,
             id,
@@ -134,6 +153,19 @@ mod tests {
 
     fn incoming(json: &str) -> IncomingEnvelope {
         parse_body(json.as_bytes(), BodyFormat::Json).unwrap().remove(0).unwrap()
+    }
+
+    #[test]
+    fn redacts_secrets_and_counts_them() {
+        let mut n = Normaliser::new();
+        let e = n.normalise(incoming(r#"{"kind":"core.value","payload":{"password":"hunter2","key":"sk-ant-api03-abcdefghijklmnopqrstuvwxyz","n":1}}"#), Utc::now());
+        assert_eq!(e.payload["password"], "[redacted]");
+        assert_eq!(e.payload["key"], "sk-ant-api03-…[redacted]");
+        assert_eq!(e.meta.extra["redacted"], 2);
+        n.set_redactor(Arc::new(Redactor::new(&crate::RedactConfig { enabled: false, ..Default::default() }).unwrap()));
+        let e = n.normalise(incoming(r#"{"kind":"core.value","payload":{"password":"hunter2"}}"#), Utc::now());
+        assert_eq!(e.payload["password"], "hunter2");
+        assert!(!e.meta.extra.contains_key("redacted"));
     }
 
     #[test]

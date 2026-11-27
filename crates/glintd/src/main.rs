@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use glint_core::config::{KEYS, Settings};
-use glint_core::{Hub, HubConfig};
+use glint_core::{Hub, HubConfig, Redactor};
 use glint_store_sqlite::SqliteStore;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -48,7 +48,11 @@ async fn main() -> Result<()> {
 
     let store = Arc::new(SqliteStore::open(&db).with_context(|| format!("opening {}", db.display()))?);
     let (hub, writer) = Hub::start(store.clone(), HubConfig::default());
-    let admin = Arc::new(Admin { store: store.clone(), settings: RwLock::new(settings.clone()), from_env, db: db.display().to_string() });
+    hub.set_redactor(redactor(&settings));
+    if !settings.redact {
+        tracing::warn!("secrets redaction is off: passwords and tokens in events are stored as sent");
+    }
+    let admin = Arc::new(Admin { store: store.clone(), hub: hub.clone(), settings: RwLock::new(settings.clone()), from_env, db: db.display().to_string() });
     glint_server::set_default_editor(Some(settings.editor.clone()));
 
     // Retention: shortly after start, then every 10 minutes, with the settings of the moment.
@@ -188,10 +192,21 @@ fn trim_log() {
     }
 }
 
+/// The redaction rules the settings ask for. A broken extra pattern (hand-edited file or
+/// environment) is dropped with a warning; the built-in rules still run.
+fn redactor(s: &Settings) -> Arc<Redactor> {
+    let cfg = s.redaction();
+    Arc::new(Redactor::new(&cfg).unwrap_or_else(|e| {
+        tracing::warn!(%e, "ignoring the extra redaction patterns");
+        Redactor::new(&glint_core::RedactConfig { patterns: Vec::new(), ..cfg }).unwrap_or_default()
+    }))
+}
+
 /// What the Settings page sees and changes: settings applied live (retention, editor, agent
 /// switches) and saved to the config file; data stats, prune, delete all.
 struct Admin {
     store: Arc<SqliteStore>,
+    hub: Hub,
     settings: RwLock<Settings>,
     /// Keys an environment variable sets: shown, not editable.
     from_env: Vec<String>,
@@ -254,6 +269,7 @@ impl glint_server::Admin for Admin {
         }
         file_view.save()?;
         glint_server::set_default_editor(Some(next.editor.clone()));
+        self.hub.set_redactor(redactor(&next));
         *self.settings.write().unwrap_or_else(|p| p.into_inner()) = next;
         tracing::info!(?changes, "settings changed");
         Ok(glint_server::Admin::settings(self))

@@ -459,7 +459,11 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .set-ctl { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .set-ctl input, .set-ctl select { font: 14px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px; min-width: 0; }
 .set-ctl input[type="number"] { width: 120px; font-variant-numeric: tabular-nums; }
-.set-ctl input:not([type]) { width: 100%; font-family: var(--mono); font-size: 13px; }
+.set-ctl input:not([type]), .set-ctl textarea { width: 100%; font-family: var(--mono); font-size: 13px; }
+.set-ctl textarea { color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px; resize: vertical; }
+.set-ctl textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.set-ctl textarea:disabled { opacity: .6; }
+.redacted-note { font-size: 12px; color: var(--muted); margin: 0; }
 .set-ctl input:focus-visible, .set-ctl select:focus-visible, .set-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .set-ctl input:disabled, .set-ctl select:disabled, .set-row input:disabled { opacity: .6; }
 .set-row.toggle { grid-template-columns: 1fr auto; }
@@ -570,6 +574,14 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <h2>Coding agents</h2>
       <div class="set-row toggle"><label for="s-agent_context"><b>Tell the agent about new failures</b><span class="set-help">With each of your prompts, Claude Code gets the failures that happened since the last one.</span></label><input type="checkbox" role="switch" id="s-agent_context" data-key="agent_context"></div>
       <div class="set-row toggle"><label for="s-stop_guard"><b>Don't let it finish while things fail</b><span class="set-help">If your programs failed during its turn, it is sent back once to fix them or explain why.</span></label><input type="checkbox" role="switch" id="s-stop_guard" data-key="stop_guard"></div>
+    </section>
+
+    <section class="set-group">
+      <h2>Secrets</h2>
+      <div class="set-row toggle"><label for="s-redact"><b>Hide secrets before storing</b><span class="set-help">Passwords, tokens, API keys, cookies and private keys in events are replaced with [redacted], so they never reach the database, this window or an agent. <button class="link" data-act="docs" data-hash="#d-secrets">What is caught</button></span></label><input type="checkbox" role="switch" id="s-redact" data-key="redact"></div>
+      <div class="set-row"><label for="s-redact_keys">Also secret</label><div class="set-ctl"><input id="s-redact_keys" data-key="redact_keys" data-list="," spellcheck="false" placeholder="ssn, pin"></div><p class="set-help">Key names, separated by commas. A key matches when its name ends with one, ignoring case, <code>_</code> and <code>-</code>.</p></div>
+      <div class="set-row"><label for="s-redact_patterns">Also hide text like</label><div class="set-ctl"><textarea id="s-redact_patterns" data-key="redact_patterns" data-list="\n" rows="2" spellcheck="false" placeholder="ACME-[0-9]{6}"></textarea></div><p class="set-help">Regular expressions, one per line. A group named <code>s</code>, as in <code>card (?P&lt;s&gt;\d+)</code>, hides only that part.</p></div>
+      <div class="set-row"><label for="s-redact_allow">Never hide</label><div class="set-ctl"><input id="s-redact_allow" data-key="redact_allow" data-list="," spellcheck="false" placeholder="csrf_token"></div><p class="set-help">Key names shown as sent, with everything inside them.</p></div>
     </section>
 
     <section class="set-group">
@@ -819,6 +831,17 @@ WordPress::queries();               // every query of this request as a table (n
 <p>Open Settings with <kbd>,</kbd> or the gear at the top. There you choose how long events are kept and how many, which editor files open in, and whether coding agents hear about failures. Changes apply right away and are saved to <code>~/.glint/config.toml</code>, which you can also edit by hand. An environment variable with the same name (<code>GLINT_KEEP_DAYS</code>, <code>GLINT_EDITOR</code>, …) wins over both, and Settings shows which ones are set that way.</p>
 <p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them, so it stays at a few hundred MB at most. <span id="docsData"></span></p>
 <p>Everything lives in <code>~/.glint</code>: the database, the settings, the SDK copies and <code>glintd.log</code>.</p>
+</section><section id="d-secrets">
+<h2>Secrets</h2>
+<p>glintd replaces passwords, tokens and keys in every event before it stores it, so they never reach the database, this window or a coding agent, which sends what it reads to a cloud model. It works the same for every SDK, Ray, OpenTelemetry and <code>glint pipe</code>. An event that had secrets says how many were replaced when you open it.</p>
+<p>Two things are caught:</p>
+<ul>
+<li>Values under keys that look secret, at any depth: names containing <code>password</code>, <code>passwd</code>, <code>secret</code>, <code>api_key</code>, <code>authorization</code>, <code>cookie</code>, <code>private_key</code>, <code>access_key</code>, <code>credentials</code>, and names ending in <code>token</code> or <code>dsn</code>. Case, <code>_</code>, <code>-</code> and dots are ignored, so <code>X-Api-Key</code> and <code>apiKey</code> count. Header pairs and SQL bindings count too: in <code>WHERE password = ?</code> the bound value is replaced.</li>
+<li>Well-known shapes anywhere in text: <code>Bearer</code> tokens, JWTs, AWS <code>AKIA</code> keys, GitHub <code>ghp_</code> and <code>github_pat_</code>, Slack <code>xox</code>, Stripe <code>sk_live_</code>, OpenAI and Anthropic <code>sk-</code>, Google <code>AIza</code>, PEM private keys, the password in <code>postgres://user:pass@host</code>, and <code>password=...</code> in log lines and SQL.</li>
+</ul>
+<p>A replaced value reads <code>[redacted]</code>; a known shape keeps its prefix, as in <code>sk-ant-…[redacted]</code>, so you can still tell which key was used. A URL keeps everything but its password.</p>
+<p>Left alone on purpose: counters and sizes such as <code>token_count</code>, <code>max_tokens</code> and <code>password_length</code>, pagination cursors such as <code>next_token</code>, and ids such as <code>session_id</code>, because a debugging session follows them from event to event. Add any of them to the extra keys if you want them hidden.</p>
+<p>In Settings, under Secrets, you can add key names, add regular expressions (a group named <code>s</code> hides only that part), list keys that are never hidden, or turn redaction off. The same settings are <code>redact</code>, <code>redact_keys</code>, <code>redact_patterns</code> and <code>redact_allow</code> in <code>~/.glint/config.toml</code>, or <code>GLINT_REDACT</code>, <code>GLINT_REDACT_KEYS</code> (comma separated), <code>GLINT_REDACT_PATTERNS</code> (one per line) and <code>GLINT_REDACT_ALLOW</code> in glintd's environment. Changes apply to events that arrive afterwards; stored events stay as they are.</p>
 </section><section id="d-langs">
 <h2>Adding a language</h2>
 <p>Any language can send events today with an HTTP POST (the HTTP tab above). A real SDK is small, because glintd does the hard parts: storage, search, projects, worktrees, the UI and MCP. An SDK needs to:</p>
@@ -1158,6 +1181,8 @@ function snippet(f) {
     const n = (sn.start || 1) + i; return `<li class="${n === f.line ? "hit" : ""}"><span>${n}</span><span>${esc(l)}</span></li>`; }).join("")}</ol></div>`;
 }
 function note(e) { return e.meta?.note ? `<div class="note"><svg class="i"><use href="#i-spark"/></svg><div>${esc(e.meta.note)} <span class="who">Agent note</span></div></div>` : ""; }
+/* glintd replaced secrets in this event before storing it (meta.redacted counts them). */
+function redactedNote(e) { const n = Number(e.meta?.redacted) || 0; return n ? `<p class="redacted-note">${n === 1 ? "1 secret was" : n + " secrets were"} replaced with [redacted] before storing. <button class="link" data-act="docs" data-hash="#d-secrets">Why</button></p>` : ""; }
 /* Where it came from, kept quiet: file:line (opens the editor), function, time. Language, SDK,
    host and worktree are in the tooltip. */
 function originLine(e) {
@@ -1168,7 +1193,7 @@ function originLine(e) {
   return `<div class="origin-line" title="${esc(tip)}">${file}${o.fn ? `<span>${esc(o.fn)}</span>` : ""}<span>${esc(clock(e.ts))}</span></div>`;
 }
 function pane(e) {
-  const p = e.payload || {}; let h = note(e);
+  const p = e.payload || {}; let h = note(e) + redactedNote(e);
   switch (e.kind) {
     case "core.value": h += (p.type ? `<div class="kv"><span>${esc(p.type)}</span></div>` : "") + tree(p.value !== undefined ? p.value : p); break;
     case "core.log": if (String(p.message || "").length > 80) h += `<div class="code">${esc(p.message)}</div>`; if (p.fields && Object.keys(p.fields).length) h += tree(p.fields); break;
@@ -1567,7 +1592,7 @@ document.addEventListener("click", ev => {
   if (act === "copyexc") return copyException(b.dataset.id);
   if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
-  if (act === "docs") return openDocs();
+  if (act === "docs") return openDocs(b.dataset.hash);
   if (act === "setup") return runSetup();
   if (act === "report") return sendReport();
   if (act === "setup-check") { S.setup = null; render(); return loadSetup().then(drawSetMac); }
@@ -1699,14 +1724,14 @@ function drawSettings() {
   ed.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
   document.querySelectorAll("#settings [data-key]").forEach(el => {
     const k = el.dataset.key, v = st[k];
-    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+    if (el.type === "checkbox") el.checked = !!v; else if (el.dataset.list) el.value = (v || []).join(el.dataset.list === "," ? ", " : "\n"); else el.value = v ?? "";
     const locked = i.from_env.includes(k); el.disabled = locked;
     const row = el.closest(".set-row"); row.querySelector(".locked")?.remove();
     if (locked) row.insertAdjacentHTML("beforeend", `<p class="locked">Set by ${esc(i.env_names[k])} in glintd's environment</p>`);
   });
 }
 async function saveSetting(el) {
-  const k = el.dataset.key, v = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value.trim();
+  const k = el.dataset.key, v = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.dataset.list ? el.value.split(el.dataset.list).map(x => x.trim()).filter(Boolean) : el.value.trim();
   const saved = $("setSaved"); saved.classList.remove("err");
   try {
     setInfo = await api("/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ [k]: v }) });
@@ -1758,8 +1783,8 @@ function openDocs(hash) {
   const lang = store.get("lang", null); if (lang) d.querySelectorAll(`[data-tab="${lang}"]`).forEach(b => selectTab(b, false));
   else d.querySelectorAll(".tabbed").forEach(t => selectTab(t.querySelector("[data-tab]"), false));
   api("/v1/info").then(i => { const x = i.data; if (x) $("docsData").textContent = `Right now: ${x.events} events, ${(x.bytes / 1048576).toFixed(1)} MB, kept ${x.keep_days} days / at most ${x.max_events} events.`; }).catch(() => {});
-  if (hash) d.querySelector(hash)?.scrollIntoView();
-  d.querySelector(".docs-nav a")?.focus();
+  d.querySelector(".docs-nav a")?.focus({ preventScroll: true });
+  if (hash) d.querySelector(hash)?.scrollIntoView({ behavior: "instant", block: "start" });
 }
 function closeDocs() { $("docs").hidden = true; document.body.classList.remove("docs-open"); }
 function selectTab(b, remember = true) {

@@ -90,6 +90,11 @@ impl Hub {
         (hub, writer)
     }
 
+    /// Replaces the secrets redaction rules for events normalised from now on.
+    pub fn set_redactor(&self, r: Arc<crate::Redactor>) {
+        self.inner.normaliser.lock().unwrap_or_else(|p| p.into_inner()).set_redactor(r);
+    }
+
     /// Completes envelopes with server defaults, in order.
     pub fn normalise(&self, incoming: Vec<IncomingEnvelope>) -> Vec<Envelope> {
         let now = Utc::now();

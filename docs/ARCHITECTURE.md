@@ -254,8 +254,11 @@ backends. Features:
 - Summarise run: "what happened in this request" for long feeds.
 - Prompt diff: highlights what changed between two `llm.call`s that behaved differently.
 
-Redaction (`glint-core::redact`) runs before anything is sent to a remote model. It applies secret patterns, a
-configurable field denylist, and a per-project "never send" switch.
+Redaction (`glint-core::redact`) already runs in the normaliser on every event, before it is stored: secret
+keys at any depth, SQL bindings of secret columns, and well-known token shapes in text are replaced, and
+`meta.redacted` counts them (settings `redact`, `redact_keys`, `redact_patterns`, `redact_allow`). So nothing
+stored, shown or handed to an agent over MCP holds them. Before anything is sent to a remote model, `glint-ai`
+adds a per-project "never send" switch on top.
 
 ### 8.3 LLM and agent observability
 

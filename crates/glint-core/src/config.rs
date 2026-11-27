@@ -2,8 +2,8 @@
 //! overridable by an environment variable. glintd reads them at start and changes them live from
 //! the Settings page (`PUT /v1/settings`); `glint hook` reads the agent switches from the file.
 //!
-//! The file is plain `key = value` lines (a TOML subset: numbers, booleans, "strings"; `#`
-//! comments), so it stays easy to edit by hand too.
+//! The file is plain `key = value` lines (a TOML subset: numbers, booleans, "strings", one-line
+//! arrays of strings; `#` comments), so it stays easy to edit by hand too.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -22,6 +22,14 @@ pub struct Settings {
     pub agent_context: bool,
     /// A coding agent that wants to stop while programs failed is sent back once.
     pub stop_guard: bool,
+    /// Secrets are replaced before events are stored (see `redact.rs`).
+    pub redact: bool,
+    /// Extra key names whose values are secret.
+    pub redact_keys: Vec<String>,
+    /// Extra regular expressions for secret values.
+    pub redact_patterns: Vec<String>,
+    /// Keys whose values are never redacted.
+    pub redact_allow: Vec<String>,
     pub addr: String,
     pub ray_addr: String,
     pub otlp_addr: String,
@@ -39,6 +47,10 @@ impl Default for Settings {
             editor: String::new(),
             agent_context: true,
             stop_guard: true,
+            redact: true,
+            redact_keys: Vec::new(),
+            redact_patterns: Vec::new(),
+            redact_allow: Vec::new(),
             addr: "127.0.0.1:23600".into(),
             ray_addr: "127.0.0.1:23517".into(),
             otlp_addr: "127.0.0.1:4318".into(),
@@ -55,6 +67,10 @@ pub const KEYS: &[(&str, &str, bool)] = &[
     ("editor", "GLINT_EDITOR", false),
     ("agent_context", "GLINT_AGENT_CONTEXT", false),
     ("stop_guard", "GLINT_STOP_GUARD", false),
+    ("redact", "GLINT_REDACT", false),
+    ("redact_keys", "GLINT_REDACT_KEYS", false),
+    ("redact_patterns", "GLINT_REDACT_PATTERNS", false),
+    ("redact_allow", "GLINT_REDACT_ALLOW", false),
     ("addr", "GLINT_ADDR", true),
     ("ray_addr", "GLINT_RAY_ADDR", true),
     ("otlp_addr", "GLINT_OTLP_ADDR", true),
@@ -78,10 +94,86 @@ pub fn expand(p: &str) -> PathBuf {
     }
 }
 
+/// The line without its `#` comment; a `#` inside quotes stays.
+fn strip_comment(l: &str) -> &str {
+    let mut quote = None;
+    let mut escaped = false;
+    for (i, c) in l.char_indices() {
+        match (quote, c) {
+            (Some('"'), '\\') if !escaped => {
+                escaped = true;
+                continue;
+            }
+            (Some(q), c) if c == q && !escaped => quote = None,
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '#') => return &l[..i],
+            _ => {}
+        }
+        escaped = false;
+    }
+    l
+}
+
+/// A list setting: a one-line array of strings (`["a", 'b\d']`, as the file and the Settings page
+/// write it), or plain text split at `sep` (handy in an environment variable).
+pub fn parse_list(v: &str, sep: char) -> Vec<String> {
+    let v = v.trim();
+    let Some(inner) = v.strip_prefix('[').and_then(|x| x.strip_suffix(']')) else {
+        return v.split(sep).map(str::trim).filter(|x| !x.is_empty()).map(str::to_owned).collect();
+    };
+    let mut out = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                let mut s = String::new();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '"' => break,
+                        '\\' => match chars.next() {
+                            Some('n') => s.push('\n'),
+                            Some('t') => s.push('\t'),
+                            Some(x) => s.push(x),
+                            None => {}
+                        },
+                        x => s.push(x),
+                    }
+                }
+                out.push(s);
+            }
+            '\'' => out.push(chars.by_ref().take_while(|&c| c != '\'').collect()),
+            c if c == ',' || c.is_whitespace() => {}
+            c => {
+                let mut s = String::from(c);
+                while let Some(&x) = chars.peek().filter(|&&x| x != ',') {
+                    s.push(x);
+                    chars.next();
+                }
+                out.push(s.trim().to_owned());
+            }
+        }
+    }
+    out.retain(|x| !x.trim().is_empty());
+    out
+}
+
+/// One string as the file writes it: a literal `'...'` unless it holds a quote.
+fn toml_str(s: &str) -> String {
+    if s.contains('\'') || s.contains('\n') {
+        format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"))
+    } else {
+        format!("'{s}'")
+    }
+}
+
+fn toml_list(items: &[String]) -> String {
+    format!("[{}]", items.iter().map(|s| toml_str(s)).collect::<Vec<_>>().join(", "))
+}
+
 pub fn parse(text: &str) -> HashMap<String, String> {
     text.lines()
         .filter_map(|l| {
-            let l = l.split_once('#').map_or(l, |(a, _)| if a.matches('"').count() % 2 == 0 { a } else { l }).trim();
+            let l = strip_comment(l).trim();
             let (k, v) = l.split_once('=')?;
             let v = v.trim();
             let v = v.strip_prefix('"').and_then(|x| x.strip_suffix('"')).unwrap_or(v);
@@ -139,6 +231,10 @@ impl Settings {
             "editor" => self.editor = v.trim().to_owned(),
             "agent_context" => self.agent_context = truthy(v).unwrap_or(self.agent_context),
             "stop_guard" => self.stop_guard = truthy(v).unwrap_or(self.stop_guard),
+            "redact" => self.redact = truthy(v).unwrap_or(self.redact),
+            "redact_keys" => self.redact_keys = parse_list(v, ','),
+            "redact_patterns" => self.redact_patterns = parse_list(v, '\n'),
+            "redact_allow" => self.redact_allow = parse_list(v, ','),
             "addr" => self.addr = v.trim().to_owned(),
             "ray_addr" => self.ray_addr = v.trim().to_owned(),
             "otlp_addr" => self.otlp_addr = v.trim().to_owned(),
@@ -160,7 +256,13 @@ impl Settings {
                 return Err(format!("{k}: expected host:port{}", if k == "addr" { "" } else { " or off" }));
             }
         }
+        crate::Redactor::new(&self.redaction())?;
         Ok(())
+    }
+
+    /// The redaction rules these settings ask for.
+    pub fn redaction(&self) -> crate::RedactConfig {
+        crate::RedactConfig { enabled: self.redact, keys: self.redact_keys.clone(), patterns: self.redact_patterns.clone(), allow: self.redact_allow.clone() }
     }
 
     /// The file, with a comment on each key.
@@ -181,6 +283,15 @@ impl Settings {
              # An agent that wants to finish while programs failed is sent back once.      GLINT_STOP_GUARD\n\
              stop_guard = {}\n\
              \n\
+             # Secrets (passwords, tokens, keys) are replaced before events are stored.    GLINT_REDACT\n\
+             redact = {}\n\
+             # More key names whose values are secret, e.g. [\"ssn\", \"pin\"].                GLINT_REDACT_KEYS\n\
+             redact_keys = {}\n\
+             # More regular expressions; a group named s marks the part to hide.          GLINT_REDACT_PATTERNS\n\
+             redact_patterns = {}\n\
+             # Keys never redacted, e.g. [\"csrf_token\"].                                  GLINT_REDACT_ALLOW\n\
+             redact_allow = {}\n\
+             \n\
              # These take effect when glintd restarts (glint install --only service).\n\
              addr = \"{}\"            # GLINT_ADDR\n\
              ray_addr = \"{}\"        # GLINT_RAY_ADDR   (\"off\" to disable)\n\
@@ -189,7 +300,8 @@ impl Settings {
              # bridge address (172.17.0.1:23600) rather than 0.0.0.0.             GLINT_REMOTE_ADDR\n\
              remote_addr = \"{}\"\n\
              db = \"{}\"         # GLINT_DB\n",
-            self.keep_days, self.max_events, self.editor, self.agent_context, self.stop_guard, self.addr, self.ray_addr, self.otlp_addr, self.remote_addr, self.db
+            self.keep_days, self.max_events, self.editor, self.agent_context, self.stop_guard, self.redact,
+            toml_list(&self.redact_keys), toml_list(&self.redact_patterns), toml_list(&self.redact_allow), self.addr, self.ray_addr, self.otlp_addr, self.remote_addr, self.db
         )
     }
 
@@ -211,7 +323,16 @@ mod tests {
 
     #[test]
     fn the_file_round_trips() {
-        let mut s = Settings { keep_days: 14, editor: "cursor".into(), stop_guard: false, remote_addr: "172.17.0.1:23600".into(), ..Settings::default() };
+        let mut s = Settings {
+            keep_days: 14,
+            editor: "cursor".into(),
+            stop_guard: false,
+            remote_addr: "172.17.0.1:23600".into(),
+            redact_keys: vec!["ssn".into(), "x-pin".into()],
+            redact_patterns: vec![r"card (?P<s>\d{4})".into(), r#"it's "#.into(), r"a#b\\".into()],
+            redact_allow: vec!["csrf_token".into()],
+            ..Settings::default()
+        };
         s.validate().unwrap();
         let back = parse(&s.to_file());
         let mut t = Settings::default();
@@ -221,6 +342,22 @@ mod tests {
         assert_eq!(s, t);
         s.max_events = 10;
         assert!(s.validate().is_err());
+        s.max_events = 0;
+        s.redact_patterns = vec!["(".into()];
+        assert!(s.validate().is_err());
+    }
+
+    #[test]
+    fn lists() {
+        assert_eq!(parse_list(r#"["a", 'b\d', "c\"q\\"]"#, ','), vec!["a", r"b\d", r#"c"q\"#]);
+        assert_eq!(parse_list(" ssn, pin ,", ','), vec!["ssn", "pin"]);
+        assert_eq!(parse_list("x\\d+\nACME-[0-9]+\n", '\n'), vec![r"x\d+", "ACME-[0-9]+"]);
+        assert_eq!(parse_list("[]", ','), Vec::<String>::new());
+        // As the Settings page sends it: JSON.
+        let mut s = Settings::default();
+        s.set("redact_patterns", &serde_json::json!([r"\bid-\d+"]).to_string());
+        assert_eq!(s.redact_patterns, vec![r"\bid-\d+"]);
+        assert_eq!(parse("p = ['a#b'] # c\n").get("p").map(String::as_str), Some("['a#b']"));
     }
 
     #[test]

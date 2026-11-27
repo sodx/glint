@@ -40,7 +40,8 @@
         "screen": { "type": "string" },
         "tags": { "type": "array", "items": { "type": "string" } },
         "size": { "enum": ["sm", "md", "lg"] },
-        "hidden": { "type": "boolean" }
+        "hidden": { "type": "boolean" },
+        "redacted": { "type": "integer", "minimum": 1, "description": "set by the server: secret values replaced before storing" }
       },
       "additionalProperties": true
     },
