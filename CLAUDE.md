@@ -12,7 +12,9 @@ Read before non-trivial work:
 ## Status
 
 M0 done: `glintd` ingests the native protocol, stores in SQLite + FTS5, streams over WebSocket and
-serves a single-file live-feed UI (`ui/index.html`, no build step yet; Vite + TS arrives with M1).
+serves the UI. The UI (`ui/index.html`, single file, no build step) follows PRODUCT.md principle 0
+"answer first": one status line (newest unseen failure, waiting pause, or All quiet), then the
+current run as one line per event. Design tokens are documented at the top of its CSS.
 Next: M1 in `docs/ROADMAP.md`.
 
 M1 in progress: Ray-compatible ingest on `:23517` (`docs/mappings/ray.md`) and the `glint` CLI

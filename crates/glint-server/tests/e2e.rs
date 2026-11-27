@@ -270,3 +270,24 @@ async fn claude_code_hooks_become_agent_events() {
     assert_eq!(http.post(format!("http://{addr}/v1/hooks/cursor")).json(&common).send().await.unwrap().status(), 404);
     assert_eq!(http.post(&url).body("nope").send().await.unwrap().status(), 400);
 }
+
+#[tokio::test]
+async fn runs_are_listed_newest_first() {
+    let addr = start().await;
+    let http = reqwest::Client::new();
+    http.post(format!("http://{addr}/v1/events"))
+        .json(&json!([
+            {"kind": "core.log", "payload": {"message": "a"}, "run": "r1", "project": "shop"},
+            {"kind": "core.exception", "payload": {"class": "E", "message": "boom"}, "run": "r2", "project": "shop"},
+            {"kind": "core.log", "payload": {"message": "b"}, "run": "r3", "project": "blog"}
+        ]))
+        .send()
+        .await
+        .unwrap();
+    let all: Value = http.get(format!("http://{addr}/v1/runs")).send().await.unwrap().json().await.unwrap();
+    let ids: Vec<_> = all["runs"].as_array().unwrap().iter().map(|r| r["run"].as_str().unwrap().to_owned()).collect();
+    assert_eq!(ids, ["r3", "r2", "r1"]);
+    let shop: Value = http.get(format!("http://{addr}/v1/runs?project=shop")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(shop["runs"][0]["errors"], 1);
+    assert_eq!(shop["runs"].as_array().unwrap().len(), 2);
+}

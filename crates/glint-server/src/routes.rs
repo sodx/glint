@@ -64,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(index))
         .route("/v1/info", get(info))
         .route("/v1/events", post(ingest).get(list))
+        .route("/v1/runs", get(runs))
         .route("/v1/events/{id}", get(one))
         .route("/v1/stream", get(stream))
         .route("/v1/hooks/{agent}", post(hook))
@@ -107,6 +108,20 @@ async fn ingest(State(hub): State<Hub>, headers: HeaderMap, body: Bytes) -> Resp
         Json(json!({ "accepted": ids.len(), "ids": ids, "rejected": decoded.rejected })),
     )
         .into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct RunsParams {
+    project: Option<String>,
+    limit: Option<usize>,
+}
+
+/// Most recently active runs, newest first (`docs/PROTOCOL.md` §7).
+async fn runs(State(hub): State<Hub>, QueryParams(p): QueryParams<RunsParams>) -> Response {
+    match hub.runs(p.project.filter(|s| !s.is_empty()), p.limit.unwrap_or(50).clamp(1, 500)).await {
+        Ok(runs) => Json(json!({ "runs": runs })).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }
 
 async fn list(State(hub): State<Hub>, QueryParams(q): QueryParams<Query>) -> Response {

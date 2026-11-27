@@ -140,7 +140,7 @@ renderers fetch `GET /v1/blobs/sha256:<hex>`.
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /v1/info` | server version, supported `v`, known kinds, enabled adapters |
-| `GET /v1/runs?project=&limit=` | recent runs |
+| `GET /v1/runs?project=&limit=` | recent runs, newest first: `{run, project, first, last, events, errors, last_id}` |
 | `GET /v1/events?run=&kind=&level=&q=&since=&limit=` | query |
 | `GET /v1/events/<id>` | one envelope |
 | `GET /v1/stream?filter=` (WebSocket) | live envelopes |
