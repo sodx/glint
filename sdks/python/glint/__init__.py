@@ -42,6 +42,8 @@ def _now() -> str:
 # Nesting: everything sent inside glint.measure(name, fn) has that measure as its parent, so a run
 # reads as a call tree. A ContextVar follows threads' own contexts and asyncio tasks.
 _PARENT: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("glint_parent", default=None)
+# Framework integrations give each request its own run (glint/_frameworks.py).
+_RUN: "contextvars.ContextVar[str]" = contextvars.ContextVar("glint_run", default=RUN)
 
 
 def _emit(kind: str, payload: Any, meta: Optional[Dict[str, Any]] = None, site: Optional[Dict[str, Any]] = None, event_id: Optional[str] = None) -> Optional[str]:
@@ -56,7 +58,7 @@ def _emit(kind: str, payload: Any, meta: Optional[Dict[str, Any]] = None, site: 
         envelope: Dict[str, Any] = {
             "id": event_id,
             "ts": _now(),
-            "run": RUN,
+            "run": _RUN.get(),
             "kind": kind,
             "payload": payload,
             "origin": _origin.origin(site),

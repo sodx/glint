@@ -93,6 +93,31 @@ final class Transport
      */
     private static array $scopes = [];
 
+    /**
+     * Framework integrations: everything sent from now on names $id as its parent (the request or
+     * job being handled), until popScope(). Pairs must nest.
+     */
+    public static function pushScope(string $id): void
+    {
+        self::$scopes[] = $id;
+    }
+
+    public static function popScope(): void
+    {
+        array_pop(self::$scopes);
+    }
+
+    /**
+     * Framework integrations: the run new events belong to (a queue worker starts one per job).
+     * Returns the previous run so it can be put back; null starts a fresh one on the next event.
+     */
+    public static function setRun(?string $run): ?string
+    {
+        $previous = self::$run;
+        self::$run = $run;
+        return $previous;
+    }
+
     /** Runs $fn with $id as the parent of everything it sends. */
     public static function within(string $id, callable $fn): mixed
     {
@@ -124,11 +149,11 @@ final class Transport
      *
      * @param array{file?: string, line?: int, fn?: string}|null $site
      */
-    public static function emitAt(string $kind, mixed $payload, array $meta = [], ?array $site = null): ?string
+    public static function emitAt(string $kind, mixed $payload, array $meta = [], ?array $site = null, ?string $fixedId = null): ?string
     {
         self::$at = $site;
         try {
-            return self::emit($kind, $payload, $meta);
+            return self::emit($kind, $payload, $meta, $fixedId);
         } finally {
             self::$at = null;
         }

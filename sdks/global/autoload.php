@@ -17,10 +17,12 @@ if (!function_exists('glint')) {
     require_once __DIR__ . '/src/helpers.php';
 }
 
-// WordPress, with no plugin: when this request is a WordPress one, register Glint's hooks before
-// WordPress loads (see src/WordPress.php). Other scripts only pay for two file checks.
+// Frameworks, with no plugin or package: when this script belongs to a WordPress site or a Laravel
+// app, Glint hooks in before it loads (see src/WordPress.php, src/Laravel.php). Other scripts only
+// pay for a few file checks.
 (static function (): void {
-    $dir = dirname((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    $script = (string) ($_SERVER['SCRIPT_FILENAME'] ?? '');
+    $dir = dirname($script !== '' && $script[0] !== '/' ? (string) realpath($script) : $script);
     for ($i = 0; $i < 3 && strlen($dir) > 1; $i++, $dir = dirname($dir)) {
         if (is_file($dir . '/wp-settings.php')) {
             try {
@@ -28,6 +30,23 @@ if (!function_exists('glint')) {
             } catch (\Throwable) {
             }
             return;
+        }
+        if (is_file($dir . '/artisan') && is_dir($dir . '/vendor/laravel/framework')) {
+            try {
+                \Glint\Laravel::preload($dir);
+            } catch (\Throwable) {
+            }
+            return;
+        }
+    }
+    // `php artisan serve` runs PHP's built-in server in public/ with a router script from vendor/.
+    if (PHP_SAPI === 'cli-server') {
+        $dir = dirname((string) getcwd());
+        if (is_file($dir . '/artisan') && is_dir($dir . '/vendor/laravel/framework')) {
+            try {
+                \Glint\Laravel::preload($dir);
+            } catch (\Throwable) {
+            }
         }
     }
 })();

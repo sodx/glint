@@ -207,11 +207,17 @@ try {
   // not Node
 }
 
+/* The store is { run?, parent? }: framework integrations (src/frameworks.js) give each request a
+   run of its own and a root event to nest under. */
 const stack = [];
-const currentParent = () => (scope ? scope.getStore() : stack[stack.length - 1]);
+const current = () => (scope ? scope.getStore() : stack[stack.length - 1]) || {};
+const currentParent = () => current().parent;
 function within(id, fn) {
-  if (scope) return scope.run(id, fn);
-  stack.push(id);
+  return withContext({ ...current(), parent: id }, fn);
+}
+function withContext(ctx, fn) {
+  if (scope) return scope.run(ctx, fn);
+  stack.push(ctx);
   try {
     return fn();
   } finally {
@@ -219,16 +225,23 @@ function within(id, fn) {
   }
 }
 
-function emit(kind, payload, meta, fixedId) {
+function emit(kind, payload, meta, fixedId, site) {
   if (!config.enabled) return null;
   try {
     const id = fixedId || ulid();
-    const e = { id, ts: new Date().toISOString(), run: RUN, kind, payload, origin: origin() };
+    const o = origin();
+    if (site) {
+      for (const k of ["file", "line", "col", "fn"]) delete o[k];
+      Object.assign(o, site);
+    }
+    const e = { id, ts: new Date().toISOString(), run: current().run || RUN, kind, payload, origin: o };
     const parent = currentParent();
     if (parent && parent !== id) e.parent = parent;
     if (meta && Object.keys(meta).length) e.meta = meta;
     if (config.project) e.project = config.project;
     enqueue(e);
+    const stats = current().stats;
+    if (stats) stats.events++; // a framework integration's request (src/frameworks.js)
     return id;
   } catch {
     return null; // never let a debugging aid break the program
@@ -389,6 +402,19 @@ glint.configure = (opts = {}) => {
   if (opts.url) config.url = opts.url;
   if (typeof opts.enabled === "boolean") config.enabled = opts.enabled;
   if (opts.project) config.project = opts.project;
+};
+
+/** For framework integrations (src/frameworks.js); not a public API. */
+export const internal = {
+  config,
+  ulid,
+  emit,
+  current,
+  withContext,
+  parseStack,
+  exceptionPayload,
+  encode,
+  SDK_PATH,
 };
 
 export default glint;
