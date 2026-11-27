@@ -7,7 +7,8 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use chrono::SecondsFormat;
+use chrono::{DateTime, SecondsFormat, Utc};
+use glint_core::agents::{Activity, EventRead, Failure};
 use glint_core::{Query, RunSummary, Store, StoreError};
 use glint_protocol::Envelope;
 use rusqlite::{Connection, OpenFlags, params_from_iter, types::Value as Sql};
@@ -30,7 +31,35 @@ CREATE INDEX IF NOT EXISTS events_run     ON events (run, seq);
 CREATE INDEX IF NOT EXISTS events_kind    ON events (kind, seq);
 CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
     USING fts5 (text, content = '', contentless_delete = 1, tokenize = 'unicode61');
+
+-- What coding agents did with Glint (glint_core::agents). Pruned with the events.
+CREATE TABLE IF NOT EXISTS agent_activity (
+    seq          INTEGER PRIMARY KEY,
+    ts           TEXT    NOT NULL,
+    agent        TEXT    NOT NULL,
+    session      TEXT,
+    project      TEXT,
+    action       TEXT    NOT NULL,
+    tool         TEXT,
+    duration_ms  INTEGER,
+    result_bytes INTEGER,
+    is_error     INTEGER NOT NULL DEFAULT 0,
+    error_events INTEGER NOT NULL DEFAULT 0,
+    detail       TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_activity_ts ON agent_activity (ts);
+-- The events each activity put in front of the agent.
+CREATE TABLE IF NOT EXISTS agent_reads (
+    activity INTEGER NOT NULL,
+    event_id TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_reads_event    ON agent_reads (event_id);
+CREATE INDEX IF NOT EXISTS agent_reads_activity ON agent_reads (activity);
 "#;
+
+/// A program failure: error level or worse, not bookkeeping, not an agent's own tool failure.
+const FAILURE: &str = "e.level >= 4 AND e.kind NOT IN ('core.update', 'ctl.resume')
+    AND COALESCE(json_extract(e.body, '$.origin.lang'), '') <> 'agent'";
 
 /// Most text indexed per event.
 const FTS_TEXT_MAX: usize = 64 * 1024;
@@ -134,6 +163,15 @@ impl SqliteStore {
             removed += ids.len() as u64;
         }
         let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        // Agent activity never outlives the events it is about.
+        if removed > 0 {
+            conn.execute_batch(
+                "DELETE FROM agent_reads WHERE activity IN (SELECT seq FROM agent_activity
+                     WHERE ts < COALESCE((SELECT min(ts) FROM events), '9999'));
+                 DELETE FROM agent_activity WHERE ts < COALESCE((SELECT min(ts) FROM events), '9999');",
+            )
+            .map_err(backend)?;
+        }
         // incremental_vacuum frees one page per step: it must be stepped to the end.
         {
             let mut st = conn.prepare("PRAGMA incremental_vacuum").map_err(backend)?;
@@ -291,6 +329,147 @@ impl Store for SqliteStore {
                 })
                 .map_err(backend)?;
             rows.collect::<Result<Vec<_>, _>>().map_err(backend)
+        })
+    }
+
+    fn record_activity(&self, activity: &[Activity]) -> Result<(), StoreError> {
+        let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction().map_err(backend)?;
+        {
+            let mut ins = tx
+                .prepare_cached(
+                    "INSERT INTO agent_activity (ts, agent, session, project, action, tool, duration_ms, result_bytes, is_error, detail)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                )
+                .map_err(backend)?;
+            let mut read = tx.prepare_cached("INSERT INTO agent_reads (activity, event_id) VALUES (?1, ?2)").map_err(backend)?;
+            let mut count = tx
+                .prepare_cached(&format!(
+                    "UPDATE agent_activity SET error_events = (SELECT count(*) FROM agent_reads r JOIN events e ON e.id = r.event_id
+                     WHERE r.activity = ?1 AND {FAILURE}) WHERE seq = ?1"
+                ))
+                .map_err(backend)?;
+            for a in activity {
+                ins.execute(rusqlite::params![
+                    a.ts.to_rfc3339_opts(SecondsFormat::Micros, true),
+                    a.agent,
+                    a.session,
+                    a.project,
+                    a.action,
+                    a.tool,
+                    a.duration_ms.and_then(|v| i64::try_from(v).ok()),
+                    a.result_bytes.and_then(|v| i64::try_from(v).ok()),
+                    a.is_error,
+                    (!a.detail.is_null()).then(|| a.detail.to_string()),
+                ])
+                .map_err(backend)?;
+                let seq = tx.last_insert_rowid();
+                for id in &a.events {
+                    read.execute(rusqlite::params![seq, id]).map_err(backend)?;
+                }
+                if !a.events.is_empty() {
+                    count.execute([seq]).map_err(backend)?;
+                }
+            }
+        }
+        tx.commit().map_err(backend)
+    }
+
+    fn activity_since(&self, since: DateTime<Utc>) -> Result<Vec<Activity>, StoreError> {
+        let since = since.to_rfc3339_opts(SecondsFormat::Micros, true);
+        self.read(|conn| {
+            let mut st = conn
+                .prepare_cached(
+                    "SELECT a.seq, a.ts, a.agent, a.session,
+                            COALESCE(a.project, (SELECT e.project FROM agent_reads r JOIN events e ON e.id = r.event_id
+                                                 WHERE r.activity = a.seq ORDER BY r.rowid LIMIT 1)),
+                            a.action, a.tool, a.duration_ms, a.result_bytes, a.is_error, a.error_events, a.detail
+                     FROM agent_activity a WHERE a.ts >= ?1 ORDER BY a.seq",
+                )
+                .map_err(backend)?;
+            let rows = st
+                .query_map([&since], |r| {
+                    let ts: String = r.get(1)?;
+                    let detail: Option<String> = r.get(11)?;
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        Activity {
+                            ts: DateTime::parse_from_rfc3339(&ts).map(|t| t.with_timezone(&Utc)).unwrap_or_default(),
+                            agent: r.get(2)?,
+                            session: r.get(3)?,
+                            project: r.get(4)?,
+                            action: r.get(5)?,
+                            tool: r.get(6)?,
+                            duration_ms: r.get::<_, Option<i64>>(7)?.and_then(|v| u64::try_from(v).ok()),
+                            result_bytes: r.get::<_, Option<i64>>(8)?.and_then(|v| u64::try_from(v).ok()),
+                            is_error: r.get(9)?,
+                            events: Vec::new(),
+                            error_events: r.get::<_, i64>(10)?.try_into().unwrap_or(0),
+                            detail: detail.and_then(|d| serde_json::from_str(&d).ok()).unwrap_or(Value::Null),
+                        },
+                    ))
+                })
+                .map_err(backend)?;
+            let mut out: Vec<(i64, Activity)> = rows.collect::<Result<_, _>>().map_err(backend)?;
+            let Some(first) = out.first().map(|(s, _)| *s) else { return Ok(Vec::new()) };
+            let mut st = conn
+                .prepare_cached("SELECT activity, event_id FROM agent_reads WHERE activity >= ?1 ORDER BY rowid")
+                .map_err(backend)?;
+            let reads = st.query_map([first], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).map_err(backend)?;
+            let index: std::collections::HashMap<i64, usize> = out.iter().enumerate().map(|(i, (s, _))| (*s, i)).collect();
+            for row in reads {
+                let (seq, id) = row.map_err(backend)?;
+                if let Some(i) = index.get(&seq) {
+                    out[*i].1.events.push(id);
+                }
+            }
+            Ok(out.into_iter().map(|(_, a)| a).collect())
+        })
+    }
+
+    fn failures_since(&self, since: DateTime<Utc>) -> Result<Vec<Failure>, StoreError> {
+        let since = since.to_rfc3339_opts(SecondsFormat::Micros, true);
+        self.read(|conn| {
+            let mut st = conn
+                .prepare_cached(&format!("SELECT e.id, e.ts, e.project FROM events e WHERE e.ts >= ?1 AND {FAILURE} ORDER BY e.seq"))
+                .map_err(backend)?;
+            let rows = st
+                .query_map([&since], |r| {
+                    let ts: String = r.get(1)?;
+                    Ok(Failure {
+                        id: r.get(0)?,
+                        ts: DateTime::parse_from_rfc3339(&ts).map(|t| t.with_timezone(&Utc)).unwrap_or_default(),
+                        project: r.get(2)?,
+                    })
+                })
+                .map_err(backend)?;
+            rows.collect::<Result<_, _>>().map_err(backend)
+        })
+    }
+
+    fn reads_in_run(&self, run: &str) -> Result<Vec<EventRead>, StoreError> {
+        self.read(|conn| {
+            let mut st = conn
+                .prepare_cached(
+                    "SELECT r.event_id, a.agent, min(a.ts),
+                            CASE WHEN a.action = 'mcp.call' THEN 'mcp' ELSE 'hook' END AS via
+                     FROM events e JOIN agent_reads r ON r.event_id = e.id JOIN agent_activity a ON a.seq = r.activity
+                     WHERE e.run = ?1 AND a.action IN ('mcp.call', 'hook.context', 'hook.stop_guard')
+                     GROUP BY r.event_id, a.agent, via",
+                )
+                .map_err(backend)?;
+            let rows = st
+                .query_map([run], |r| {
+                    let ts: String = r.get(2)?;
+                    Ok(EventRead {
+                        event: r.get(0)?,
+                        agent: r.get(1)?,
+                        ts: DateTime::parse_from_rfc3339(&ts).map(|t| t.with_timezone(&Utc)).unwrap_or_default(),
+                        via: r.get(3)?,
+                    })
+                })
+                .map_err(backend)?;
+            rows.collect::<Result<_, _>>().map_err(backend)
         })
     }
 
@@ -488,6 +667,37 @@ mod tests {
         assert_eq!(s.query(&Query::default()).unwrap().len(), 1);
         drop(s);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn agent_activity_round_trips_counts_failures_and_goes_with_the_events() {
+        let s = sample();
+        let all = s.query(&Query::default()).unwrap();
+        let (log, exc) = (all[0].id.clone(), all[2].id.clone());
+        let mut a = Activity::new("claude-code", glint_core::agents::MCP_CALL);
+        a.tool = Some("glint_events".into());
+        a.events = vec![log.clone(), exc.clone()];
+        a.duration_ms = Some(12);
+        let mut b = Activity::new("claude-code", glint_core::agents::HOOK_CONTEXT);
+        b.events = vec![exc.clone()];
+        b.detail = serde_json::json!({ "failures": 1 });
+        s.record_activity(&[a, b]).unwrap();
+
+        let since = chrono::Utc::now() - chrono::Duration::hours(1);
+        let got = s.activity_since(since).unwrap();
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].events, [log.clone(), exc.clone()]);
+        assert_eq!(got[0].error_events, 1);
+        assert_eq!(got[0].project.as_deref(), Some("shop"), "from the first event read");
+        assert_eq!(got[1].detail["failures"], 1);
+        let fails = s.failures_since(since).unwrap();
+        assert_eq!(fails.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(), [exc.as_str()]);
+        let reads = s.reads_in_run("r2").unwrap();
+        assert_eq!(reads.len(), 2, "once over MCP, once by a hook");
+        assert!(reads.iter().all(|r| r.event == exc));
+
+        s.clear().unwrap();
+        assert!(s.activity_since(since).unwrap().is_empty());
     }
 
     #[test]

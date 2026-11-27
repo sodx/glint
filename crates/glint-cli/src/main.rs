@@ -6,6 +6,7 @@
 //! echo '{"sql":"select 1"}' | glint send --kind sql.query
 //! npm run dev 2>&1 | glint pipe --label web
 //! glint conformance -- node sdks/js/conformance.mjs
+//! glint stats                            # what coding agents did with Glint this week
 //! glint install                          # glintd at login + glint() in PHP, Python, Node
 //! ```
 
@@ -19,6 +20,7 @@ mod lines;
 mod mcp;
 mod pipe;
 mod send;
+mod stats;
 
 use std::process::ExitCode;
 
@@ -145,6 +147,22 @@ enum Command {
         /// A command to run first; only what happens from then on counts.
         #[arg(last = true)]
         command: Vec<String>,
+    },
+    /// What coding agents did with Glint: who connected, tool calls by tool, hook actions, and
+    /// how soon failures reached an agent. Recorded locally by glintd; nothing leaves this machine.
+    Stats {
+        /// How many days back.
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Only this project.
+        #[arg(short, long)]
+        project: Option<String>,
+        /// A failure counts as looked at in time when an agent read it within this many minutes.
+        #[arg(long, default_value_t = 10)]
+        within: u64,
+        /// Print glintd's JSON instead.
+        #[arg(long)]
+        json: bool,
     },
     /// Check a language SDK against the conformance suite (spec/conformance/).
     ///
@@ -299,6 +317,7 @@ fn main() -> ExitCode {
                 }
             };
         }
+        Command::Stats { days, project, within, json } => stats::run(&cli.url, &stats::Args { days, project, within, json }),
         Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };
     match result {

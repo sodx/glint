@@ -1,0 +1,5 @@
+{
+  "c1": { "items": [{ "sku": "mug", "price": { "amount": 8, "currency": "EUR" }, "qty": 2 }] },
+  "c2": { "items": [{ "sku": "tea", "price": { "amount": 4.5, "currency": "EUR" }, "qty": 3 }], "shipping": { "amount": 3.9 } },
+  "c3": { "items": [{ "sku": "pot", "price": 21, "qty": 1 }, { "sku": "tea", "price": { "amount": 4.5, "currency": "EUR" }, "qty": 1 }] }
+}

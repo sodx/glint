@@ -132,6 +132,10 @@ continues.
 `glint_pauses`, `glint_resume`, `glint_annotate`, `glint_show`, `glint_clear`. `glint mcp` serves
 the same tools over stdio. Agent annotations are `core.update` events with `meta.note`.
 
+The answer to `initialize` carries an `Mcp-Session-Id` of the form `glint-<n>-<client name>`;
+clients send it back, and every tool call is recorded in the agent activity log (§7) under that
+client. `glint mcp` also sends `X-Glint-Project` (its working directory's project).
+
 ## 6. Blobs
 
 `PUT /v1/blobs` with raw bytes returns `{"ref": "blob://sha256:<hex>"}`. Payload fields may hold the ref.
@@ -150,6 +154,12 @@ Renderers fetch `GET /v1/blobs/sha256:<hex>`.
 | `GET /v1/events?run=&kind=&level=&q=&since=&limit=` | query |
 | `GET /v1/events/<id>` | one envelope |
 | `GET /v1/stream?filter=` (WebSocket) | live envelopes |
+| `GET /v1/agents/stats?days=7&project=&within_min=10` | what coding agents did with Glint (`glint-core/src/agents.rs`): `{since, within_min, totals, groups: [{day, project, agents: {name: {sessions, calls, hooks}}, tools: {tool: n}, calls, call_errors, calls_with_failures, result_bytes, hook_context, hook_failures, stop_guard, stop_fixed, stop_explained, failures, read, read_in_time, told, median_read_s?}]}` |
+| `GET /v1/agents/reads?run=` | which events of a run agents saw: `{reads: [{event, agent, ts, via}]}`, `via` is `mcp` (asked) or `hook` (told) |
+| `POST /v1/agents/activity` | `glint hook` reports what it told the agent: `{agent, session?, project?, action: hook.context \| hook.stop_guard \| hook.stop_outcome, events?: [ids], detail?}` |
+
+Agent activity is stored next to the events, pruned with them (none outlives the oldest event),
+and never sent anywhere.
 
 Filter expression (shared by `/v1/stream`, `/v1/wait` and MCP): `kind:sql.* level>=warn project:shop-api "free text"`.
 

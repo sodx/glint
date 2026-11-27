@@ -197,3 +197,35 @@ async fn llm_calls_list_and_totals() {
     let (text, _) = call(&s, "glint_llm_calls", json!({"model": "sonnet"})).await;
     assert!(text.contains("Totals over 1 calls"));
 }
+
+#[tokio::test]
+async fn tool_calls_are_recorded_with_the_client_and_the_events_it_saw() {
+    let (s, hub) = server().await;
+    put(&hub, r#"[{"kind":"core.exception","payload":{"class":"E","message":"boom"},"run":"r1","project":"shop"}]"#).await;
+    let init = s
+        .handle_from(
+            json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "claude-code", "version": "2"}}}),
+            &Caller::default(),
+        )
+        .await;
+    let sid = init.session.expect("a session id for initialize");
+    assert!(sid.ends_with("-claude-code"), "{sid}");
+    let caller = Caller { session: Some(sid.clone()), project: Some("shop".into()) };
+    let r = s
+        .handle_from(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "glint_last_error", "arguments": {}}}), &caller)
+        .await;
+    assert!(r.reply.is_some() && r.session.is_none());
+    // Without the session (a client that drops it): still recorded, as an unknown agent.
+    s.handle(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "glint_runs", "arguments": {}}})).await;
+
+    let st = hub.agent_stats(1, None, 10).await.unwrap();
+    let t = &st.totals;
+    assert_eq!(t.calls, 2);
+    assert_eq!(t.agents["claude-code"].calls, 1);
+    assert_eq!(t.agents["claude-code"].sessions, 1);
+    assert_eq!(t.agents["unknown"].calls, 1);
+    assert_eq!((t.failures, t.read, t.read_in_time), (1, 1, 1));
+    assert_eq!(t.calls_with_failures, 2, "glint_runs names the run's last event, the failure");
+    let reads = hub.reads_in_run("r1".into()).await.unwrap();
+    assert!(reads.iter().any(|r| r.agent == "claude-code" && r.via == "mcp"));
+}

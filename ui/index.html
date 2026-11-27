@@ -474,7 +474,23 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .set-row.toggle .locked { grid-column: 1; }
 .set-actions { display: flex; gap: 8px; padding: 12px 0 8px; border-top: 1px solid var(--line); }
 .btn.danger { color: var(--red); }
-@media (max-width: 560px) { .set-row { grid-template-columns: 1fr; } .set-row .set-help, .set-row .locked { grid-column: 1; } }
+/* ---------------- agents ---------------- */
+.read-by { font-size: 11.5px; color: var(--faint); margin-right: 10px; }
+.read-by.mcp { color: var(--muted); }
+.read-by.quiet { display: none; }
+.open > .row .read-by.quiet { display: inline; }
+.ag-ctl { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); margin: 0 0 16px; flex-wrap: wrap; }
+.ag-ctl select { font: 13.5px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 8px; }
+.ag-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 16px; margin: 0 0 8px; }
+.ag-num b { display: block; font: 600 20px var(--sans); color: var(--text); font-variant-numeric: tabular-nums; }
+.ag-num span { font-size: 12.5px; color: var(--muted); }
+.ag-line { font-size: 13.5px; color: var(--muted); margin: 0; padding: 8px 0; border-top: 1px solid var(--line); }
+.ag-line b { font-weight: 500; color: var(--text); }
+.ag-tools { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+.ag-tool { font: 12px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--muted); }
+.ag-tool i { font-style: normal; color: var(--text); margin-left: 4px; }
+.ag-day { font: 500 12.5px var(--sans); color: var(--faint); margin: 22px 0 8px; letter-spacing: .02em; }
+@media (max-width: 560px) { .ag-nums { grid-template-columns: 1fr 1fr; } .set-row { grid-template-columns: 1fr; } .set-row .set-help, .set-row .locked { grid-column: 1; } }
 </style>
 </head>
 <body>
@@ -511,6 +527,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="menu" id="projMenu" role="menu"></div></div>
     <span class="spacer"></span>
     <span class="live" id="live" title="Connected to glintd"><svg class="mark" id="liveMark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="liveText">Live</span></span>
+    <button class="docs-btn" id="agentsBtn" data-act="agents" aria-label="Agents (g)" title="What coding agents did with Glint (g)"><svg class="i"><use href="#k-prompt"/></svg></button>
     <button class="docs-btn" id="settingsBtn" data-act="settings" aria-label="Settings (,)" title="Settings (,)"><svg class="i"><use href="#i-gear"/></svg></button>
     <button class="docs-btn" id="docsBtn" data-act="docs" aria-label="Docs (?)" title="Docs (?)">?</button>
     <button class="cmdk-btn" id="cmdkBtn" aria-label="Jump to a run or action (⌘K)"><svg class="i"><use href="#i-search"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
@@ -526,7 +543,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <ol class="entries" id="entries"></ol>
 </div>
 
-<div class="keys" aria-hidden="true"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span><span><kbd>,</kbd>settings</span></div>
+<div class="keys" aria-hidden="true"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span><span><kbd>,</kbd>settings</span><span><kbd>g</kbd>agents</span></div>
 <div class="palette" id="palette" role="dialog" aria-modal="true" aria-label="Command palette">
   <div class="box"><input id="pq" placeholder="Jump to a run, or type an action…" aria-controls="plist" autocomplete="off"><ul id="plist" role="listbox"></ul></div>
 </div>
@@ -563,6 +580,16 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="set-row"><label for="s-otlp_addr">OpenTelemetry receiver</label><div class="set-ctl"><input id="s-otlp_addr" data-key="otlp_addr" spellcheck="false"></div><p class="set-help"><code>off</code> to turn it off.</p></div>
       <div class="set-row"><label for="s-db">Database file</label><div class="set-ctl"><input id="s-db" data-key="db" spellcheck="false"></div></div>
     </section>
+  </div>
+</div>
+<div class="docs sheet" id="agents" role="dialog" aria-modal="true" aria-labelledby="agTitle" hidden>
+  <div class="sheet-body">
+    <header class="sheet-head"><h1 id="agTitle">Agents</h1><button class="link" data-act="agents-close">Close <kbd>esc</kbd></button></header>
+    <p class="sheet-lead">What coding agents did with Glint: who connected, which tools they called, and how soon a failure reached them. Recorded on this machine only and kept as long as events. <code>glint stats</code> prints the same.</p>
+    <div class="ag-ctl"><label>Last <select id="agDays"><option value="1">day</option><option value="7" selected>7 days</option><option value="30">30 days</option></select></label>
+      <label>in <select id="agProj"><option value="">every project</option></select></label>
+      <label>read in time means within <select id="agWithin"><option>5</option><option selected>10</option><option>30</option><option>60</option></select> min</label></div>
+    <div id="agBody">…</div>
   </div>
 </div>
 <!-- docs:start (generated by ui/docs/build.py; edit there) -->
@@ -725,6 +752,10 @@ WordPress::queries();               // every query of this request as a table (n
 <tr><td><code>glint_annotate</code>, <code>glint_show</code></td><td>leave a note on an event; show you markdown or a diagram</td></tr>
 <tr><td><code>glint_llm_calls</code>, <code>glint_clear</code></td><td>LLM calls with tokens and cost; start a clean view</td></tr>
 </table>
+<h3>Does the agent use it?</h3>
+<p>Glint keeps a log of what agents do with it: each MCP tool call (which agent, which tool, how long, how big the answer, whether it showed a failure) and each hook action (context given, stop guard fired, then fixed or explained). The log stays in Glint's database on this machine and is deleted with the events. Press <kbd>G</kbd> for the Agents view: per day and project, which agents connected, their calls by tool, how many failures an agent read and how soon. In a run, a failure an agent read says <code>read by Claude Code 14:02</code>; other rows say it when you open them.</p>
+<pre class="code cmd"><code data-lang="bash">glint stats --days 7</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>prints the same numbers. <code>examples/agent-eval</code> has a small experiment that has Claude Code fix seeded bugs with and without Glint and compares turns, time and success.</p>
 <p>To set it up by hand:</p>
 <pre class="code cmd"><code data-lang="bash">claude mcp add --scope user --transport http glint http://127.0.0.1:23600/mcp</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
 <pre class="code cmd"><code data-lang="bash">glint hook --print-config</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
@@ -737,6 +768,7 @@ WordPress::queries();               // every query of this request as a table (n
 <tr><td><code>glint install</code></td><td>set up this machine; <code>--only service,php,python,node,agents</code>, <code>--dry-run</code></td></tr>
 <tr><td><code>glint doctor</code></td><td>is glintd up, does <code>glint()</code> work in each language, which agents know Glint, how big the data is</td></tr>
 <tr><td><code>glint uninstall</code></td><td>undo install; your data in <code>~/.glint</code> stays</td></tr>
+<tr><td><code>glint stats</code></td><td>what coding agents did with Glint: agents, tool calls, failures read and how soon; <code>--days</code>, <code>-p project</code>, <code>--json</code></td></tr>
 <tr><td><code>glint mcp</code>, <code>glint hook</code></td><td>MCP over stdio; the command agent hooks run</td></tr>
 <tr><td><code>glint conformance -- node my-sdk.mjs</code></td><td>check an SDK for a new language against the spec</td></tr>
 </table>
@@ -746,6 +778,7 @@ WordPress::queries();               // every query of this request as a table (n
 <table class="ref">
 <tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action</td></tr>
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
+<tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
 <tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
@@ -1256,7 +1289,7 @@ function entries() {
     const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
     const twig = e.kidCount ? `<button class="twig" data-act="twig" data-id="${esc(e.id)}" aria-expanded="${!S.collapsed.has(e.id)}" aria-label="${S.collapsed.has(e.id) ? "Show" : "Hide"} ${e.kidCount} inside" title="${e.kidCount} inside"><svg class="i"><use href="#i-down"/></svg></button>` : "";
     return `<li class="entry lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
-      <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${d ? `<span class="dur" title="${d} ms, started +${Math.round(startOf(e) - t0)} ms into the run"><i style="--x:${((startOf(e) - t0) / span * 100).toFixed(1)}%;--w:${Math.max(3, d / span * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
+      <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${readBy(e)}${d ? `<span class="dur" title="${d} ms, started +${Math.round(startOf(e) - t0)} ms into the run"><i style="--x:${((startOf(e) - t0) / span * 100).toFixed(1)}%;--w:${Math.max(3, d / span * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
       <div class="qa"><button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")}"><svg class="i"><use href="#i-open"/></svg></button>` : ""}</div>
       <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
   }).join("");
@@ -1395,6 +1428,7 @@ async function loadRun() {
   if (!S.run) { S.entries = []; return; }
   const { events } = await api(`/v1/events?run=${encodeURIComponent(S.run)}&limit=5000`);
   foldAll(events);
+  loadReads();
 }
 async function loadStatus() {
   const q = S.project ? `&project=${encodeURIComponent(S.project)}` : "";
@@ -1495,6 +1529,8 @@ document.addEventListener("click", ev => {
   if (act === "setup-check") { S.setup = null; render(); return loadSetup().then(drawSetMac); }
   if (act === "sample") return sendSample();
   if (act === "settings") return openSettings();
+  if (act === "agents") return openAgents();
+  if (act === "agents-close") return closeAgents();
   if (act === "settings-close") return closeSettings();
   if (act === "data-prune") return api("/v1/data/prune", { method: "POST" }).then(r => { toast(r.removed ? `Removed ${r.removed} old events` : "Nothing old enough to remove"); return openSettings(); }).catch(e => toast(e.message));
   if (act === "data-clear") {
@@ -1530,6 +1566,75 @@ document.addEventListener("click", ev => {
 $("q").addEventListener("input", e => { S.q = e.target.value; render(); });
 
 
+
+/* ---------------- agents ----------------
+   Which coding agents used Glint and whether failures reached them (GET /v1/agents/stats), and,
+   in a run, which events an agent saw (GET /v1/agents/reads). */
+const AGENT_NAMES = { "claude-code": "Claude Code", "claude-ai": "Claude Code", cursor: "Cursor", "cursor-vscode": "Cursor", "Visual Studio Code": "VS Code", vscode: "VS Code", windsurf: "Windsurf", "gemini-cli-mcp-client": "Gemini CLI", "gemini-cli": "Gemini CLI", "codex-mcp-client": "Codex", codex: "Codex", unknown: "an agent", "": "an agent" };
+const agentName = a => AGENT_NAMES[a] ?? a;
+const secs = s => s < 60 ? Math.round(s) + " s" : s < 3600 ? (s / 60).toFixed(1) + " min" : (s / 3600).toFixed(1) + " h";
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+S.reads = new Map();
+async function loadReads() {
+  if (!S.run) { S.reads = new Map(); return; }
+  try {
+    const { reads } = await api(`/v1/agents/reads?run=${encodeURIComponent(S.run)}`);
+    const m = new Map();
+    reads.forEach(r => { const l = m.get(r.event) || []; l.push(r); m.set(r.event, l); });
+    const changed = m.size !== S.reads.size || [...m].some(([k, v]) => (S.reads.get(k) || []).length !== v.length);
+    S.reads = m;
+    if (changed) render();
+  } catch {}
+}
+/* "read by Claude Code 14:02" when an agent asked for it; "told Claude Code" when a hook listed it.
+   Always on failures; on other rows (an agent listing a run reads all of it) only when opened. */
+function readBy(e) {
+  const l = (S.reads.get(e.id) || []).slice().sort((a, b) => a.ts < b.ts ? -1 : 1); if (!l.length) return "";
+  const mcp = l.filter(r => r.via === "mcp"), first = mcp[0] || l[0];
+  const names = [...new Set((mcp.length ? mcp : l).map(x => agentName(x.agent)))];
+  const who = names[0] + (names.length > 1 ? ` +${names.length - 1}` : "");
+  const title = l.map(x => `${x.via === "mcp" ? "Read by" : "Told to"} ${agentName(x.agent)} at ${clock(x.ts)}`).join("\n");
+  const quiet = rowLevel(e) !== "error" ? " quiet" : "";
+  return `<span class="read-by${mcp.length ? " mcp" : ""}${quiet}" title="${esc(title)}">${mcp.length ? `read by ${esc(who)} ${clock(first.ts).slice(0, 5)}` : `told ${esc(who)}`}</span>`;
+}
+async function openAgents() {
+  $("agents").hidden = false;
+  const sel = $("agProj"), cur = sel.value;
+  sel.innerHTML = `<option value="">every project</option>` + S.projects.map(p => `<option${p === cur ? " selected" : ""}>${esc(p)}</option>`).join("");
+  await drawAgents();
+  $("agDays").focus();
+}
+function closeAgents() { $("agents").hidden = true; }
+function agGroup(g, within) {
+  const agents = Object.entries(g.agents).map(([n, u]) => `<b>${esc(agentName(n))}</b> ${[plural(u.sessions, "session"), u.calls ? plural(u.calls, "call") : "", u.hooks ? plural(u.hooks, "hook") : ""].filter(Boolean).join(", ")}`).join(" · ");
+  const tools = Object.entries(g.tools).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<span class="ag-tool">${esc(t.replace(/^glint_/, ""))}<i>${n}</i></span>`).join("");
+  const calls = g.calls ? `<p class="ag-line"><b>${plural(g.calls, "tool call")}</b>${g.call_errors ? `, ${g.call_errors} answered with an error` : ""}${g.calls_with_failures ? `, ${g.calls_with_failures} showed a failure` : ""}<span class="ag-tools">${tools}</span></p>` : `<p class="ag-line">No tool calls.</p>`;
+  const hooks = g.hook_context + g.stop_guard ? `<p class="ag-line">Hooks gave context <b>${g.hook_context}</b> ${g.hook_context === 1 ? "time" : "times"} and listed ${plural(g.hook_failures, "failure")}${g.stop_guard ? `. The stop guard sent it back <b>${g.stop_guard}</b> ${g.stop_guard === 1 ? "time" : "times"}: fixed ${g.stop_fixed}, explained ${g.stop_explained}` : ""}.</p>` : "";
+  const fails = g.failures ? `<p class="ag-line"><b>${plural(g.failures, "failure")}</b> while an agent was around: ${g.read} read by an agent, ${g.read_in_time} within ${within} min${g.median_read_s != null ? `, median ${secs(g.median_read_s)} after it happened` : ""}. A hook told it about ${g.told}.</p>` : `<p class="ag-line">No failures while an agent was around.</p>`;
+  return `<p class="ag-line" style="border-top:0">${agents || "No agent"}</p>${calls}${hooks}${fails}`;
+}
+async function drawAgents() {
+  const days = $("agDays").value, proj = $("agProj").value, within = $("agWithin").value;
+  let st;
+  try { st = await api(`/v1/agents/stats?days=${days}&within_min=${within}${proj ? "&project=" + encodeURIComponent(proj) : ""}`); }
+  catch (err) { $("agBody").innerHTML = `<p class="set-help">Could not load: ${esc(err.message)}</p>`; return; }
+  if (!st.groups.length) { $("agBody").innerHTML = `<section class="set-group"><p class="set-help" style="padding-bottom:10px">No coding agent has used Glint in this period. Once one connects over MCP or its hooks run, its calls show up here.</p></section>`; return; }
+  const t = st.totals, pct = (a, b) => b ? Math.round(a / b * 100) + "%" : "–";
+  const nums = [
+    [t.calls, "tool calls"],
+    [Object.keys(t.agents).length, Object.keys(t.agents).length === 1 ? "agent" : "agents"],
+    [pct(t.read_in_time, t.failures), `of failures read within ${within} min`],
+    [t.median_read_s != null ? secs(t.median_read_s) : "–", "median time to read a failure"],
+  ];
+  let html = `<section class="set-group"><div class="ag-nums">${nums.map(([v, l]) => `<div class="ag-num"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>${agGroup(t, within)}</section>`;
+  let day = "";
+  st.groups.forEach(g => {
+    if (g.day !== day) { day = g.day; html += `<h3 class="ag-day">${esc(new Date(day + "T12:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }))}</h3>`; }
+    html += `<section class="set-group"><h2>${esc(g.project || "no project")}</h2>${agGroup(g, within)}</section>`;
+  });
+  $("agBody").innerHTML = html;
+}
+["agDays", "agProj", "agWithin"].forEach(id => $(id).addEventListener("change", drawAgents));
 
 /* ---------------- settings ---------------- */
 let setInfo = null, setTimer = null;
@@ -1643,6 +1748,7 @@ function commands() {
   c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: openSearch });
   c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", hint: "?", ico: "run", run: () => openDocs() });
   c.push({ g: "Actions", label: "Settings: data, editor, agents", hint: ",", ico: "run", run: () => openSettings() });
+  c.push({ g: "Actions", label: "Agents: what coding agents did with Glint", hint: "G", ico: "run", run: () => openAgents() });
   c.push({ g: "Actions", label: "Set up this Mac: glint() in PHP, Python, Node and coding agents", ico: "run", run: () => runSetup() });
   c.push({ g: "Actions", label: "Show me an example run", ico: "run", run: () => sendSample() });
   if (S.fail) c.push({ g: "Actions", label: "Copy the last failure for your agent", ico: "copy", run: () => copyException(S.fail.id) });
@@ -1681,6 +1787,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && $("palette").classList.contains("open")) { closePalette(); return; }
   if (!$("docs").hidden) { if (e.key === "Escape") closeDocs(); return; }
   if (!$("settings").hidden) { if (e.key === "Escape") closeSettings(); return; }
+  if (!$("agents").hidden) { if (e.key === "Escape") closeAgents(); return; }
   if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
     if (e.key === "e" && S.fail && !S.ack.has(S.fail.id)) return showFailure();
     if (e.key === "c" && S.pauses[0]) return answer(S.pauses[0].id, "continue");
@@ -1689,6 +1796,7 @@ document.addEventListener("keydown", e => {
     if (e.key === "/") { e.preventDefault(); return openSearch(); }
     if (e.key === "?") { e.preventDefault(); return openDocs(); }
     if (e.key === ",") { e.preventDefault(); return openSettings(); }
+    if (e.key === "g") { e.preventDefault(); return openAgents(); }
     if (e.key === "j" || e.key === "k") {
       const rows = [...document.querySelectorAll(".entry .row")]; if (!rows.length) return;
       const i = rows.indexOf(document.activeElement);
@@ -1699,6 +1807,8 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") { closeSearch(); $("runMenu").classList.remove("open"); $("projMenu").classList.remove("open"); }
 });
 
+// Agents read events without the stream saying so: look again every few seconds.
+setInterval(() => { if (!document.hidden && S.run) loadReads(); }, 4000);
 setInterval(() => document.querySelectorAll(".ago").forEach(a => (a.textContent = rel(a.dataset.t))), 1000);
 loadAll().then(connect);
 // Which editors glintd found; the first is the default until you pick one (⌘K → "Open files in").

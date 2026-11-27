@@ -78,6 +78,9 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/source", get(crate::source::source))
         .route("/v1/open", post(crate::source::open))
         .route("/v1/editors", get(crate::source::editors))
+        .route("/v1/agents/stats", get(agent_stats))
+        .route("/v1/agents/reads", get(agent_reads))
+        .route("/v1/agents/activity", post(agent_activity))
         .route("/v1/ctl", get(pauses))
         .route("/v1/ctl/{id}", get(wait_pause))
         .route("/v1/ctl/{id}/resume", post(resume))
@@ -332,22 +335,80 @@ async fn resume(State(hub): State<Hub>, Path(id): Path<String>, body: Bytes) -> 
 }
 
 /// MCP over Streamable HTTP: JSON in, JSON out (no SSE stream needed for these tools).
-async fn mcp(State(s): State<AppState>, body: Bytes) -> Response {
+async fn mcp(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
     let msg: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(glint_mcp::error(serde_json::Value::Null, -32700, &format!("parse error: {e}")))).into_response(),
     };
-    let is_init = msg.get("method").and_then(serde_json::Value::as_str) == Some("initialize");
-    match s.mcp.handle(msg).await {
+    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_owned).filter(|v| !v.is_empty());
+    let caller = glint_mcp::Caller { session: header("mcp-session-id"), project: header("x-glint-project") };
+    let out = s.mcp.handle_from(msg, &caller).await;
+    match out.reply {
         Some(reply) => {
             let mut res = Json(reply).into_response();
-            if is_init && let Ok(v) = axum::http::HeaderValue::from_str(&format!("glint-{}", std::process::id())) {
+            if let Some(v) = out.session.and_then(|sid| axum::http::HeaderValue::from_str(&sid).ok()) {
                 res.headers_mut().insert("mcp-session-id", v);
             }
             res
         }
         None => StatusCode::ACCEPTED.into_response(),
     }
+}
+
+// ---- what agents did with Glint (glint_core::agents)
+
+#[derive(serde::Deserialize)]
+struct StatsParams {
+    days: Option<u32>,
+    project: Option<String>,
+    within_min: Option<u64>,
+}
+
+/// `GET /v1/agents/stats?days=7&project=&within_min=10`: agents, tool calls, hook actions and
+/// how fast failures reached an agent, per day and project.
+async fn agent_stats(State(hub): State<Hub>, QueryParams(p): QueryParams<StatsParams>) -> Response {
+    let days = p.days.unwrap_or(7).clamp(1, 3650);
+    match hub.agent_stats(days, p.project.filter(|s| !s.is_empty()), p.within_min.unwrap_or(10).clamp(1, 1440)).await {
+        Ok(st) => Json(st).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ReadsParams {
+    run: String,
+}
+
+/// `GET /v1/agents/reads?run=R`: which events of a run agents saw, and when.
+async fn agent_reads(State(hub): State<Hub>, QueryParams(p): QueryParams<ReadsParams>) -> Response {
+    match hub.reads_in_run(p.run).await {
+        Ok(reads) => Json(json!({ "reads": reads })).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// `POST /v1/agents/activity`: one activity or a list, from `glint hook` (what it told the agent).
+async fn agent_activity(State(hub): State<Hub>, body: Bytes) -> Response {
+    let v: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+    let list = match v {
+        serde_json::Value::Array(items) => items,
+        one => vec![one],
+    };
+    let mut parsed = Vec::with_capacity(list.len());
+    for item in list.into_iter().take(100) {
+        match serde_json::from_value::<glint_core::agents::Activity>(item) {
+            // Only hooks report here; MCP calls are recorded by the MCP server itself.
+            Ok(a) if a.action.starts_with("hook.") => parsed.push(glint_core::agents::Activity { error_events: 0, ..a }),
+            Ok(a) => return error(StatusCode::BAD_REQUEST, format!("unexpected action `{}` (hook.* only)", a.action)),
+            Err(e) => return error(StatusCode::BAD_REQUEST, e.to_string()),
+        }
+    }
+    let n = parsed.len();
+    hub.record_activity(parsed).await;
+    Json(json!({ "accepted": n })).into_response()
 }
 
 pub(crate) fn error(status: StatusCode, message: String) -> Response {

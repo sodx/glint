@@ -161,6 +161,41 @@ impl Hub {
             .map_err(|e| StoreError::Backend(e.to_string()))?
     }
 
+    /// Records agent activity. Never fails the caller: losing a statistic is fine.
+    pub async fn record_activity(&self, activity: Vec<crate::agents::Activity>) {
+        if activity.is_empty() {
+            return;
+        }
+        let store = self.inner.store.clone();
+        let list: Vec<_> = activity.into_iter().map(crate::agents::Activity::bounded).collect();
+        match tokio::task::spawn_blocking(move || store.record_activity(&list)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => tracing::warn!(%e, "agent activity was not recorded"),
+            Err(e) => tracing::warn!(%e, "agent activity was not recorded"),
+        }
+    }
+
+    /// Agent statistics for the last `days` days (see [`crate::agents::stats`]).
+    pub async fn agent_stats(&self, days: u32, project: Option<String>, within_min: u64) -> Result<crate::agents::AgentStats, StoreError> {
+        let store = self.inner.store.clone();
+        let since = Utc::now() - chrono::Duration::days(i64::from(days.max(1)));
+        tokio::task::spawn_blocking(move || {
+            let act = store.activity_since(since)?;
+            let fails = store.failures_since(since)?;
+            Ok(crate::agents::stats(&act, &fails, Some(since), within_min, project.as_deref()))
+        })
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+    }
+
+    /// Which events of `run` agents saw.
+    pub async fn reads_in_run(&self, run: String) -> Result<Vec<crate::agents::EventRead>, StoreError> {
+        let store = self.inner.store.clone();
+        tokio::task::spawn_blocking(move || store.reads_in_run(&run))
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?
+    }
+
     /// Live events, after they are stored.
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<Envelope>> {
         self.inner.bus.subscribe()

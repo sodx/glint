@@ -1,0 +1,7 @@
+[
+  { "id": "A-1", "items": [{ "sku": "pen", "price": 1.5, "qty": 4 }] },
+  { "id": "A-2", "items": [{ "sku": "pad", "price": 3.0, "qty": 12 }] },
+  { "id": "A-3", "items": [{ "sku": "ink", "price": 7.25, "qty": 1 }], "coupon": { "code": "TEN", "percent": 10 } },
+  { "id": "A-4", "items": [{ "sku": "pen", "price": 1.5, "qty": 2 }], "coupon": { "code": "SPRING" } },
+  { "id": "A-5", "items": [{ "sku": "bag", "price": 19.0, "qty": 1 }, { "sku": "pen", "price": 1.5, "qty": 10 }] }
+]

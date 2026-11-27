@@ -46,3 +46,14 @@ covered by tests, but have not yet been seen from a live session.
 Prompts and tool inputs and outputs are stored locally, like any other event. Nothing leaves the
 machine. Agents reading Glint over MCP see these events in the same timeline as the program's
 own output.
+
+## What the hooks record about themselves
+
+`glint hook` reports its own actions to `POST /v1/agents/activity`, so `glint stats` and the
+Agents view can say whether Glint reached the agent:
+
+| Action | When | `detail` |
+|---|---|---|
+| `hook.context` | SessionStart, or UserPromptSubmit with new failures | `{event, failures}`; `events` lists the failures shown |
+| `hook.stop_guard` | Stop sent the agent back | `{failures}`; `events` lists them |
+| `hook.stop_outcome` | the next Stop after a guard | `{outcome: fixed}` when a file a failure came from changed since, else `explained` |

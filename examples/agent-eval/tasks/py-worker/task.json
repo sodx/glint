@@ -1,0 +1,5 @@
+{
+  "prompt": "`python3 worker.py` should price all five orders in orders.json, but it reports that one was skipped. Find out why and fix worker.py so every order is priced correctly. Do not edit orders.json.",
+  "needs": ["python3"],
+  "check": ["python3", "check.py"]
+}

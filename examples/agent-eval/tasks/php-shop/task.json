@@ -1,0 +1,5 @@
+{
+  "prompt": "`python3 check.py` serves the shop with PHP's built-in server and fetches three order summaries; one comes back as an empty HTTP 500. Fix index.php so all three summaries are right. Do not edit check.py or orders.php.",
+  "needs": ["php", "python3"],
+  "check": ["python3", "check.py"]
+}

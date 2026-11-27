@@ -2,6 +2,7 @@
 //! [`Store`] and fans them out on a bus. Knows no transport, no storage engine and no
 //! language.
 
+pub mod agents;
 pub mod control;
 mod hub;
 mod normalise;
@@ -28,6 +29,24 @@ pub trait Store: Send + Sync + 'static {
     fn get(&self, id: &str) -> Result<Option<Envelope>, StoreError>;
     /// The most recently active runs, newest first.
     fn runs(&self, project: Option<&str>, limit: usize) -> Result<Vec<RunSummary>, StoreError>;
+
+    /// Records what agents did with Glint (see [`agents`]). Stores that don't keep it ignore it.
+    fn record_activity(&self, _activity: &[agents::Activity]) -> Result<(), StoreError> {
+        Ok(())
+    }
+    /// Agent activity since `since`, oldest first, with `error_events` filled in and, where the
+    /// agent named no project, the project of the first event it read.
+    fn activity_since(&self, _since: chrono::DateTime<chrono::Utc>) -> Result<Vec<agents::Activity>, StoreError> {
+        Ok(Vec::new())
+    }
+    /// Program failures since `since`, oldest first (not an agent's own failed tool calls).
+    fn failures_since(&self, _since: chrono::DateTime<chrono::Utc>) -> Result<Vec<agents::Failure>, StoreError> {
+        Ok(Vec::new())
+    }
+    /// Which events of `run` agents saw, first time per event, agent and way.
+    fn reads_in_run(&self, _run: &str) -> Result<Vec<agents::EventRead>, StoreError> {
+        Ok(Vec::new())
+    }
 }
 
 /// One run (a process, request, test or agent session) at a glance.

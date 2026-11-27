@@ -437,6 +437,10 @@ WordPress::queries();               // every query of this request as a table (n
 <tr><td><code>glint_annotate</code>, <code>glint_show</code></td><td>leave a note on an event; show you markdown or a diagram</td></tr>
 <tr><td><code>glint_llm_calls</code>, <code>glint_clear</code></td><td>LLM calls with tokens and cost; start a clean view</td></tr>
 </table>
+<h3>Does the agent use it?</h3>
+<p>Glint keeps a log of what agents do with it: each MCP tool call (which agent, which tool, how long, how big the answer, whether it showed a failure) and each hook action (context given, stop guard fired, then fixed or explained). The log stays in Glint's database on this machine and is deleted with the events. Press <kbd>G</kbd> for the Agents view: per day and project, which agents connected, their calls by tool, how many failures an agent read and how soon. In a run, a failure an agent read says <code>read by Claude Code 14:02</code>; other rows say it when you open them.</p>
+{cmd("glint stats --days 7")}
+<p>prints the same numbers. <code>examples/agent-eval</code> has a small experiment that has Claude Code fix seeded bugs with and without Glint and compares turns, time and success.</p>
 <p>To set it up by hand:</p>
 {cmd("claude mcp add --scope user --transport http glint http://127.0.0.1:23600/mcp")}
 {cmd("glint hook --print-config")}
@@ -450,6 +454,7 @@ WordPress::queries();               // every query of this request as a table (n
 <tr><td><code>glint install</code></td><td>set up this machine; <code>--only service,php,python,node,agents</code>, <code>--dry-run</code></td></tr>
 <tr><td><code>glint doctor</code></td><td>is glintd up, does <code>glint()</code> work in each language, which agents know Glint, how big the data is</td></tr>
 <tr><td><code>glint uninstall</code></td><td>undo install; your data in <code>~/.glint</code> stays</td></tr>
+<tr><td><code>glint stats</code></td><td>what coding agents did with Glint: agents, tool calls, failures read and how soon; <code>--days</code>, <code>-p project</code>, <code>--json</code></td></tr>
 <tr><td><code>glint mcp</code>, <code>glint hook</code></td><td>MCP over stdio; the command agent hooks run</td></tr>
 <tr><td><code>glint conformance -- node my-sdk.mjs</code></td><td>check an SDK for a new language against the spec</td></tr>
 </table>
@@ -460,6 +465,7 @@ WordPress::queries();               // every query of this request as a table (n
 <table class="ref">
 <tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action</td></tr>
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
+<tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
 <tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>

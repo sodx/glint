@@ -124,17 +124,21 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
             list(&fails)
         )
     };
+    let listed: Vec<String> = fails.iter().rev().take(5).map(|e| e.id.clone()).collect();
+    record(http, base, session, &project, glint_core::agents::HOOK_CONTEXT, &listed, json!({ "event": event, "failures": fails.len() }));
     Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string())
 }
 
 /// Failures of this project's programs since the turn began keep the agent from stopping, once.
 fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
-    if hook["stop_hook_active"] == true {
-        return None;
-    }
     let cwd = hook["cwd"].as_str()?;
     let project = glint_core::project::resolve(cwd).map(|r| r.project).or_else(|| glint_core::project::folder_name(cwd))?;
-    let seen = state_file(hook["session_id"].as_str().unwrap_or("unknown"))?;
+    let session = hook["session_id"].as_str().unwrap_or("unknown");
+    if hook["stop_hook_active"] == true {
+        outcome(http, base, session, &project);
+        return None;
+    }
+    let seen = state_file(session)?;
     let mark = std::fs::read_to_string(&seen).ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())?;
     let url = format!("{base}/v1/events?project={}&level=error&limit=20&after={}", enc(&project), enc(&mark));
     let got: Value = http.get(&url).call().ok()?.into_json().ok()?;
@@ -152,6 +156,11 @@ fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     if fails.is_empty() {
         return None;
     }
+    let ids: Vec<String> = fails.iter().map(|e| e.id.clone()).collect();
+    if let Some(dir) = seen.parent() {
+        let _ = std::fs::write(dir.join(format!("{}.guard", safe_name(session))), ids.join("\n"));
+    }
+    record(http, base, session, &project, glint_core::agents::HOOK_STOP_GUARD, &ids, json!({ "failures": ids.len() }));
     let reason = format!(
         "Before you finish: Glint recorded {} failure{} in {project} while you worked on this turn (programs, not your tools):\n{}\n\
          Look at them (glint_event <id> has the stack and values) and fix what your change broke, or tell the user \
@@ -161,6 +170,31 @@ fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         list(&fails)
     );
     Some(json!({ "decision": "block", "reason": reason }).to_string())
+}
+
+/// The agent stops again after the Stop guard sent it back: did it change the code a failure came
+/// from (fixed) or only answer (explained)? Recorded once per guard.
+fn outcome(http: &ureq::Agent, base: &str, session: &str, project: &str) {
+    let Some(dir) = state_file(session).and_then(|f| f.parent().map(std::path::Path::to_path_buf)) else { return };
+    let file = dir.join(format!("{}.guard", safe_name(session)));
+    let Ok(ids) = std::fs::read_to_string(&file) else { return };
+    let _ = std::fs::remove_file(&file);
+    let ids: Vec<String> = ids.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned).collect();
+    let fixed = ids.iter().any(|id| {
+        http.get(&format!("{base}/v1/events/{}", enc(id)))
+            .call()
+            .ok()
+            .and_then(|r| r.into_json::<Envelope>().ok())
+            .is_some_and(|e| edited_since(&e))
+    });
+    let what = if fixed { "fixed" } else { "explained" };
+    record(http, base, session, project, glint_core::agents::HOOK_STOP_OUTCOME, &ids, json!({ "outcome": what }));
+}
+
+/// Tells glintd what a hook did (`glint stats`, the Agents view). Best effort.
+fn record(http: &ureq::Agent, base: &str, session: &str, project: &str, action: &str, ids: &[String], detail: Value) {
+    let body = json!({ "agent": "claude-code", "session": session, "project": project, "action": action, "events": ids, "detail": detail });
+    let _ = http.post(&format!("{base}/v1/agents/activity")).set("Content-Type", "application/json").send_string(&body.to_string());
 }
 
 /// Where a failure was thrown (first app frame), else where it was reported.
@@ -213,9 +247,12 @@ fn prune_state(dir: &std::path::Path) {
     }
 }
 
+fn safe_name(session: &str) -> String {
+    session.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(80).collect()
+}
+
 fn state_file(session: &str) -> Option<PathBuf> {
-    let safe: String = session.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(80).collect();
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".glint/hooks").join(format!("{safe}.last")))
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".glint/hooks").join(format!("{}.last", safe_name(session))))
 }
 
 fn enc(s: &str) -> String {

@@ -37,6 +37,11 @@ glintd's UI. `app/bundle-macos.sh` makes `target/release/Glint.app` without taur
 from `app/icons/make.py`. The CLI lives in `Contents/Resources/bin` because `glint` and `Glint`
 collide on case-insensitive file systems.
 
+Agent activity log (`glint-core::agents`): every MCP tool call and hook action is recorded in the
+store next to events (same retention); `GET /v1/agents/stats`, `glint stats`, the Agents view (g)
+and "read by" marks in a run. `examples/agent-eval/` is an opt-in A/B experiment (costs money,
+never run by tests).
+
 `glint expect` / MCP `glint_expect` / `POST /v1/expect` share `glint-core::expect` (term syntax, evaluator, async runner).
 
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`

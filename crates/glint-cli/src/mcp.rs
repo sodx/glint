@@ -13,6 +13,14 @@ pub fn run(base: &str) -> Result<(), String> {
         .timeout_connect(Duration::from_secs(1))
         .timeout(Duration::from_secs(150))
         .build();
+    // The agent's project (where it launched us) and its session, so Glint can tell which agent
+    // looked at what (`glint stats`).
+    let project = std::env::current_dir().ok().and_then(|d| {
+        let cwd = d.display().to_string();
+        glint_core::project::resolve(&cwd).map(|r| r.project).or_else(|| glint_core::project::folder_name(&cwd))
+    })
+    .filter(|p| p.is_ascii() && !p.chars().any(char::is_control));
+    let mut session: Option<String> = None;
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -20,9 +28,21 @@ pub fn run(base: &str) -> Result<(), String> {
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match agent.post(&url).set("Content-Type", "application/json").send_string(&line) {
+        let mut req = agent.post(&url).set("Content-Type", "application/json");
+        if let Some(p) = &project {
+            req = req.set("X-Glint-Project", p);
+        }
+        if let Some(s) = &session {
+            req = req.set("Mcp-Session-Id", s);
+        }
+        let reply = match req.send_string(&line) {
             Ok(res) if res.status() == 202 => None,
-            Ok(res) => res.into_string().ok().filter(|s| !s.trim().is_empty()),
+            Ok(res) => {
+                if let Some(s) = res.header("mcp-session-id") {
+                    session = Some(s.to_owned());
+                }
+                res.into_string().ok().filter(|s| !s.trim().is_empty())
+            }
             Err(ureq::Error::Status(_, res)) => res.into_string().ok().filter(|s| !s.trim().is_empty()),
             Err(e) => unreachable_reply(&line, base, &e.to_string()),
         };

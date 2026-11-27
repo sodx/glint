@@ -1,0 +1,5 @@
+{
+  "prompt": "`node check.mjs` starts the cart API (server.mjs) and asks it for three cart totals; the third request gets no answer. Fix server.mjs so all three totals come back right. Do not edit check.mjs or carts.json.",
+  "needs": ["node"],
+  "check": ["node", "check.mjs"]
+}
