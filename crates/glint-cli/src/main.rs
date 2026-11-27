@@ -9,6 +9,7 @@
 //! glint stats                            # what coding agents did with Glint this week
 //! glint install                          # glintd at login + glint() in PHP, Python, Node
 //! glint docker                           # the same inside a container (compose snippet)
+//! glint report                           # a diagnostics file in ~/Downloads, sent nowhere
 //! ```
 
 mod agents;
@@ -21,6 +22,7 @@ mod install;
 mod lines;
 mod mcp;
 mod pipe;
+mod report;
 mod send;
 mod stats;
 
@@ -146,6 +148,25 @@ enum Command {
     /// Check that glintd is reachable and glint() is available in each language.
     Doctor {
         /// Also print the result as one machine-readable line, `GLINT_JSON:[…]`.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Write a diagnostics file to ~/Downloads and show it in Finder; nothing is sent anywhere.
+    ///
+    /// It has versions (app, glintd, glint, macOS, arch), `glint doctor`, the last setup.log, the
+    /// end of glintd's log, config.toml with secrets removed, whether Glint.app still carries the
+    /// download quarantine flag, the login shell's PATH, and the coding agents found.
+    Report {
+        /// The Glint.app to describe (default: /Applications/Glint.app or ~/Applications/Glint.app).
+        #[arg(long)]
+        app: Option<std::path::PathBuf>,
+        /// Write to this folder instead of ~/Downloads.
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+        /// Don't show the file in Finder.
+        #[arg(long)]
+        no_reveal: bool,
+        /// Also print `GLINT_JSON:{"path":…}` (for the window).
         #[arg(long)]
         json: bool,
     },
@@ -285,18 +306,7 @@ fn docker_cmd(
 fn setup(steps: &[install::Step], dry_run: bool, then: &str, json: bool) -> Result<(), String> {
     if json {
         // One line, behind a marker: a login shell may print its own things around it.
-        let list: Vec<_> = steps
-            .iter()
-            .map(|s| {
-                let (status, detail) = match &s.result {
-                    Ok(d) if s.skipped => ("skip", d),
-                    Ok(d) => ("ok", d),
-                    Err(e) => ("fail", e),
-                };
-                json!({ "name": s.name, "status": status, "detail": detail })
-            })
-            .collect();
-        println!("GLINT_JSON:{}", serde_json::Value::Array(list));
+        println!("GLINT_JSON:{}", install::to_json(steps));
     }
     if dry_run {
         println!("(dry run: nothing was changed)");
@@ -368,6 +378,7 @@ fn main() -> ExitCode {
         Command::Doctor { json } => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None, json }
             .args(&cli.url)
             .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "", json)),
+        Command::Report { app, out, no_reveal, json } => report::run(report::Args { app, out, reveal: !no_reveal, json, url: cli.url.clone() }),
         Command::Expect { expect, project, all_projects, unordered, allow_errors, timeout, lookback, command } => {
             let a = expect::Args { expect, project, all_projects, unordered, allow_errors, timeout, lookback, command };
             return match expect::run(&cli.url, &a) {

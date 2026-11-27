@@ -523,6 +523,7 @@ name = "glint-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "futures-util",
  "glint-core",
  "glint-ingest",

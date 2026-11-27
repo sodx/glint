@@ -89,16 +89,48 @@ fn drop_server(root: &mut Map<String, Value>, section: &str) -> bool {
 /// as in tests) when its app is in /Applications or its command is on PATH: someone who
 /// installed Cursor or Claude Code but never opened it should still get Glint.
 fn installed(a: &Args, folder: &Path, apps: &[&str], commands: &[&str]) -> bool {
+    found(a, folder, apps, commands).is_some()
+}
+
+/// How an agent was found (its folder, app or command), or `None`.
+fn found(a: &Args, folder: &Path, apps: &[&str], commands: &[&str]) -> Option<String> {
+    let mut how = Vec::new();
     if folder.exists() {
-        return true;
+        how.push(format!("folder {}", folder.display()));
     }
-    if !a.probe {
-        return false;
+    if a.probe {
+        for n in apps {
+            for d in [PathBuf::from("/Applications"), a.home.join("Applications")] {
+                let app = d.join(format!("{n}.app"));
+                if app.exists() {
+                    how.push(format!("app {}", app.display()));
+                }
+            }
+        }
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        for c in commands {
+            if let Some(p) = std::env::split_paths(&path).map(|d| d.join(c)).find(|p| p.is_file()) {
+                how.push(format!("command {}", p.display()));
+            }
+        }
     }
-    let app = apps.iter().any(|n| [PathBuf::from("/Applications"), a.home.join("Applications")].iter().any(|d| d.join(format!("{n}.app")).exists()));
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    let cmd = commands.iter().any(|c| std::env::split_paths(&path).any(|d| d.join(c).is_file()));
-    app || cmd
+    (!how.is_empty()).then(|| how.join(", "))
+}
+
+/// Every agent Glint knows, and how each was found (for `glint report`).
+pub fn detected(a: &Args) -> Vec<(&'static str, Option<String>)> {
+    let mut v = vec![("Claude Code", found(a, &a.home.join(".claude"), &[], &["claude"]))];
+    let vscode = vscode_dir(a);
+    v.push(("Cursor", found(a, &a.home.join(".cursor"), &["Cursor"], &["cursor"])));
+    v.push(("VS Code", found(a, &vscode, &["Visual Studio Code"], &["code"])));
+    v.push(("Windsurf", found(a, &a.home.join(".codeium/windsurf"), &["Windsurf"], &["windsurf"])));
+    v.push(("Gemini CLI", found(a, &a.home.join(".gemini"), &[], &["gemini"])));
+    v.push(("Codex", found(a, &a.home.join(".codex"), &[], &["codex"])));
+    v
+}
+
+fn vscode_dir(a: &Args) -> PathBuf {
+    if cfg!(target_os = "macos") { a.home.join("Library/Application Support/Code/User") } else { a.home.join(".config/Code/User") }
 }
 
 /// A JSON-configured agent: where its user config lives and how it spells a server.
@@ -114,7 +146,7 @@ struct JsonAgent {
 fn json_agents(a: &Args) -> Vec<JsonAgent> {
     let h = &a.home;
     let url = mcp_url(a);
-    let vscode = if cfg!(target_os = "macos") { h.join("Library/Application Support/Code/User") } else { h.join(".config/Code/User") };
+    let vscode = vscode_dir(a);
     vec![
         JsonAgent { name: "Cursor", present: installed(a, &h.join(".cursor"), &["Cursor"], &["cursor"]), config: h.join(".cursor/mcp.json"), section: "mcpServers", server: json!({ "url": url }) },
         JsonAgent { name: "VS Code", present: installed(a, &vscode, &["Visual Studio Code"], &["code"]), config: vscode.join("mcp.json"), section: "servers", server: json!({ "type": "http", "url": url }) },

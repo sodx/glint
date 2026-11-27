@@ -11,6 +11,9 @@
 //! The SDKs are embedded in this binary and written to `~/.glint/sdk`. Everything this command
 //! writes is listed in its output and removed by `glint uninstall`; event data in `~/.glint` is
 //! kept. SDKs stay off in production (`NODE_ENV` / `APP_ENV=production`) unless `GLINT_ENABLED=1`.
+//!
+//! `GLINT_SKIP_SERVICE_START=1` writes the login service file but leaves launchd and systemd alone:
+//! a check in a sandbox HOME (scripts/clean-mac-check.sh) must not replace the real service.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,6 +22,11 @@ use std::process::Command;
 pub(crate) const MARK_BEGIN: &str = "# >>> glint >>>";
 pub(crate) const MARK_END: &str = "# <<< glint <<<";
 const SERVICE_LABEL: &str = "local.glint.glintd";
+
+/// Leave launchd and systemd alone (see the module docs).
+fn skip_service_start() -> bool {
+    std::env::var("GLINT_SKIP_SERVICE_START").is_ok_and(|v| !v.is_empty() && v != "0")
+}
 
 macro_rules! sdk_files {
     ($($path:literal),* $(,)?) => { &[$(($path, include_str!(concat!("../../../sdks/", $path)))),*] };
@@ -90,6 +98,22 @@ pub(crate) fn fail(name: &'static str, err: String) -> Step {
     Step { name, result: Err(err), skipped: false }
 }
 
+/// `[{name, status: ok|skip|fail, detail}]`, as `--json` prints it and the window reads it.
+pub fn to_json(steps: &[Step]) -> serde_json::Value {
+    let list = steps
+        .iter()
+        .map(|s| {
+            let (status, detail) = match &s.result {
+                Ok(d) if s.skipped => ("skip", d),
+                Ok(d) => ("ok", d),
+                Err(e) => ("fail", e),
+            };
+            serde_json::json!({ "name": s.name, "status": status, "detail": detail })
+        })
+        .collect();
+    serde_json::Value::Array(list)
+}
+
 pub fn print(steps: &[Step]) -> bool {
     let mut ok = true;
     for s in steps {
@@ -150,10 +174,12 @@ fn install_service(a: &Args) -> Step {
         Err(e) => return fail("service", format!("cannot find this executable: {e}")),
     };
     let name = if cfg!(windows) { "glintd.exe" } else { "glintd" };
-    // Next to this binary (a build, ~/.glint/bin), or inside Glint.app, where this binary is
-    // Contents/Resources/bin/glint and glintd is Contents/MacOS/glintd.
-    let daemon = [here.with_file_name(name), here.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|c| c.join("MacOS").join(name)).unwrap_or_default()]
-        .into_iter()
+    // The glintd that ran this setup (GLINT_DAEMON, set by glintd's "Set up this Mac", which may
+    // run this binary from a copy in ~/.glint/cache), next to this binary (a build, ~/.glint/bin),
+    // or inside Glint.app, where this binary is Contents/Resources/bin/glint and glintd is
+    // Contents/MacOS/glintd.
+    let from_env = std::env::var_os("GLINT_DAEMON").map(PathBuf::from).filter(|p| p.file_name().is_some_and(|n| n == name));
+    let daemon = from_env.into_iter().chain([here.with_file_name(name), here.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|c| c.join("MacOS").join(name)).unwrap_or_default()])
         .find(|p| p.is_file())
         .unwrap_or_else(|| here.with_file_name(name));
     if !daemon.exists() {
@@ -193,7 +219,7 @@ fn install_service(a: &Args) -> Step {
         if let Err(e) = write(a, &plist, &body) {
             return fail("service", e);
         }
-        if !a.dry_run {
+        if !a.dry_run && !skip_service_start() {
             let uid = run("id", &["-u"], &a.home).unwrap_or_default();
             let domain = format!("gui/{uid}");
             let _ = Command::new("launchctl").args(["bootout", &format!("{domain}/{SERVICE_LABEL}")]).output();
@@ -202,7 +228,8 @@ fn install_service(a: &Args) -> Step {
                 return fail("service", format!("wrote {} but launchctl bootstrap failed; run it yourself or log out and in", plist.display()));
             }
         }
-        done("service", format!("glintd starts at login ({}) · binaries in {}", plist.display(), bin.display()))
+        let note = if skip_service_start() { " (launchd left alone: GLINT_SKIP_SERVICE_START)" } else { "" };
+        done("service", format!("glintd starts at login ({}) · binaries in {}{note}", plist.display(), bin.display()))
     } else if cfg!(target_os = "linux") {
         let unit = a.home.join(".config/systemd/user/glintd.service");
         let body = format!(
@@ -212,7 +239,7 @@ fn install_service(a: &Args) -> Step {
         if let Err(e) = write(a, &unit, &body) {
             return fail("service", e);
         }
-        if !a.dry_run {
+        if !a.dry_run && !skip_service_start() {
             let _ = Command::new("systemctl").args(["--user", "daemon-reload"]).status();
             let ok = Command::new("systemctl").args(["--user", "enable", "--now", "glintd.service"]).status().is_ok_and(|s| s.success());
             if !ok {
@@ -394,13 +421,13 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
             Target::Service => {
                 if cfg!(target_os = "macos") {
                     let plist = a.home.join("Library/LaunchAgents").join(format!("{SERVICE_LABEL}.plist"));
-                    if !a.dry_run {
+                    if !a.dry_run && !skip_service_start() {
                         let uid = run("id", &["-u"], &a.home).unwrap_or_default();
                         let _ = Command::new("launchctl").args(["bootout", &format!("gui/{uid}/{SERVICE_LABEL}")]).output();
                     }
                     steps.push(if rm(&plist) { done("service", format!("stopped and removed {}", plist.display())) } else { skip("service", "not installed".into()) });
                 } else if cfg!(target_os = "linux") {
-                    if !a.dry_run {
+                    if !a.dry_run && !skip_service_start() {
                         let _ = Command::new("systemctl").args(["--user", "disable", "--now", "glintd.service"]).status();
                     }
                     let unit = a.home.join(".config/systemd/user/glintd.service");

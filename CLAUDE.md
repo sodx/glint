@@ -42,6 +42,11 @@ store next to events (same retention); `GET /v1/agents/stats`, `glint stats`, th
 and "read by" marks in a run. `examples/agent-eval/` is an opt-in A/B experiment (costs money,
 never run by tests).
 
+`scripts/clean-mac-check.sh` (CI: `.github/workflows/clean-mac.yml`) installs the DMG like a new
+tester (quarantine flag on), runs setup through glintd and checks PHP, Python, Node, Claude Code,
+agent detection, `glint report` and uninstall; locally it runs in a sandbox HOME on a spare port.
+"Send diagnostics" (`POST /v1/report`) and `glint report` share `glint-server::report`.
+
 `glint expect` / MCP `glint_expect` / `POST /v1/expect` share `glint-core::expect` (term syntax, evaluator, async runner).
 
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
