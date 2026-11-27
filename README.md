@@ -41,7 +41,7 @@ python3 -c 'glint({"hello": "from Python"})'
 node -e 'glint({ hello: "from Node" })'
 ```
 
-The [install guide](docs/INSTALL.md) ([по-русски](docs/INSTALL.ru.md)) covers the one macOS
+The [install guide](docs/INSTALL.md) covers the one macOS
 prompt you see the first time. On Linux, or to build it yourself, see
 [Building from source](docs/from-source.md).
 

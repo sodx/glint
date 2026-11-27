@@ -24,31 +24,4 @@ This build runs on Macs with Apple silicon (M1 or newer) and macOS 11 or later.
    It saves a report to Downloads and shows it in Finder; send that file to whoever gave you
    Glint. Nothing is sent by itself.
 
-The full guide, in English and Russian, is in docs/INSTALL.md and docs/INSTALL.ru.md of the
-Glint repository.
-
-
-Glint для Mac
-
-Эта сборка работает на Mac с Apple silicon (M1 и новее), macOS 11 и новее.
-
-1. Перетащите Glint в папку «Программы».
-
-2. Откройте Glint. В первый раз macOS скажет, что не может проверить приложение: сборка
-   не подписана через Apple. Нажмите «Готово», затем откройте «Системные настройки» >
-   «Конфиденциальность и безопасность», прокрутите вниз до «Glint заблокирован», нажмите
-   «Всё равно открыть» и подтвердите паролем.
-   (Или один раз выполните в Терминале:  xattr -dr com.apple.quarantine /Applications/Glint.app )
-
-3. В строке меню появится маленькая искра, откроется окно Glint. Разрешите уведомления,
-   когда macOS спросит: так Glint сообщает об ошибках.
-
-4. Окно Glint показывает, что настроено. Нажмите там «Set up this Mac» (или правой кнопкой
-   по искре, «Set up this Mac...»). Через несколько секунд у каждой части появится галочка.
-   Потом откройте новое окно терминала и новую сессию Claude Code. «Show me an example» покажет пример.
-
-5. Проверьте (команды выше, в шаге 5 английской части).
-
-6. Что-то не работает? Нажмите «Send diagnostics» в окне Glint (Settings > This Mac). Отчёт
-   сохранится в «Загрузки» и откроется в Finder; перешлите этот файл тому, кто дал вам Glint.
-   Сам Glint ничего не отправляет.
+The full guide: https://github.com/sodx/glint/blob/main/docs/INSTALL.md
