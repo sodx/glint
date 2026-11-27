@@ -15,7 +15,9 @@ M0 done: `glintd` ingests the native protocol, stores in SQLite + FTS5, streams 
 serves a single-file live-feed UI (`ui/index.html`, no build step yet; Vite + TS arrives with M1).
 Next: M1 in `docs/ROADMAP.md`.
 
-Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native only),
+M1 in progress: Ray-compatible ingest on `:23517` is done (`docs/mappings/ray.md`).
+
+Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray),
 `glint-server`, `glintd`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack
@@ -67,7 +69,7 @@ Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p glintd                      # http://127.0.0.1:23600, DB at ~/.glint/glint.db
-GLINT_DB=/tmp/g.db GLINT_ADDR=127.0.0.1:23700 cargo run -p glintd
+GLINT_DB=/tmp/g.db GLINT_ADDR=127.0.0.1:23700 GLINT_RAY_ADDR=off cargo run -p glintd
 curl -d '{"kind":"core.value","payload":{"value":42}}' http://127.0.0.1:23600/v1/events
 ```
 

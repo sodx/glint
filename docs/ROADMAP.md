@@ -18,7 +18,7 @@ Each milestone ends with something a person can use. Order is a guide, not a con
 - SDKs: JS/TS, Python, PHP (+ conformance suite v1 and runner).
 - UI moves to Vite + TS; screens, configurable open-in-editor scheme, markdown rendering.
 - Retention (count/age) and `glint clear`.
-- Ray-compatible ingest adapter.
+- ✅ Ray-compatible ingest adapter (`docs/mappings/ray.md`), verified with spatie/ray 1.48.1.
 
 ## M2 — Agents
 - `glint-mcp`: runs, events, event, last_error, wait_for, annotate, clear.

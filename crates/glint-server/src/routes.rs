@@ -22,10 +22,13 @@ const KNOWN_KINDS: &[&str] = &[
     "core.json",
     "core.html",
     "core.markdown",
+    "core.mermaid",
     "core.table",
     "core.exception",
+    "core.trace",
     "core.measure",
     "core.separator",
+    "core.screen",
     "core.clear",
     "core.update",
     "sql.query",
@@ -35,6 +38,8 @@ const KNOWN_KINDS: &[&str] = &[
 pub struct AppState {
     pub hub: Hub,
     pub stop: watch::Receiver<bool>,
+    /// Adapters this daemon runs, for `/v1/info`.
+    pub adapters: std::sync::Arc<Vec<String>>,
 }
 
 impl axum::extract::FromRef<AppState> for Hub {
@@ -58,12 +63,12 @@ async fn index() -> Html<&'static str> {
     Html(crate::INDEX_HTML)
 }
 
-async fn info() -> Json<serde_json::Value> {
+async fn info(State(s): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "name": "glint",
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": [PROTOCOL_VERSION],
-        "adapters": ["native"],
+        "adapters": *s.adapters,
         "kinds": KNOWN_KINDS,
     }))
 }
@@ -142,6 +147,6 @@ async fn pump(socket: WebSocket, hub: Hub, mut stop: watch::Receiver<bool>, filt
     }
 }
 
-fn error(status: StatusCode, message: String) -> Response {
+pub(crate) fn error(status: StatusCode, message: String) -> Response {
     (status, Json(json!({ "error": message }))).into_response()
 }

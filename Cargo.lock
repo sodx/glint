@@ -358,6 +358,8 @@ dependencies = [
  "glint-core",
  "glint-protocol",
  "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

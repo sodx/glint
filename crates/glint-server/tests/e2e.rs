@@ -15,7 +15,7 @@ async fn start() -> SocketAddr {
     let (hub, _writer) = Hub::start(Arc::new(store), HubConfig::default());
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    tokio::spawn(glint_server::serve(listener, hub, std::future::pending()));
+    tokio::spawn(glint_server::serve(listener, hub, glint_server::Options::default(), std::future::pending()));
     addr
 }
 
@@ -123,4 +123,41 @@ async fn serves_ui_and_info() {
     assert!(page.contains("<title>Glint</title>"));
     let info: Value = http.get(format!("http://{addr}/v1/info")).send().await.unwrap().json().await.unwrap();
     assert_eq!(info["protocol"][0], 1);
+}
+
+#[tokio::test]
+async fn ray_clients_land_in_the_same_store() {
+    let store = SqliteStore::open_in_memory().unwrap();
+    let (hub, _writer) = Hub::start(Arc::new(store), HubConfig::default());
+    let main = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let ray = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let (main_addr, ray_addr) = (main.local_addr().unwrap(), ray.local_addr().unwrap());
+    tokio::spawn(glint_server::serve_ray(ray, hub.clone(), std::future::pending()));
+    tokio::spawn(glint_server::serve(main, hub, glint_server::Options::default(), std::future::pending()));
+    let http = reqwest::Client::new();
+
+    // What the PHP client does before sending: an HTTP error status means "up".
+    let probe = http.get(format!("http://{ray_addr}/_availability_check")).send().await.unwrap();
+    assert_eq!(probe.status(), 404);
+
+    let body = json!({
+        "uuid": "e2e-uuid",
+        "payloads": [{"type": "log", "content": {"values": ["from php"], "meta": [{"clipboard_data": "from php"}]},
+                      "origin": {"file": "/app/a.php", "line_number": 3, "hostname": "box"}}],
+        "meta": {"php_version": "8.3.0", "php_version_id": 80300, "project_name": "", "ray_package_version": "1.41.0"}
+    });
+    let res = http.post(format!("http://{ray_addr}/")).json(&body).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let color = json!({"uuid": "e2e-uuid", "payloads": [{"type": "color", "content": {"color": "red"}, "origin": {}}], "meta": {}});
+    http.post(format!("http://{ray_addr}/")).json(&color).send().await.unwrap();
+
+    let e: Value = http.get(format!("http://{main_addr}/v1/events/ray-e2e-uuid")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(e["kind"], "core.value");
+    assert_eq!(e["payload"]["value"], "from php");
+    assert_eq!(e["origin"]["lang"], "php");
+    let upd: Value = http.get(format!("http://{main_addr}/v1/events?kind=core.update")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(upd["events"][0]["payload"], json!({"target": "ray-e2e-uuid", "meta": {"color": "red"}}));
+
+    let lock: Value = http.get(format!("http://{ray_addr}/locks/abc?hostname=box&project_name=")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(lock, json!({"active": false, "stop_execution": false}));
 }

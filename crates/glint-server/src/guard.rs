@@ -16,11 +16,22 @@ pub struct Allowlist {
 impl Allowlist {
     pub fn for_addr(addr: SocketAddr) -> Self {
         let port = addr.port();
-        let mut hosts = vec![format!("127.0.0.1:{port}"), format!("localhost:{port}"), format!("[::1]:{port}")];
+        // host.docker.internal is how containers reach the host (Docker Desktop, or
+        // `host-gateway` on Linux). A web page cannot make a browser send it as Host.
+        let mut hosts = vec![
+            format!("127.0.0.1:{port}"),
+            format!("localhost:{port}"),
+            format!("[::1]:{port}"),
+            format!("host.docker.internal:{port}"),
+        ];
         if !addr.ip().is_loopback() && !addr.ip().is_unspecified() {
             hosts.push(addr.to_string());
         }
-        let mut origins: Vec<String> = hosts.iter().map(|h| format!("http://{h}")).collect();
+        let mut origins: Vec<String> = hosts
+            .iter()
+            .filter(|h| !h.starts_with("host.docker.internal"))
+            .map(|h| format!("http://{h}"))
+            .collect();
         // The Tauri shell (M4) serves the UI from these origins.
         origins.extend(["tauri://localhost".to_owned(), "http://tauri.localhost".to_owned()]);
         Self {

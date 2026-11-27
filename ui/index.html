@@ -58,6 +58,9 @@
   table { border-collapse: collapse; font-size: 12px; } th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vertical-align: top; }
   th { background: var(--code); }
   iframe { width: 100%; min-height: 60px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+  .screen { display: flex; align-items: center; gap: 10px; color: var(--accent); font-size: 12px; margin: 16px 0 10px; }
+  .screen::after { content: ""; flex: 1; border-top: 1px solid var(--accent); opacity: .4; }
+  button.mini { float: right; font-size: 11px; padding: 1px 6px; margin: 0 0 4px 8px; }
   hr.sep { border: 0; border-top: 2px dashed var(--line); margin: 14px 0; }
   .note { color: var(--muted); font-style: italic; margin: 6px 0; }
   .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -187,8 +190,25 @@ const renderers = {
     if (p && p.fields && Object.keys(p.fields).length) box.appendChild(jsonTree(p.fields));
     return box;
   },
-  "core.text": p => el("pre", "", typeof p === "string" ? p : String(p && p.content)),
+  "core.text"(p) {
+    const text = el("pre", "", typeof p === "string" ? p : String(p && p.content));
+    if (!(p && p.html)) return text;
+    // Ray dumps carry both a plain-text and an HTML rendering; text leads, HTML on demand.
+    const box = el("div");
+    const toggle = el("button", "mini", "HTML");
+    let rich = null;
+    toggle.addEventListener("click", () => {
+      if (!rich) { rich = renderers["core.html"]({ content: p.html }); rich.hidden = true; box.appendChild(rich); }
+      rich.hidden = !rich.hidden; text.hidden = !rich.hidden;
+      toggle.textContent = rich.hidden ? "HTML" : "Text";
+    });
+    box.appendChild(toggle);
+    box.appendChild(text);
+    return box;
+  },
   "core.markdown": p => el("pre", "", String(p && p.content)),
+  "core.mermaid": p => el("pre", "block", String(p && p.content)),
+  "core.trace": p => frameList((p && p.frames) || []),
   "core.json": p => jsonTree(p && "content" in p ? p.content : p),
   "core.html"(p) {
     // Untrusted: an empty sandbox means no scripts, no forms, no same-origin access.
@@ -215,19 +235,13 @@ const renderers = {
     const box = el("div");
     box.appendChild(el("div", "exc-title", (p && p.class) || "Exception"));
     box.appendChild(el("div", "exc-msg", (p && p.message) || ""));
-    const ul = el("ul", "frames");
-    ((p && p.frames) || []).slice(0, 200).forEach(f => {
-      const li = el("li", f.vendor ? "vendor" : "");
-      li.appendChild(el("span", "fn", (f.class ? f.class + "::" : "") + (f.fn || "{main}")));
-      li.appendChild(el("span", "loc", "  " + (f.file || "?") + (f.line ? ":" + f.line : "")));
-      ul.appendChild(li);
-    });
-    box.appendChild(ul);
+    box.appendChild(frameList((p && p.frames) || []));
     if (p && p.cause) { box.appendChild(el("div", "note", "caused by")); box.appendChild(exc(p.cause)); }
     return box;
   },
   "core.measure": p => el("pre", "", `${(p && p.name) || "measure"}: ${p && p.duration_ms != null ? p.duration_ms + " ms" : "?"}` +
-    (p && p.memory_bytes != null ? `, ${(p.memory_bytes / 1048576).toFixed(1)} MiB` : "")),
+    (p && p.since_last_ms != null && !p.new_timer ? ` (+${p.since_last_ms} ms since last)` : "") +
+    (p && p.memory_bytes ? `, ${(p.memory_bytes / 1048576).toFixed(1)} MiB` : "")),
   "sql.query"(p) {
     const box = el("div");
     box.appendChild(el("pre", "block", (p && p.sql) || ""));
@@ -241,8 +255,24 @@ const renderers = {
   },
 };
 
+function frameList(frames) {
+  const ul = el("ul", "frames");
+  frames.slice(0, 200).forEach(f => {
+    const li = el("li", f.vendor ? "vendor" : "");
+    li.appendChild(el("span", "fn", (f.class ? f.class + "::" : "") + (f.fn || "{main}")));
+    li.appendChild(el("span", "loc", "  " + (f.file || "?") + (f.line ? ":" + f.line : "")));
+    ul.appendChild(li);
+  });
+  return ul;
+}
+
 function renderEvent(e) {
   if (e.kind === "core.separator") return el("hr", "sep");
+  if (e.kind === "core.screen") {
+    const d = el("div", "screen");
+    d.appendChild(el("span", "", "screen · " + ((e.payload && e.payload.name) || "")));
+    return d;
+  }
   const n = el("article", "ev");
   n.dataset.id = e.id;
   const head = el("div", "head");
@@ -251,6 +281,7 @@ function renderEvent(e) {
   const label = el("span", "label");
   head.appendChild(label);
   if (e.project && e.project !== "default") head.appendChild(el("span", "", e.project));
+  if (e.origin && e.origin.via) head.appendChild(el("span", "", "via " + e.origin.via));
   const link = editorLink(e.origin);
   if (link) head.appendChild(link);
   n.appendChild(head);
