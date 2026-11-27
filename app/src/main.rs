@@ -7,12 +7,15 @@
 //! - the Dock icon carries the same state as a badge (✗ or ⏸), because on a MacBook with a notch
 //!   the menu-bar spark can be hidden behind it;
 //! - ⌥⌘G shows and hides the window from anywhere;
-//! - glintd is started if nothing answers (the copy inside the app bundle, else ~/.glint/bin).
+//! - glintd is started if nothing answers (the copy inside the app bundle, else ~/.glint/bin);
+//! - updates itself from signed releases, glintd and the CLI included (see `update`).
 //!
 //! Closing the window keeps Glint in the menu bar; Quit (menu or ⌘Q) ends it. glintd keeps
 //! running either way, so events are never lost while the window is closed.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod update;
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -24,6 +27,7 @@ use serde_json::Value;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
@@ -89,10 +93,10 @@ fn ensure_daemon() {
         .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(home.join(".glint/glintd.log")));
     let mut cmd = Command::new(bin);
     cmd.stdin(Stdio::null());
-    if let Ok(f) = log {
-        if let Ok(f2) = f.try_clone() {
-            cmd.stdout(f).stderr(f2);
-        }
+    if let Ok(f) = log
+        && let Ok(f2) = f.try_clone()
+    {
+        cmd.stdout(f).stderr(f2);
     }
     if cmd.spawn().is_ok() {
         wait_up(30);
@@ -333,6 +337,7 @@ fn clear_own_quarantine() {
 
 fn main() {
     clear_own_quarantine();
+    update::sync_tools();
     ensure_daemon();
     let seen_by_user = Arc::new(AtomicBool::new(true));
     let seen = seen_by_user.clone();
@@ -383,6 +388,7 @@ fn main() {
         })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show(app)))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -400,8 +406,10 @@ fn main() {
             let open = MenuItem::with_id(app, "open", "Open Glint", true, Some("Alt+CmdOrCtrl+G"))?;
             let browser = MenuItem::with_id(app, "browser", "Open in Browser", true, None::<&str>)?;
             let setup = MenuItem::with_id(app, "setup", "Set up this Mac…", bundled_cli().is_some(), None::<&str>)?;
+            let updates = MenuItem::with_id(app, "update", "Check for Updates…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Glint", true, Some("CmdOrCtrl+Q"))?;
-            let menu = Menu::with_items(app, &[&status, &PredefinedMenuItem::separator(app)?, &open, &browser, &setup, &PredefinedMenuItem::separator(app)?, &quit])?;
+            let menu = Menu::with_items(app, &[&status, &PredefinedMenuItem::separator(app)?, &open, &browser, &setup, &updates, &PredefinedMenuItem::separator(app)?, &quit])?;
+            update::start(app.handle(), updates);
             TrayIconBuilder::with_id("main")
                 .icon(Image::from_bytes(TRAY_OK)?)
                 .icon_as_template(true)
@@ -412,6 +420,7 @@ fn main() {
                     "open" => show(app),
                     "browser" => open_in_browser(),
                     "setup" => set_up_this_mac(app),
+                    "update" => update::menu_clicked(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -423,8 +432,23 @@ fn main() {
                 .build(app)?;
 
             let url = base_url().parse().map_err(|e| format!("GLINT_URL: {e}"))?;
+            let nav = handle.clone();
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("Glint")
+                // The version shows in the title bar, and in About.
+                .title(format!("Glint {}", update::VERSION))
+                // The update banner links to glint-app://update; the click never leaves the page.
+                .on_navigation(move |url| {
+                    if url.scheme() == "glint-app" {
+                        update::banner_clicked(&nav);
+                        return false;
+                    }
+                    true
+                })
+                .on_page_load(|w, p| {
+                    if p.event() == PageLoadEvent::Finished {
+                        update::banner(w.app_handle());
+                    }
+                })
                 .inner_size(560.0, 820.0)
                 .min_inner_size(380.0, 420.0)
                 .build()?;
@@ -448,7 +472,11 @@ fn main() {
             std::thread::spawn(move || watch(handle, status, seen));
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build({
+            let mut ctx = tauri::generate_context!();
+            update::configure(&mut ctx);
+            ctx
+        })
         .expect("Glint could not start");
 
     app.run(|app, event| {

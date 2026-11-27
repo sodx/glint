@@ -62,6 +62,10 @@ node -e 'glint({ hello: "from Node" })'
 Each value shows up in the Glint window. Press `?` there for the full documentation, with an
 example of every method in every language, and `,` for Settings.
 
+Glint updates itself: when a new version is out, the menu-bar menu shows **Update to x.y.z…** and
+the window shows a banner; one click installs it, glintd and the `glint` command included, and
+restarts Glint. The version you have is in the window title and in About Glint.
+
 ## What setup changes on your Mac
 
 Setup writes these files, and `glint uninstall` removes them again:
