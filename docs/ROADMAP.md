@@ -39,6 +39,7 @@ Each milestone ends with something a person can use. The order is a guide, not a
 
 ## M5: Breadth
 - SDKs: Go, Rust, Ruby, Java/Kotlin, C#, Elixir.
-- Integrations: Laravel, Django, FastAPI, Express/Next, Rails, Spring.
+- Integrations: Laravel, Django, Flask, FastAPI, Express, Next.js and a Vite plugin are done
+  (`docs/mappings/frameworks.md`); Rails and Spring are next.
 - Renderer plugin loading for `x-*` kinds.
 - `glint-ai`: explain exception, group, summarise run (local model by default).

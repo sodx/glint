@@ -176,6 +176,17 @@ final class Glint
         }
     }
 
+    /**
+     * The core.exception payload of $e (for framework integrations that add request context).
+     *
+     * @internal
+     * @return array<string, mixed>
+     */
+    public static function exceptionData(Throwable $e): array
+    {
+        return self::exceptionPayload($e);
+    }
+
     /** @return array<string, mixed> */
     private static function exceptionPayload(Throwable $e, int $depth = 0): array
     {

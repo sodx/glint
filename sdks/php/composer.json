@@ -15,5 +15,10 @@
             "Glint\\": "src/"
         },
         "files": ["src/helpers.php"]
+    },
+    "extra": {
+        "laravel": {
+            "providers": ["Glint\\LaravelServiceProvider"]
+        }
     }
 }

@@ -47,6 +47,13 @@ tester (quarantine flag on), runs setup through glintd and checks PHP, Python, N
 agent detection, `glint report` and uninstall; locally it runs in a sandbox HOME on a spare port.
 "Send diagnostics" (`POST /v1/report`) and `glint report` share `glint-server::report`.
 
+Framework integrations with no code, hooked in by the global shims: Laravel (`sdks/php/src/Laravel.php`,
+via an `env()` defined before Laravel's), Django, Flask, FastAPI, SQLAlchemy, requests and httpx
+(`sdks/python/glint/_frameworks.py`, via a `sys.meta_path` hook), Node servers, Express, Next.js,
+fetch, pg, mysql2 and node:sqlite (`sdks/js/src/frameworks.js`), plus a Vite plugin
+(`sdks/js/src/vite.js`). One run per request with a `core.measure` root; manifest in
+`docs/mappings/frameworks.md`; `python3 examples/frameworks/check.py` checks them live.
+
 `glint expect` / MCP `glint_expect` / `POST /v1/expect` share `glint-core::expect` (term syntax, evaluator, async runner).
 
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`

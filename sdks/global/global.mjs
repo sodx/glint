@@ -16,3 +16,12 @@ if (typeof process !== "undefined" && process.on) {
     }
   });
 }
+
+// Frameworks, with no code: every HTTP server reports a run per request, Express errors, failed
+// fetch() calls and the SQL of pg, mysql2 and node:sqlite (src/frameworks.js).
+try {
+  const { install } = await import("./src/frameworks.js");
+  await install();
+} catch {
+  // never stop the program from starting
+}
