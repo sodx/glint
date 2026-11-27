@@ -25,6 +25,9 @@ pub struct Settings {
     pub addr: String,
     pub ray_addr: String,
     pub otlp_addr: String,
+    /// A second listener for containers and other machines (`off`): it takes events and
+    /// nothing else, so whoever reaches it can write events but not read them.
+    pub remote_addr: String,
     pub db: String,
 }
 
@@ -39,6 +42,7 @@ impl Default for Settings {
             addr: "127.0.0.1:23600".into(),
             ray_addr: "127.0.0.1:23517".into(),
             otlp_addr: "127.0.0.1:4318".into(),
+            remote_addr: "off".into(),
             db: "~/.glint/glint.db".into(),
         }
     }
@@ -54,6 +58,7 @@ pub const KEYS: &[(&str, &str, bool)] = &[
     ("addr", "GLINT_ADDR", true),
     ("ray_addr", "GLINT_RAY_ADDR", true),
     ("otlp_addr", "GLINT_OTLP_ADDR", true),
+    ("remote_addr", "GLINT_REMOTE_ADDR", true),
     ("db", "GLINT_DB", true),
 ];
 
@@ -137,6 +142,7 @@ impl Settings {
             "addr" => self.addr = v.trim().to_owned(),
             "ray_addr" => self.ray_addr = v.trim().to_owned(),
             "otlp_addr" => self.otlp_addr = v.trim().to_owned(),
+            "remote_addr" => self.remote_addr = v.trim().to_owned(),
             "db" => self.db = v.trim().to_owned(),
             _ => {}
         }
@@ -149,7 +155,7 @@ impl Settings {
         if self.max_events != 0 && self.max_events < 1000 {
             return Err("max_events: at least 1000, or 0 for no cap".into());
         }
-        for (k, a) in [("addr", &self.addr), ("ray_addr", &self.ray_addr), ("otlp_addr", &self.otlp_addr)] {
+        for (k, a) in [("addr", &self.addr), ("ray_addr", &self.ray_addr), ("otlp_addr", &self.otlp_addr), ("remote_addr", &self.remote_addr)] {
             if !(k != "addr" && a == "off") && a.parse::<std::net::SocketAddr>().is_err() {
                 return Err(format!("{k}: expected host:port{}", if k == "addr" { "" } else { " or off" }));
             }
@@ -179,8 +185,11 @@ impl Settings {
              addr = \"{}\"            # GLINT_ADDR\n\
              ray_addr = \"{}\"        # GLINT_RAY_ADDR   (\"off\" to disable)\n\
              otlp_addr = \"{}\"        # GLINT_OTLP_ADDR  (\"off\" to disable)\n\
+             # Containers on Linux and other machines: events in, nothing out. Use the Docker\n\
+             # bridge address (172.17.0.1:23600) rather than 0.0.0.0.             GLINT_REMOTE_ADDR\n\
+             remote_addr = \"{}\"\n\
              db = \"{}\"         # GLINT_DB\n",
-            self.keep_days, self.max_events, self.editor, self.agent_context, self.stop_guard, self.addr, self.ray_addr, self.otlp_addr, self.db
+            self.keep_days, self.max_events, self.editor, self.agent_context, self.stop_guard, self.addr, self.ray_addr, self.otlp_addr, self.remote_addr, self.db
         )
     }
 
@@ -202,7 +211,7 @@ mod tests {
 
     #[test]
     fn the_file_round_trips() {
-        let mut s = Settings { keep_days: 14, editor: "cursor".into(), stop_guard: false, ..Settings::default() };
+        let mut s = Settings { keep_days: 14, editor: "cursor".into(), stop_guard: false, remote_addr: "172.17.0.1:23600".into(), ..Settings::default() };
         s.validate().unwrap();
         let back = parse(&s.to_file());
         let mut t = Settings::default();

@@ -10,6 +10,8 @@ import sysconfig
 from types import FrameType, TracebackType
 from typing import Any, Dict, List, Optional
 
+from . import _config
+
 SDK = "glint-python/0.1.0"
 
 _PKG_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
@@ -74,5 +76,7 @@ def origin(site: Dict[str, Any]) -> Dict[str, Any]:
         o["cwd"] = os.getcwd()
     except OSError:
         pass
+    if _config.settings.path_map:
+        o["path_map"] = _config.settings.path_map
     o.update(site)
     return o

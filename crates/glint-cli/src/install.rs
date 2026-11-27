@@ -23,12 +23,12 @@ const SERVICE_LABEL: &str = "local.glint.glintd";
 macro_rules! sdk_files {
     ($($path:literal),* $(,)?) => { &[$(($path, include_str!(concat!("../../../sdks/", $path)))),*] };
 }
-const JS: &[(&str, &str)] = sdk_files!["js/src/index.js", "js/src/encode.js", "js/src/index.d.ts", "js/package.json"];
-const PYTHON: &[(&str, &str)] = sdk_files![
+pub(crate) const JS: &[(&str, &str)] = sdk_files!["js/src/index.js", "js/src/encode.js", "js/src/index.d.ts", "js/package.json"];
+pub(crate) const PYTHON: &[(&str, &str)] = sdk_files![
     "python/glint/__init__.py", "python/glint/_config.py", "python/glint/_encode.py",
     "python/glint/_ids.py", "python/glint/_origin.py", "python/glint/_transport.py", "python/glint/py.typed",
 ];
-const PHP: &[(&str, &str)] = sdk_files![
+pub(crate) const PHP: &[(&str, &str)] = sdk_files![
     "php/src/Transport.php", "php/src/Encoder.php", "php/src/Entry.php", "php/src/Glint.php", "php/src/GlintStop.php", "php/src/WordPress.php", "php/src/helpers.php",
 ];
 

@@ -62,6 +62,10 @@ node -e 'glint({ hello: "from Node" })'
 Each value shows up in the Glint window. Press `?` there for the full documentation, with an
 example of every method in every language, and `,` for Settings.
 
+Code that runs in Docker, a dev container or on a machine you reach over SSH needs one more step:
+run `glint docker` in the project folder and add what it prints to your compose file (see
+"Docker and remote machines" in the README).
+
 ## What setup changes on your Mac
 
 Setup writes these files, and `glint uninstall` removes them again:

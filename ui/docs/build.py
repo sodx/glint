@@ -396,6 +396,36 @@ WordPress::options('siteurl', 'permalink_structure');
 WordPress::queries();               // every query of this request as a table (needs SAVEQUERIES)""", "php")}
 <p>Plain <code>glint()</code>, <code>Glint\\Glint::measure()</code> and <code>Glint\\Glint::pause()</code> work in themes and plugins as everywhere else. A pause in a template stops the page until you continue it here.</p>
 """))
+    s.append(("d-docker", "Docker and remote", f"""
+<h2>Docker and remote machines</h2>
+<p>Code in a container or on another machine has no <code>glint install</code>, and 127.0.0.1 there is not this Mac. Run <code>glint docker</code> in the project folder. It writes a copy of the SDKs to <code>~/.glint/sdk/container</code> and prints the lines to add to the service in <code>docker-compose.yml</code>:</p>
+{cmd("glint docker                 # compose; --run for docker run, --devcontainer, --ssh HOST")}
+{code("""    volumes:
+      - /Users/me/.glint/sdk/container:/opt/.glint/sdk:ro
+    environment:
+      GLINT_URL: http://host.docker.internal:23600
+      GLINT_PROJECT: shop
+      GLINT_PATH_MAP: /var/www/html:/Users/me/shop
+      PHP_INI_SCAN_DIR: ":/opt/.glint/sdk/php/conf.d"
+    extra_hosts:
+      - host.docker.internal:host-gateway""", "yaml")}
+<p>Recreate the container and <code>glint()</code> works in PHP, Python and Node there, and uncaught errors arrive as they do on the Mac. <code>PHP_INI_SCAN_DIR</code> loads the prepend file, <code>PYTHONPATH</code> runs a <code>sitecustomize.py</code>, and <code>NODE_OPTIONS</code> imports the global; the command sets only the ones for the languages it finds in the folder (<code>--lang</code> to choose).</p>
+<table class="ref">
+<tr><td><code>GLINT_URL</code></td><td>where glintd is. Inside a container the SDKs already try <code>http://host.docker.internal:23600</code> when it is not set.</td></tr>
+<tr><td><code>GLINT_PROJECT</code></td><td>the project. A path like <code>/var/www/html</code> does not say which repository it is, so the command names the git repository of this folder.</td></tr>
+<tr><td><code>GLINT_PATH_MAP</code></td><td><code>container path:Mac path</code>, several separated by commas. glintd rewrites file paths and stack frames with it, so the source view and Open in editor show the files on this Mac. Use <code>--app-dir</code> when your compose file mounts the code somewhere else.</td></tr>
+</table>
+<h3>Docker on Linux</h3>
+<p>Docker Desktop on a Mac passes <code>host.docker.internal</code> to the Mac's 127.0.0.1, so nothing else is needed there. On Linux, <code>host-gateway</code> is the Docker bridge, which glintd does not listen on. Set <code>remote_addr</code> in Settings, or in <code>~/.glint/config.toml</code>, to the bridge address and restart glintd:</p>
+{code('remote_addr = "172.17.0.1:23600"', "toml")}
+<p>That address only takes events: a program there can send and wait for its own pause, and cannot read events, settings or files. glintd retries every 10 seconds when Docker creates the bridge after it started. Do not use <code>0.0.0.0</code>: every network this machine is on could then write events.</p>
+<h3>Dev containers</h3>
+<p><code>glint docker --devcontainer</code> prints <code>mounts</code>, <code>runArgs</code> and <code>containerEnv</code> for <code>.devcontainer/devcontainer.json</code>. The path map there is <code>${{containerWorkspaceFolder}}:${{localWorkspaceFolder}}</code>, so it fits any checkout.</p>
+<h3>SSH</h3>
+<p>Keep glintd on the Mac and open a reverse tunnel, so 127.0.0.1:23600 on the remote machine reaches it:</p>
+{cmd("ssh -R 23600:127.0.0.1:23600 devbox")}
+<p>Or put <code>RemoteForward 23600 127.0.0.1:23600</code> under the host in <code>~/.ssh/config</code>; VS Code Remote SSH reads that file too. <code>glint docker --ssh devbox</code> prints the commands that copy the SDK there and the lines for the remote shell profile. Set <code>GLINT_PATH_MAP</code> only when the same code is also on the Mac; otherwise the files open only on the remote machine.</p>
+"""))
     s.append(("d-tree", "Call tree", f"""
 <h2>Call tree and timing</h2>
 <p>Wrap work in <code>measure()</code> and everything it sends nests under it. A checkout request then reads <code>checkout → load order → select …</code> instead of a flat list. Click the arrow left of a row to fold it. The bars on the right are a small waterfall: where in the run each piece started and how long it took. OpenTelemetry spans nest the same way.</p>

@@ -11,6 +11,9 @@ import { encode, typeName } from "./encode.js";
 export const VERSION = "0.1.0";
 const SDK = `glint-js/${VERSION}`;
 const DEFAULT_URL = "http://127.0.0.1:23600";
+// Inside a container 127.0.0.1 is the container itself; Docker Desktop (and `host-gateway` on
+// Linux) names the host machine host.docker.internal.
+const CONTAINER_URL = "http://host.docker.internal:23600";
 const TIMEOUT_MS = 2000;
 const RETRY_AFTER_MS = 5000;
 const MAX_QUEUE = 10_000;
@@ -23,7 +26,35 @@ const config = {
   url: env("GLINT_URL") || DEFAULT_URL,
   enabled: isEnabled(),
   project: env("GLINT_PROJECT"),
+  // "container:host" pairs, comma separated; glintd rewrites file paths with it.
+  pathMap: env("GLINT_PATH_MAP"),
 };
+
+// No GLINT_URL and running in a container: send to the host. Synchronous where Node offers its
+// built-in modules synchronously (getBuiltinModule), else decided before the first send.
+if (!env("GLINT_URL") && typeof process !== "undefined" && process.versions && process.versions.node) {
+  const fromFs = (fs) => {
+    try {
+      if (inContainer(fs)) config.url = CONTAINER_URL;
+    } catch {
+      // not worth failing over
+    }
+  };
+  if (typeof process.getBuiltinModule === "function") fromFs(process.getBuiltinModule("node:fs"));
+  else {
+    const name = "node:fs"; // a variable keeps bundlers for the browser from resolving it
+    import(name).then(fromFs, () => {});
+  }
+}
+
+function inContainer(fs) {
+  if (fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv")) return true;
+  try {
+    return /docker|kubepods|containerd|libpod/.test(fs.readFileSync("/proc/1/cgroup", "utf8"));
+  } catch {
+    return false;
+  }
+}
 
 function isEnabled() {
   const v = (env("GLINT_ENABLED") || "").toLowerCase();
@@ -109,6 +140,7 @@ function origin() {
   } else if (typeof navigator !== "undefined") {
     o.runtime = navigator.userAgent;
   }
+  if (config.pathMap) o.path_map = config.pathMap;
   if (site.file) o.file = site.file;
   if (site.line) o.line = site.line;
   if (site.col) o.col = site.col;
@@ -120,6 +152,10 @@ function origin() {
 
 const queue = [];
 const inFlight = new Set();
+// Batches sent but not answered yet. A process that crashes right away (a throw at the top of an
+// ES module runs the send first) would lose them; flushSync sends them again, and glintd keeps
+// the first copy of each id.
+const unanswered = new Set();
 let scheduled = false;
 let downUntil = 0;
 let dropped = 0;
@@ -183,7 +219,11 @@ function drain() {
     return;
   }
   inFlight.add(p);
-  p.finally(() => inFlight.delete(p));
+  unanswered.add(batch);
+  p.finally(() => {
+    inFlight.delete(p);
+    unanswered.delete(batch);
+  });
 }
 
 // ---------------------------------------------------------------- envelopes
@@ -363,8 +403,9 @@ glint.pause = async (reason, { timeoutMs = 300_000 } = {}) => {
  * asynchronous request could finish. Node only; elsewhere it does nothing.
  */
 glint.flushSync = (timeoutMs = 1500) => {
-  if (!queue.length || !nodeRequire || typeof process === "undefined") return;
-  const batch = queue.splice(0, queue.length);
+  if ((!queue.length && !unanswered.size) || !nodeRequire || typeof process === "undefined") return;
+  const batch = [...unanswered].flat().concat(queue.splice(0, queue.length));
+  unanswered.clear();
   try {
     const { spawnSync } = nodeRequire("node:child_process");
     const script = `let b="";process.stdin.on("data",d=>b+=d).on("end",()=>fetch(process.argv[1],{method:"POST",headers:{"content-type":"application/json"},body:b}).catch(()=>{}))`;

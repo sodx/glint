@@ -8,11 +8,13 @@
 //! glint conformance -- node sdks/js/conformance.mjs
 //! glint stats                            # what coding agents did with Glint this week
 //! glint install                          # glintd at login + glint() in PHP, Python, Node
+//! glint docker                           # the same inside a container (compose snippet)
 //! ```
 
 mod agents;
 mod client;
 mod conformance;
+mod docker;
 mod expect;
 mod hook;
 mod install;
@@ -109,6 +111,37 @@ enum Command {
     Uninstall {
         #[command(flatten)]
         setup: Setup,
+    },
+    /// glint() and uncaught errors for code in Docker, a dev container or on an SSH machine.
+    ///
+    /// Writes a copy of the SDKs to ~/.glint/sdk/container and prints what to add to the
+    /// service in docker-compose.yml (default), to `docker run` (--run), to devcontainer.json
+    /// (--devcontainer), or to an SSH session (--ssh HOST, a reverse tunnel to this glintd).
+    /// Run it in the project folder: it names the project after the git repository and maps the
+    /// container folder (--app-dir) to this one, so files open in your editor.
+    Docker {
+        /// Print `docker run` flags.
+        #[arg(long, conflicts_with_all = ["devcontainer", "ssh"])]
+        run: bool,
+        /// Print a devcontainer.json snippet.
+        #[arg(long, conflicts_with = "ssh")]
+        devcontainer: bool,
+        /// Print the steps for a remote machine reached over SSH.
+        #[arg(long, value_name = "HOST")]
+        ssh: Option<String>,
+        /// Languages to set up: php, python, node (default: what the folder uses).
+        #[arg(long, value_delimiter = ',', value_parser = docker::Lang::parse)]
+        lang: Vec<docker::Lang>,
+        /// Where this folder is in the container or on the remote machine
+        /// (default: /var/www/html for PHP, /app otherwise, the workspace in a dev container).
+        #[arg(long)]
+        app_dir: Option<String>,
+        /// The project folder on this machine (default: the current directory).
+        #[arg(long)]
+        dir: Option<std::path::PathBuf>,
+        /// Project name (default: the folder's git repository).
+        #[arg(long)]
+        project: Option<String>,
     },
     /// Check that glintd is reachable and glint() is available in each language.
     Doctor {
@@ -221,6 +254,34 @@ impl Setup {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn docker_cmd(
+    url: &str,
+    run: bool,
+    devcontainer: bool,
+    ssh: Option<String>,
+    lang: Vec<docker::Lang>,
+    app_dir: Option<String>,
+    dir: Option<std::path::PathBuf>,
+    project: Option<String>,
+) -> Result<(), String> {
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is not set")?;
+    let dir = match dir {
+        Some(d) => d,
+        None => std::env::current_dir().map_err(|e| format!("current directory: {e}"))?,
+    };
+    let dir = dir.canonicalize().map_err(|e| format!("{}: {e}", dir.display()))?;
+    let format = match (run, devcontainer, &ssh) {
+        (true, _, _) => docker::Format::Run,
+        (_, true, _) => docker::Format::Devcontainer,
+        (_, _, Some(_)) => docker::Format::Ssh,
+        _ => docker::Format::Compose,
+    };
+    let langs = if lang.is_empty() { docker::detect(&dir) } else { lang };
+    let port = url.rsplit(':').next().and_then(|p| p.trim_end_matches('/').parse().ok()).unwrap_or(23600);
+    docker::run(&docker::Args { format, langs, dir, app_dir, project, ssh_host: ssh, home, port })
+}
+
 fn setup(steps: &[install::Step], dry_run: bool, then: &str, json: bool) -> Result<(), String> {
     if json {
         // One line, behind a marker: a login shell may print its own things around it.
@@ -303,6 +364,7 @@ fn main() -> ExitCode {
             let (dry, json) = (s.dry_run, s.json);
             s.args(&cli.url).and_then(|a| setup(&install::uninstall(&a), dry, "", json))
         }
+        Command::Docker { run, devcontainer, ssh, lang, app_dir, dir, project } => docker_cmd(&cli.url, run, devcontainer, ssh, lang, app_dir, dir, project),
         Command::Doctor { json } => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None, json }
             .args(&cli.url)
             .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "", json)),

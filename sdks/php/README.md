@@ -63,8 +63,9 @@ request as a call tree.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `GLINT_ENABLED` | see below | `0`/`false`/`off` disables everything (no network); `1`/`true`/`on` enables |
-| `GLINT_URL` | `http://127.0.0.1:23600` | Glint server |
+| `GLINT_URL` | `http://127.0.0.1:23600`; in a container `http://host.docker.internal:23600` | Glint server |
 | `GLINT_PROJECT` | unset | project name attached to every event |
+| `GLINT_PATH_MAP` | unset | `/var/www/html:/Users/me/shop`: container path to host path, so files open in your editor |
 
 Variables are read with `getenv()`, then `$_ENV` and `$_SERVER`, so a `.env` loader that fills
 any of them works.

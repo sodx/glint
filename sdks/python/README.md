@@ -63,9 +63,10 @@ unless `GLINT_FORCE_PAUSE` is set. After 5 minutes it gives up and carries on.
 
 | Variable | Meaning |
 |----------|---------|
-| `GLINT_URL` | Glint server, default `http://127.0.0.1:23600` |
+| `GLINT_URL` | Glint server, default `http://127.0.0.1:23600`; in a container `http://host.docker.internal:23600` |
 | `GLINT_ENABLED` | `0`/`false`/`off` disables; `1`/`true`/`on` enables |
 | `GLINT_PROJECT` | optional project name attached to every event |
+| `GLINT_PATH_MAP` | `/app:/Users/me/shop`: container path to host path, so files open in your editor |
 
 Without `GLINT_ENABLED`, the SDK is **off** when any of `APP_ENV`, `ENV`, `PYTHON_ENV` or
 `DJANGO_ENV` is `production`, and on otherwise. When disabled, no thread starts and nothing is

@@ -59,6 +59,13 @@ Only `kind` and `payload` are required. The server fills in everything else when
 `lang`, `runtime`, `framework`, `sdk` (`"<name>/<semver>"`), `file`, `line`, `col`, `fn`, `host`,
 `pid`, `thread`, `cwd`. All are optional strings or ints. `file` SHOULD be absolute or relative to `cwd`.
 
+`path_map` is for code that runs in a container or on another machine, where file paths are not
+the paths on the machine running the server: comma-separated `<container path>:<host path>` pairs
+(`/var/www/html:/Users/me/shop`), split at the first colon, so a host path may be a Windows path.
+SDKs send the `GLINT_PATH_MAP` environment variable here. The server rewrites `origin.file`,
+`origin.cwd` and each `payload.frames[].file` that starts with a container path (the longest
+match wins), then drops `path_map`; the project is then derived from the host paths.
+
 ### 3.2 `meta`
 
 | Field | Type | Meaning |

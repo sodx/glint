@@ -16,6 +16,7 @@ final class Transport
     public const SDK = 'glint-php/0.1.0';
 
     private const DEFAULT_URL = 'http://127.0.0.1:23600';
+    private const CONTAINER_URL = 'http://host.docker.internal:23600';
     private const BATCH = 100;
     private const MAX_QUEUE = 10000;
     private const FLUSH_INTERVAL = 0.1;
@@ -30,6 +31,8 @@ final class Transport
     private static ?bool $enabled = null;
     private static string $url = self::DEFAULT_URL;
     private static ?string $project = null;
+    /** GLINT_PATH_MAP: "container:host" pairs, comma separated; glintd rewrites file paths with it. */
+    private static ?string $pathMap = null;
     private static ?string $run = null;
     /** @var array<int, array<string, mixed>> */
     private static array $queue = [];
@@ -48,7 +51,12 @@ final class Transport
         $url = self::env('GLINT_URL');
         if ($url !== null && $url !== '') {
             self::$url = $url;
+        } elseif (self::inContainer()) {
+            // 127.0.0.1 is the container itself; Docker names the host machine like this.
+            self::$url = self::CONTAINER_URL;
         }
+        $map = self::env('GLINT_PATH_MAP');
+        self::$pathMap = ($map !== null && $map !== '') ? $map : null;
         $project = self::env('GLINT_PROJECT');
         self::$project = ($project !== null && $project !== '') ? $project : null;
         self::$enabled = self::enabledFromEnv();
@@ -234,6 +242,15 @@ final class Transport
         }
     }
 
+    private static function inContainer(): bool
+    {
+        if (@is_file('/.dockerenv') || @is_file('/run/.containerenv')) {
+            return true;
+        }
+        $cgroup = @file_get_contents('/proc/1/cgroup');
+        return is_string($cgroup) && preg_match('/docker|kubepods|containerd|libpod/', $cgroup) === 1;
+    }
+
     private static function enabledFromEnv(): bool
     {
         $v = strtolower(trim((string) self::env('GLINT_ENABLED')));
@@ -308,6 +325,9 @@ final class Transport
         $cwd = getcwd();
         if ($cwd !== false) {
             $o['cwd'] = $cwd;
+        }
+        if (self::$pathMap !== null) {
+            $o['path_map'] = self::$pathMap;
         }
         if (self::$at !== null) { // given by emitAt(); [] means none
             return $o + array_filter(self::$at, static fn ($v) => $v !== null);
