@@ -1,0 +1,18 @@
+{
+  "name": "glint-sdk",
+  "version": "0.1.0",
+  "description": "Send values, logs, exceptions and timings from JavaScript/TypeScript to Glint",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": { "types": "./src/index.d.ts", "default": "./src/index.js" }
+  },
+  "engines": { "node": ">=18" },
+  "files": ["src"],
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "conformance": "glint conformance -- node conformance.mjs"
+  }
+}

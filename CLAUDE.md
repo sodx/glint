@@ -16,10 +16,11 @@ serves a single-file live-feed UI (`ui/index.html`, no build step yet; Vite + TS
 Next: M1 in `docs/ROADMAP.md`.
 
 M1 in progress: Ray-compatible ingest on `:23517` (`docs/mappings/ray.md`) and the `glint` CLI
-(`send`, `pipe`) are done.
+(`send`, `pipe`) are done, as are SDKs for JS/TS, Python and PHP with the conformance suite
+(`spec/conformance/`, runner `glint conformance`).
 
 Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray),
-`glint-server`, `glintd`, `glint-cli` (binary `glint`). The rest of the layout in ARCHITECTURE §10 is planned, not present.
+`glint-server`, `glintd`, `glint-cli` (binary `glint`); SDKs in `sdks/{js,python,php}`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack
 
@@ -59,7 +60,9 @@ Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-
   `PROTOCOL.md`.
 - **New ingest adapter:** module in `crates/glint-ingest/src/<name>/`, translates foreign bytes to
   `Envelope` only, mapping table in `docs/mappings/<name>.md`, golden tests with recorded input.
-- **New language SDK:** `sdks/<lang>/`, must pass `glint conformance`. Update
+- **New language SDK:** `sdks/<lang>/` with a `conformance.<ext>` program; must pass
+  `glint conformance -- <runtime> sdks/<lang>/conformance.<ext>` (20/20) and be added to
+  `crates/glint-cli/tests/sdks.rs`. `sdks/js` is the reference implementation. Update
   `spec/support-matrix.yaml`.
 - **New framework integration:** `integrations/<framework>/`, builds on the language SDK, emits only
   existing kinds or `x-<framework>.*` kinds, ships a manifest of the kinds it emits.

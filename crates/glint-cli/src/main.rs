@@ -5,9 +5,11 @@
 //! glint send --kind core.log "deployed"   # a log line
 //! echo '{"sql":"select 1"}' | glint send --kind sql.query
 //! npm run dev 2>&1 | glint pipe --label web
+//! glint conformance -- node sdks/js/conformance.mjs
 //! ```
 
 mod client;
+mod conformance;
 mod lines;
 mod pipe;
 mod send;
@@ -70,6 +72,18 @@ enum Command {
         #[command(flatten)]
         common: Common,
     },
+    /// Check a language SDK against the conformance suite (spec/conformance/).
+    ///
+    /// Runs the SDK's conformance program three times against an in-memory server: normally,
+    /// with Glint unreachable, and with GLINT_ENABLED=0.
+    Conformance {
+        /// Use this scenarios.json instead of the built-in one.
+        #[arg(long)]
+        scenarios: Option<String>,
+        /// The command that runs the SDK's conformance program.
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Args)]
@@ -124,6 +138,7 @@ fn main() -> ExitCode {
             send::run(&args, &base(common, "send"), &client)
         }
         Command::Pipe { quiet, common } => pipe::run(&pipe::PipeArgs { quiet }, &base(common, "pipe"), &client),
+        Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

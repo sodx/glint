@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glint-sdk"
+version = "0.1.0"
+description = "Send values, logs, tables, exceptions and timings to a local Glint debug desk."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT OR Apache-2.0"
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Debuggers",
+]
+
+[tool.setuptools]
+packages = ["glint"]
+
+[tool.setuptools.package-data]
+glint = ["py.typed"]

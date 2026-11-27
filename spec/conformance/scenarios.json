@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "name": "scalars",
+      "do": "glint(42); glint(\"hello\"); glint(true); glint(null); glint(3.5) — five separate calls",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": 42 } },
+        { "kind": "core.value", "payload": { "value": "hello" } },
+        { "kind": "core.value", "payload": { "value": true } },
+        { "kind": "core.value", "payload": { "value": null } },
+        { "kind": "core.value", "payload": { "value": 3.5 } }
+      ]
+    },
+    {
+      "name": "structured",
+      "do": "glint({\"name\": \"Ada\", \"tags\": [\"vip\", \"eu\"], \"nested\": {\"n\": 1}}) using the language's map/dict/associative array",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": { "name": "Ada", "tags": ["vip", "eu"], "nested": { "n": 1 } } } }
+      ]
+    },
+    {
+      "name": "object-type",
+      "do": "glint(an instance of a user-defined class named ConformanceOrder with fields id = 7 and total = 129.5)",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": { "id": 7, "total": 129.5 }, "type": "$contains:ConformanceOrder" } }
+      ]
+    },
+    {
+      "name": "cycle",
+      "do": "a = object with name = \"a\"; a.self = a; glint(a)",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": "$has-key-deep:$ref" } }
+      ]
+    },
+    {
+      "name": "special-numbers",
+      "do": "glint({\"nan\": NaN, \"inf\": +Infinity, \"ninf\": -Infinity})",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": { "nan": "NaN", "inf": "Infinity", "ninf": "-Infinity" } } }
+      ]
+    },
+    {
+      "name": "depth",
+      "do": "build 50 nested maps {\"child\": {\"child\": …}} and glint() the outermost",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": "$has-key-deep:$truncated" } }
+      ]
+    },
+    {
+      "name": "multiple-values",
+      "do": "glint(1, 2).label(\"pair\") — one call, two values",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": 1 }, "meta": { "label": "pair" } },
+        { "kind": "core.value", "payload": { "value": 2 }, "meta": { "label": "pair" } }
+      ]
+    },
+    {
+      "name": "fluent",
+      "do": "glint(\"styled\").color(\"red\").label(\"L\").large()",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": "styled" }, "meta": { "color": "red", "label": "L", "size": "lg" } }
+      ]
+    },
+    {
+      "name": "hide-remove",
+      "do": "glint(\"h\").hide(); glint(\"r\").remove()",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": "h" }, "hidden": true },
+        { "kind": "core.value", "payload": { "value": "r" }, "removed": true }
+      ]
+    },
+    {
+      "name": "log",
+      "do": "glint.log(\"user signed in\", {\"user_id\": 7}, \"warn\")",
+      "expect": [
+        { "kind": "core.log", "payload": { "message": "user signed in", "fields": { "user_id": 7 } }, "meta": { "level": "warn" } }
+      ]
+    },
+    {
+      "name": "table",
+      "do": "glint.table([{\"sku\": \"A-1\", \"qty\": 2}, {\"sku\": \"B-7\", \"qty\": 1}])",
+      "expect": [
+        { "kind": "core.table", "payload": { "rows": [{ "sku": "A-1", "qty": 2 }, { "sku": "B-7", "qty": 1 }] } }
+      ]
+    },
+    {
+      "name": "exception",
+      "do": "create (or throw and catch) the language's standard runtime error with message \"boom\" inside a function, then glint.exception(err)",
+      "expect": [
+        {
+          "kind": "core.exception",
+          "payload": { "class": "$string", "message": "boom", "frames": "$nonempty-array" }
+        }
+      ]
+    },
+    {
+      "name": "measure",
+      "do": "glint.measure(\"work\", fn) where fn sleeps for 20 ms and returns 5; the program checks it got 5 back",
+      "expect": [
+        { "kind": "core.measure", "payload": { "name": "work", "duration_ms": "$gte:15" } }
+      ]
+    },
+    {
+      "name": "send",
+      "do": "glint.send(\"x-conformance.custom\", {\"a\": 1}, {\"label\": \"raw\"})",
+      "expect": [
+        { "kind": "x-conformance.custom", "payload": { "a": 1 }, "meta": { "label": "raw" } }
+      ]
+    },
+    {
+      "name": "origin",
+      "do": "glint(\"origin-check\") on a line that also carries a comment containing glint:origin",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": "origin-check" }, "origin": { "file": "$string", "line": "$int" } }
+      ],
+      "check_origin_marker": true
+    },
+    {
+      "name": "end",
+      "do": "glint(\"end\"), then exit normally without calling flush — the SDK must deliver it on exit",
+      "expect": [
+        { "kind": "core.value", "payload": { "value": "end" } }
+      ]
+    }
+  ]
+}

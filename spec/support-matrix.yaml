@@ -1,0 +1,44 @@
+# Language × integration layer → status. Rendered into docs and the app's "connect" screen.
+# Layers (docs/ARCHITECTURE.md §5): otlp = zero-SDK via OpenTelemetry, ray = existing Ray client,
+# pipe = `glint pipe`, sdk = first-party SDK passing spec/conformance.
+# status: supported | planned | community | n/a
+
+languages:
+  javascript:
+    sdk: { status: supported, path: sdks/js, conformance: "node sdks/js/conformance.mjs" }
+    ray: { status: supported, client: node-ray, note: "mapped from source; not yet run against the real client" }
+    otlp: { status: planned, milestone: M3 }
+    pipe: { status: supported }
+  typescript:
+    sdk: { status: supported, path: sdks/js, note: "same package, ships .d.ts" }
+  python:
+    sdk: { status: supported, path: sdks/python, conformance: "python3 sdks/python/conformance.py", note: "tested on CPython 3.14; declares >=3.9" }
+    otlp: { status: planned, milestone: M3 }
+    pipe: { status: supported }
+  php:
+    sdk: { status: supported, path: sdks/php, conformance: "php sdks/php/conformance.php", note: "tested on PHP 8.1" }
+    ray: { status: supported, client: spatie/ray, verified: "1.48.1 on PHP 8.1" }
+    pipe: { status: supported }
+  go:
+    sdk: { status: planned, milestone: M5 }
+    otlp: { status: planned, milestone: M3 }
+    pipe: { status: supported }
+  rust:
+    sdk: { status: planned, milestone: M5 }
+    otlp: { status: planned, milestone: M3 }
+    pipe: { status: supported }
+  ruby:
+    sdk: { status: planned, milestone: M5 }
+    ray: { status: supported, client: spatie/ruby-ray, note: "protocol-compatible; not run yet" }
+    pipe: { status: supported }
+  java-kotlin:
+    sdk: { status: planned, milestone: M5 }
+    otlp: { status: planned, milestone: M3 }
+    pipe: { status: supported }
+  csharp:
+    sdk: { status: planned, milestone: M5 }
+    otlp: { status: planned, milestone: M3 }
+    pipe: { status: supported }
+  any:
+    pipe: { status: supported, note: "anything that prints to stdout/stderr" }
+    http: { status: supported, note: "POST JSON to /v1/events, docs/PROTOCOL.md" }

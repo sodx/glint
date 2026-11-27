@@ -1,0 +1,298 @@
+// Glint SDK for JavaScript and TypeScript (Node >= 18; browsers with fetch).
+//
+//   import glint from "glint-sdk";
+//   glint(order).label("before save").orange();
+//   glint.log("user signed in", { userId: 7 }, "info");
+//
+// Contract: spec/conformance/README.md. Never throws into your program, never blocks it.
+
+import { encode, typeName } from "./encode.js";
+
+export const VERSION = "0.1.0";
+const SDK = `glint-js/${VERSION}`;
+const DEFAULT_URL = "http://127.0.0.1:23600";
+const TIMEOUT_MS = 2000;
+const RETRY_AFTER_MS = 5000;
+const MAX_QUEUE = 10_000;
+const COLORS = ["gray", "green", "orange", "red", "blue", "purple"];
+
+const env = (k) => (typeof process !== "undefined" && process.env ? process.env[k] : undefined);
+const SDK_DIR = new URL(".", import.meta.url).href;
+
+const config = {
+  url: env("GLINT_URL") || DEFAULT_URL,
+  enabled: isEnabled(),
+  project: env("GLINT_PROJECT"),
+};
+
+function isEnabled() {
+  const v = (env("GLINT_ENABLED") || "").toLowerCase();
+  if (v === "0" || v === "false" || v === "off") return false;
+  if (v === "1" || v === "true" || v === "on") return true;
+  return env("NODE_ENV") !== "production";
+}
+
+// ---------------------------------------------------------------- ids
+
+const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+function ulid() {
+  let t = Date.now();
+  let time = "";
+  for (let i = 0; i < 10; i++) {
+    time = B32[t % 32] + time;
+    t = Math.floor(t / 32);
+  }
+  const rnd = new Uint8Array(16);
+  if (globalThis.crypto && globalThis.crypto.getRandomValues) globalThis.crypto.getRandomValues(rnd);
+  else for (let i = 0; i < 16; i++) rnd[i] = Math.floor(Math.random() * 256);
+  let r = "";
+  for (let i = 0; i < 16; i++) r += B32[rnd[i] % 32];
+  return time + r;
+}
+
+const RUN = `js-${ulid()}`;
+
+// ---------------------------------------------------------------- call site
+
+/** Parses V8 / SpiderMonkey / JSC stack lines into frames. */
+export function parseStack(stack) {
+  const frames = [];
+  for (const raw of String(stack || "").split("\n")) {
+    const line = raw.trim();
+    let m = line.match(/^at (?:(.*?) \()?(.*?):(\d+):(\d+)\)?$/); // V8
+    if (!m) {
+      const f = line.match(/^(.*?)@(.*?):(\d+):(\d+)$/); // Firefox / Safari
+      if (f) m = [f[0], f[1], f[2], f[3], f[4]];
+    }
+    if (!m) continue;
+    const file = toPath(m[2]);
+    frames.push({
+      file,
+      line: Number(m[3]),
+      col: Number(m[4]),
+      fn: m[1] || undefined,
+      vendor: /node_modules|^node:|^internal\//.test(file) || undefined,
+    });
+  }
+  return frames;
+}
+
+function toPath(f) {
+  if (f.startsWith("file://")) {
+    try {
+      return decodeURIComponent(new URL(f).pathname);
+    } catch {
+      return f;
+    }
+  }
+  return f.replace(/^async /, "");
+}
+
+const SDK_PATH = toPath(SDK_DIR);
+
+function callSite() {
+  const frames = parseStack(new Error().stack);
+  return frames.find((f) => !f.file.startsWith(SDK_PATH)) || {};
+}
+
+function origin() {
+  const site = callSite();
+  const o = { lang: "js", sdk: SDK };
+  if (typeof process !== "undefined" && process.versions && process.versions.node) {
+    o.runtime = `node ${process.versions.node}`;
+    o.pid = process.pid;
+    try {
+      o.cwd = process.cwd();
+    } catch {
+      // cwd can vanish; not worth failing over.
+    }
+  } else if (typeof navigator !== "undefined") {
+    o.runtime = navigator.userAgent;
+  }
+  if (site.file) o.file = site.file;
+  if (site.line) o.line = site.line;
+  if (site.col) o.col = site.col;
+  if (site.fn) o.fn = site.fn;
+  return o;
+}
+
+// ---------------------------------------------------------------- transport
+
+const queue = [];
+const inFlight = new Set();
+let scheduled = false;
+let downUntil = 0;
+let dropped = 0;
+let warned = false;
+
+function goDown() {
+  downUntil = Date.now() + RETRY_AFTER_MS;
+  if (warned) return;
+  warned = true;
+  // Node only: one line on stderr. Browsers stay quiet; the console is the user's.
+  try {
+    if (typeof process !== "undefined" && process.stderr && process.stderr.write) {
+      process.stderr.write(`glint: cannot reach ${config.url}; events are dropped until it answers\n`);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function enqueue(envelope) {
+  if (queue.length >= MAX_QUEUE) {
+    queue.shift();
+    dropped++;
+  }
+  queue.push(envelope);
+  if (!scheduled) {
+    scheduled = true;
+    // Everything a synchronous block sends goes out in one request.
+    queueMicrotask(drain);
+  }
+}
+
+function drain() {
+  scheduled = false;
+  if (!queue.length) return;
+  const batch = queue.splice(0, queue.length);
+  if (Date.now() < downUntil) {
+    dropped += batch.length;
+    return;
+  }
+  if (dropped) {
+    batch[0].meta = { ...batch[0].meta, dropped };
+    dropped = 0;
+  }
+  let p;
+  try {
+    p = fetch(`${config.url.replace(/\/$/, "")}/v1/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(batch),
+      keepalive: typeof window !== "undefined",
+      signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(TIMEOUT_MS) : undefined,
+    })
+      .then((res) => {
+        if (!res.ok && res.status >= 500) goDown();
+        return res.body && res.body.cancel ? res.body.cancel() : undefined;
+      })
+      .catch(goDown);
+  } catch {
+    goDown();
+    return;
+  }
+  inFlight.add(p);
+  p.finally(() => inFlight.delete(p));
+}
+
+// ---------------------------------------------------------------- envelopes
+
+function emit(kind, payload, meta) {
+  if (!config.enabled) return null;
+  try {
+    const id = ulid();
+    const e = { id, ts: new Date().toISOString(), run: RUN, kind, payload, origin: origin() };
+    if (meta && Object.keys(meta).length) e.meta = meta;
+    if (config.project) e.project = config.project;
+    enqueue(e);
+    return id;
+  } catch {
+    return null; // never let a debugging aid break the program
+  }
+}
+
+/** Handle for events just sent; its methods change how they are shown. */
+export class Entry {
+  constructor(ids) {
+    this.ids = ids.filter(Boolean);
+  }
+  #update(change) {
+    for (const target of this.ids) emit("core.update", { target, ...change });
+    return this;
+  }
+  label(label) {
+    return this.#update({ meta: { label: String(label) } });
+  }
+  color(color) {
+    return COLORS.includes(color) ? this.#update({ meta: { color } }) : this;
+  }
+  gray() { return this.color("gray"); }
+  green() { return this.color("green"); }
+  orange() { return this.color("orange"); }
+  red() { return this.color("red"); }
+  blue() { return this.color("blue"); }
+  purple() { return this.color("purple"); }
+  small() { return this.#update({ meta: { size: "sm" } }); }
+  large() { return this.#update({ meta: { size: "lg" } }); }
+  hide() { return this.#update({ hidden: true }); }
+  remove() { return this.#update({ removed: true }); }
+}
+
+function valuePayload(v) {
+  const p = { value: encode(v) };
+  const t = typeName(v);
+  if (t) p.type = t;
+  return p;
+}
+
+function exceptionPayload(err, depth = 0) {
+  if (!(err instanceof Error)) {
+    return { class: typeof err, message: String(err), frames: [] };
+  }
+  const p = {
+    class: err.name || (err.constructor && err.constructor.name) || "Error",
+    message: err.message,
+    frames: parseStack(err.stack),
+  };
+  if (err.cause instanceof Error && depth < 5) p.cause = exceptionPayload(err.cause, depth + 1);
+  return p;
+}
+
+/** Sends each value as its own event. */
+export function glint(...values) {
+  return new Entry(values.map((v) => emit("core.value", valuePayload(v))));
+}
+
+glint.log = (message, fields, level = "info") => {
+  const p = { message: String(message) };
+  if (fields !== undefined && fields !== null) p.fields = encode(fields);
+  return new Entry([emit("core.log", p, { level })]);
+};
+
+glint.table = (rows, columns) => {
+  const p = { rows: encode(Array.from(rows || [])) };
+  if (columns) p.columns = Array.from(columns, String);
+  return new Entry([emit("core.table", p)]);
+};
+
+glint.exception = (err) => new Entry([emit("core.exception", exceptionPayload(err))]);
+
+glint.measure = (name, fn) => {
+  const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+  const start = now();
+  const done = () => emit("core.measure", { name: String(name), duration_ms: Math.round((now() - start) * 1000) / 1000 });
+  const result = fn();
+  if (result && typeof result.then === "function") {
+    return result.finally(done);
+  }
+  done();
+  return result;
+};
+
+glint.send = (kind, payload, meta) => new Entry([emit(String(kind), encode(payload), meta ? encode(meta) : undefined)]);
+
+/** Resolves once everything queued so far has been sent, or after `timeoutMs`. */
+glint.flush = (timeoutMs = TIMEOUT_MS) => {
+  drain();
+  const all = Promise.allSettled(Array.from(inFlight));
+  return Promise.race([all, new Promise((r) => setTimeout(r, timeoutMs).unref?.())]).then(() => undefined);
+};
+
+glint.configure = (opts = {}) => {
+  if (opts.url) config.url = opts.url;
+  if (typeof opts.enabled === "boolean") config.enabled = opts.enabled;
+  if (opts.project) config.project = opts.project;
+};
+
+export default glint;

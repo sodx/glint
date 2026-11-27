@@ -12,16 +12,15 @@ path = "src/main.rs"
 
 [dependencies]
 glint-protocol.workspace = true
+glint-core.workspace = true
+glint-server.workspace = true
+glint-store-sqlite.workspace = true
+tokio = { workspace = true, features = ["process"] }
 clap = { version = "4", features = ["derive", "env"] }
 serde_json.workspace = true
 ulid.workspace = true
 ureq = { version = "2", default-features = false, features = ["json"] }
 
-[dev-dependencies]
-glint-core.workspace = true
-glint-server.workspace = true
-glint-store-sqlite.workspace = true
-tokio.workspace = true
 
 [lints]
 workspace = true

@@ -141,7 +141,11 @@ A client is conformant when it:
 5. Serialises non-JSON values faithfully: cyclic refs as `{"$ref": "..."}`, binary as base64 with
    `{"$bin": ...}`, special floats as strings, depth/size limits with `{"$truncated": true}`.
 6. Is disabled by default in production (`GLINT_ENABLED` / framework env check).
-7. Passes `glint conformance run -- <test program>` for every scenario in `spec/conformance/`.
+7. Passes `glint conformance -- <command running its conformance program>` — every scenario in
+   `spec/conformance/scenarios.json`, plus the unreachable-server and `GLINT_ENABLED=0` runs.
+   The SDK surface and exact rules are in `spec/conformance/README.md`.
+8. Assigns a client `id` (ULID) to every event, so fluent calls (`.label()`, `.red()`, `.hide()`)
+   can target it with `core.update`.
 
 ## 9. Foreign protocols
 

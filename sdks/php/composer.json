@@ -1,0 +1,19 @@
+{
+    "name": "glint/glint",
+    "description": "Send values, logs, exceptions and timings from PHP to Glint, the local debug desk",
+    "type": "library",
+    "license": "MIT OR Apache-2.0",
+    "require": {
+        "php": ">=8.1",
+        "ext-json": "*"
+    },
+    "suggest": {
+        "ext-curl": "Faster, time-bounded delivery; without it the SDK falls back to file_get_contents"
+    },
+    "autoload": {
+        "psr-4": {
+            "Glint\\": "src/"
+        },
+        "files": ["src/helpers.php"]
+    }
+}
