@@ -29,7 +29,7 @@ const PYTHON: &[(&str, &str)] = sdk_files![
     "python/glint/_ids.py", "python/glint/_origin.py", "python/glint/_transport.py", "python/glint/py.typed",
 ];
 const PHP: &[(&str, &str)] = sdk_files![
-    "php/src/Transport.php", "php/src/Encoder.php", "php/src/Entry.php", "php/src/Glint.php", "php/src/helpers.php",
+    "php/src/Transport.php", "php/src/Encoder.php", "php/src/Entry.php", "php/src/Glint.php", "php/src/GlintStop.php", "php/src/helpers.php",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,20 +141,6 @@ fn run(cmd: &str, args: &[&str], home: &Path) -> Option<String> {
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
 
-const DEFAULT_CONFIG: &str = "# Glint's settings (read by glintd at start; restart it, or run `glint install --only service`).\n\
-# Each can also be set by an environment variable, which wins.\n\
-\n\
-# Events older than this many days are deleted (0 keeps everything).      GLINT_KEEP_DAYS\n\
-keep_days = 7\n\
-# At most this many events are kept; the oldest go first (0: no cap).       GLINT_MAX_EVENTS\n\
-max_events = 100000\n\
-# Where files open: vscode, cursor, windsurf, zed, phpstorm, idea, webstorm, pycharm, sublime.  GLINT_EDITOR\n\
-# editor = \"vscode\"\n\
-# addr = \"127.0.0.1:23600\"        GLINT_ADDR\n\
-# ray_addr = \"127.0.0.1:23517\"    GLINT_RAY_ADDR   (\"off\" to disable)\n\
-# otlp_addr = \"127.0.0.1:4318\"    GLINT_OTLP_ADDR  (\"off\" to disable)\n\
-# db = \"~/.glint/glint.db\"         GLINT_DB\n";
-
 fn install_service(a: &Args) -> Step {
     let bin = a.glint_dir().join("bin");
     let here = match std::env::current_exe() {
@@ -166,14 +152,13 @@ fn install_service(a: &Args) -> Step {
         return fail("service", format!("glintd not found next to {} — build or install it first (cargo install --path crates/glintd)", here.display()));
     }
     let target_daemon = bin.join("glintd");
-    if !a.dry_run {
-        if let Err(e) = fs::create_dir_all(&bin).and_then(|()| replace_file(&daemon, &target_daemon)).and_then(|()| replace_file(&here, &bin.join("glint"))) {
+    if !a.dry_run
+        && let Err(e) = fs::create_dir_all(&bin).and_then(|()| replace_file(&daemon, &target_daemon)).and_then(|()| replace_file(&here, &bin.join("glint"))) {
             return fail("service", format!("copying binaries to {}: {e}", bin.display()));
         }
-    }
     let config = a.glint_dir().join("config.toml");
     if !config.exists()
-        && let Err(e) = write(a, &config, DEFAULT_CONFIG)
+        && let Err(e) = write(a, &config, &glint_core::config::Settings::default().to_file())
     {
         return fail("service", e);
     }

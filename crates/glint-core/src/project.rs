@@ -42,10 +42,10 @@ pub struct ProjectResolver {
 impl ProjectResolver {
     pub fn resolve(&mut self, dir: &str) -> Option<Resolved> {
         let now = Instant::now();
-        if let Some((at, r)) = self.cache.get(dir) {
-            if now.duration_since(*at) < TTL {
-                return r.clone();
-            }
+        if let Some((at, r)) = self.cache.get(dir)
+            && now.duration_since(*at) < TTL
+        {
+            return r.clone();
         }
         if self.cache.len() >= MAX_ENTRIES {
             self.cache.retain(|_, (at, _)| now.duration_since(*at) < TTL);

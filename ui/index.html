@@ -410,6 +410,53 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   .docs-brand { display: none; }
   .docs-close { margin: 0 0 0 auto; position: sticky; right: 0; background: var(--bg); box-shadow: -12px 0 12px var(--bg); }
 }
+
+
+.docs-body .method { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 18px; }
+.docs-body .method h3 { font: 600 15px var(--sans); margin: 0 0 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.docs-body .method h3 code { font-size: 14px; }
+.docs-body .method p { margin: 0 0 6px; }
+.docs-body ol { padding-left: 20px; }
+.docs-body pre .k { color: var(--kw); } .docs-body pre .s { color: var(--str); } .docs-body pre .n { color: var(--num); }
+.docs-body pre .v { color: var(--accent); } .docs-body pre .f { color: var(--text); font-weight: 600; }
+.docs-body pre.cmd { padding-right: 46px; }
+/* ---------------- settings ---------------- */
+.sheet { overflow-y: auto; }
+.sheet-body { max-width: 640px; margin: 0 auto; padding: 28px 20px 80px; }
+.sheet-head { display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--bg); padding: 10px 0; z-index: 1; }
+.sheet-head h1 { font: 600 22px var(--sans); margin: 0; }
+.sheet-head .link { margin-left: auto; }
+.sheet-saved { font-size: 13px; color: var(--green); }
+.sheet-saved.err { color: var(--red); }
+.sheet-lead { color: var(--muted); font-size: 14px; margin: 4px 0 18px; }
+.sheet code { font: 12.5px var(--mono); background: var(--code); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.set-group { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 8px; margin-bottom: 16px; background: var(--surface); }
+.set-group h2 { font: 600 15px var(--sans); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.set-badge { font: 500 11.5px var(--sans); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+.set-stat { font-size: 13.5px; color: var(--muted); margin: 0 0 8px; }
+.set-row { display: grid; grid-template-columns: 180px 1fr; gap: 4px 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.set-row > label { font-size: 14px; }
+.set-row .set-help { grid-column: 2; }
+.set-help { font-size: 12.5px; color: var(--muted); margin: 0; line-height: 1.5; }
+.set-ctl { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.set-ctl input, .set-ctl select { font: 14px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.set-ctl input[type="number"] { width: 120px; font-variant-numeric: tabular-nums; }
+.set-ctl input:not([type]) { width: 100%; font-family: var(--mono); font-size: 13px; }
+.set-ctl input:focus-visible, .set-ctl select:focus-visible, .set-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.set-ctl input:disabled, .set-ctl select:disabled, .set-row input:disabled { opacity: .6; }
+.set-row.toggle { grid-template-columns: 1fr auto; }
+.set-row.toggle label { display: grid; gap: 3px; }
+.set-row.toggle b { font-weight: 500; }
+.set-row.toggle label .set-help { grid-column: auto; }
+.set-row input[type="checkbox"] { appearance: none; width: 38px; height: 22px; border-radius: 22px; background: var(--line-strong); position: relative; cursor: pointer; transition: background .15s; }
+.set-row input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform .15s; }
+.set-row input[type="checkbox"]:checked { background: var(--accent); }
+.set-row input[type="checkbox"]:checked::after { transform: translateX(16px); }
+.set-row .locked { grid-column: 2; font-size: 12px; color: var(--amber); }
+.set-row.toggle .locked { grid-column: 1; }
+.set-actions { display: flex; gap: 8px; padding: 12px 0 8px; border-top: 1px solid var(--line); }
+.btn.danger { color: var(--red); }
+@media (max-width: 560px) { .set-row { grid-template-columns: 1fr; } .set-row .set-help, .set-row .locked { grid-column: 1; } }
 </style>
 </head>
 <body>
@@ -419,6 +466,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></symbol>
   <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
   <symbol id="i-run" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9"/></symbol>
@@ -445,6 +493,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="menu" id="projMenu" role="menu"></div></div>
     <span class="spacer"></span>
     <span class="live" id="live" title="Connected to glintd"><svg class="mark" id="liveMark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="liveText">Live</span></span>
+    <button class="docs-btn" id="settingsBtn" data-act="settings" aria-label="Settings (,)" title="Settings (,)"><svg class="i"><use href="#i-gear"/></svg></button>
     <button class="docs-btn" id="docsBtn" data-act="docs" aria-label="Docs (?)" title="Docs (?)">?</button>
     <button class="cmdk-btn" id="cmdkBtn" aria-label="Jump to a run or action (⌘K)"><svg class="i"><use href="#i-search"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
   </header>
@@ -459,198 +508,242 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <ol class="entries" id="entries"></ol>
 </div>
 
-<div class="keys" aria-hidden="true"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span></div>
+<div class="keys" aria-hidden="true"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span><span><kbd>,</kbd>settings</span></div>
 <div class="palette" id="palette" role="dialog" aria-modal="true" aria-label="Command palette">
   <div class="box"><input id="pq" placeholder="Jump to a run, or type an action…" aria-controls="plist" autocomplete="off"><ul id="plist" role="listbox"></ul></div>
 </div>
+<div class="docs sheet" id="settings" role="dialog" aria-modal="true" aria-labelledby="setTitle" hidden>
+  <div class="sheet-body">
+    <header class="sheet-head"><h1 id="setTitle">Settings</h1><span class="sheet-saved" id="setSaved" aria-live="polite"></span><button class="link" data-act="settings-close">Close <kbd>esc</kbd></button></header>
+    <p class="sheet-lead">Changes apply right away and are saved to <code id="setPath">~/.glint/config.toml</code>.</p>
+
+    <section class="set-group">
+      <h2>Stored events</h2>
+      <p class="set-stat" id="setData">…</p>
+      <div class="set-row"><label for="s-keep_days">Keep events for</label><div class="set-ctl"><input type="number" id="s-keep_days" data-key="keep_days" min="0" max="3650" step="1"><span>days</span></div><p class="set-help">Older ones are deleted every 10 minutes. 0 keeps everything.</p></div>
+      <div class="set-row"><label for="s-max_events">Keep at most</label><div class="set-ctl"><input type="number" id="s-max_events" data-key="max_events" min="0" step="1000"><span>events</span></div><p class="set-help">The oldest go first. 0 means no limit. 100,000 events take a few hundred MB at most.</p></div>
+      <div class="set-actions"><button class="btn" data-act="data-prune">Clean up now</button><button class="btn danger" data-act="data-clear">Delete all events…</button></div>
+    </section>
+
+    <section class="set-group">
+      <h2>Editor</h2>
+      <div class="set-row"><label for="s-editor">Open files in</label><div class="set-ctl"><select id="s-editor" data-key="editor"></select></div><p class="set-help">Used when you click a file:line in an event.</p></div>
+    </section>
+
+    <section class="set-group">
+      <h2>Coding agents</h2>
+      <div class="set-row toggle"><label for="s-agent_context"><b>Tell the agent about new failures</b><span class="set-help">With each of your prompts, Claude Code gets the failures that happened since the last one.</span></label><input type="checkbox" role="switch" id="s-agent_context" data-key="agent_context"></div>
+      <div class="set-row toggle"><label for="s-stop_guard"><b>Don't let it finish while things fail</b><span class="set-help">If your programs failed during its turn, it is sent back once to fix them or explain why.</span></label><input type="checkbox" role="switch" id="s-stop_guard" data-key="stop_guard"></div>
+    </section>
+
+    <section class="set-group">
+      <h2>Addresses <span class="set-badge">after a restart</span></h2>
+      <p class="set-help">These take effect when glintd restarts: run <code>glint install --only service</code>.</p>
+      <div class="set-row"><label for="s-addr">This window and the API</label><div class="set-ctl"><input id="s-addr" data-key="addr" spellcheck="false"></div></div>
+      <div class="set-row"><label for="s-ray_addr">Ray-compatible port</label><div class="set-ctl"><input id="s-ray_addr" data-key="ray_addr" spellcheck="false"></div><p class="set-help"><code>off</code> to turn it off.</p></div>
+      <div class="set-row"><label for="s-otlp_addr">OpenTelemetry receiver</label><div class="set-ctl"><input id="s-otlp_addr" data-key="otlp_addr" spellcheck="false"></div><p class="set-help"><code>off</code> to turn it off.</p></div>
+      <div class="set-row"><label for="s-db">Database file</label><div class="set-ctl"><input id="s-db" data-key="db" spellcheck="false"></div></div>
+    </section>
+  </div>
+</div>
+<!-- docs:start (generated by ui/docs/build.py; edit there) -->
 <div class="docs" id="docs" role="dialog" aria-modal="true" aria-labelledby="docsTitle" hidden>
   <div class="docs-shell">
     <nav class="docs-nav" aria-label="Documentation">
       <div class="docs-brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="docsTitle">Glint docs</span></div>
-      <a href="#d-start">Start</a>
-      <a href="#d-code">From your code</a>
-      <a href="#d-nocode">With no code</a>
-      <a href="#d-tree">Call tree &amp; timing</a>
-      <a href="#d-expect">Checks: glint expect</a>
-      <a href="#d-agents">Coding agents</a>
-      <a href="#d-cli">Command line</a>
-      <a href="#d-app">Using this window</a>
-      <a href="#d-config">Settings &amp; data</a>
-      <a href="#d-help">When something is off</a>
+      <a href="#d-start">Start</a><a href="#d-api">Methods</a><a href="#d-nocode">With no code</a><a href="#d-tree">Call tree</a><a href="#d-expect">glint expect</a><a href="#d-agents">Coding agents</a><a href="#d-cli">Command line</a><a href="#d-app">This window</a><a href="#d-config">Settings and data</a><a href="#d-langs">Other languages</a><a href="#d-help">When something is off</a>
       <button class="link docs-close" data-act="docs-close">Close <kbd>esc</kbd></button>
     </nav>
-    <article class="docs-body">
-
-<section id="d-start">
+    <article class="docs-body"><section id="d-start">
 <h1>Glint shows what your programs did</h1>
-<p class="lead">Values, logs, SQL, exceptions, timings and LLM calls from PHP, Python, Node and the browser land here, live, grouped by project and run. Your coding agent sees the same thing.</p>
+<p class="lead">Values, logs, SQL, exceptions, timings and LLM calls from PHP, Python, Node and the browser arrive here as they happen, grouped by project and run. Your coding agent reads the same events.</p>
 <h3>Install once</h3>
-<pre class="cmd"><code>cargo build --release -p glintd -p glint-cli &amp;&amp; target/release/glint install</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
-<p>That starts <code>glintd</code> at login, makes <code>glint()</code> a global in every PHP, Python and Node program, reports their uncaught errors, and tells the coding agents it finds (Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex) about Glint. Open a new terminal afterwards. Then check:</p>
-<pre class="cmd"><code>glint doctor</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
-<p class="aside">Glint stays off in production: SDKs send nothing when <code>APP_ENV</code> or <code>NODE_ENV</code> is <code>production</code>, or <code>GLINT_ENABLED=0</code>. Everything stays on this machine.</p>
-</section>
+<pre class="code cmd"><code data-lang="bash">cargo build --release -p glintd -p glint-cli &amp;&amp; target/release/glint install</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>This starts <code>glintd</code> at login, makes <code>glint()</code> a global in every PHP, Python and Node program, reports their uncaught errors, and tells the coding agents it finds (Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex) about Glint. Open a new terminal, then check that everything answers:</p>
+<pre class="code cmd"><code data-lang="bash">glint doctor</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p class="aside">SDKs send nothing in production: when <code>APP_ENV</code> or <code>NODE_ENV</code> is <code>production</code>, or <code>GLINT_ENABLED=0</code>. Events never leave this machine.</p>
+</section><section id="d-api">
+<h2>Methods</h2>
+<p>After <code>glint install</code>, <code>glint()</code> works in PHP, Python and Node without an import. In PHP the other methods live on <code>Glint\Glint</code>; in Python, Node and the browser they hang off <code>glint</code>. Pick a language once and every example below follows it.</p>
+<div class="method" id="m-value"><h3><code>glint(value)</code> send a value</h3><p>Sends one event per value. Arrays, dictionaries, objects and models arrive as foldable JSON; an exception passed this way is shown as an exception with its stack. It returns a handle for the methods below.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">$order = Order::with(&#x27;items&#x27;)-&gt;find($id);
+glint($order);                       // one value
+glint($request-&gt;all(), $order-&gt;total); // several, one event each</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">order = db.orders.get(order_id)
+glint(order)                         # one value
+glint(request.json, order.total)     # several, one event each</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">const order = await db.orders.find(orderId);
+glint(order);                        // one value
+glint(req.body, order.total);        // several, one event each</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">const cart = await fetch(&quot;/api/cart&quot;).then((r) =&gt; r.json());
+glint(cart);</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash">curl -s localhost:23600/v1/events \
+  -d &#x27;{&quot;kind&quot;:&quot;core.value&quot;,&quot;payload&quot;:{&quot;value&quot;:{&quot;id&quot;:7,&quot;total&quot;:129.5}}}&#x27;</code></pre></div></div></div><div class="method" id="m-label"><h3><code>label, colour, size, hide</code></h3><p>Change how the events you just sent look: a label to find them by, a colour (gray, green, orange, red, blue, purple), a smaller or larger row, or hide them. glint expect can match on labels, even ones set afterwards.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">glint($order)-&gt;label(&#x27;before save&#x27;)-&gt;green();
+glint($payload)-&gt;label(&#x27;webhook&#x27;)-&gt;small();
+glint($secret)-&gt;hide();</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">glint(order).label(&quot;before save&quot;).green()
+glint(payload).label(&quot;webhook&quot;).small()
+glint(secret).hide()</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">glint(order).label(&quot;before save&quot;).green();
+glint(payload).label(&quot;webhook&quot;).small();
+glint(secret).hide();</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">glint(cart).label(&quot;cart on load&quot;).blue();</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash"># label and colour travel in meta
+curl -s localhost:23600/v1/events \
+  -d &#x27;{&quot;kind&quot;:&quot;core.value&quot;,&quot;payload&quot;:{&quot;value&quot;:{&quot;id&quot;:7}},&quot;meta&quot;:{&quot;label&quot;:&quot;before save&quot;,&quot;color&quot;:&quot;green&quot;}}&#x27;</code></pre></div></div></div><div class="method" id="m-log"><h3><code>log(message, fields, level)</code></h3><p>A log line with structured fields. Levels are trace, debug, info, warn, error and fatal; error and fatal count as failures.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">Glint\Glint::log(&#x27;payment retried&#x27;, [&#x27;order&#x27; =&gt; $order-&gt;id, &#x27;attempt&#x27; =&gt; 2], &#x27;warn&#x27;);</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">glint.log(&quot;payment retried&quot;, {&quot;order&quot;: order.id, &quot;attempt&quot;: 2}, level=&quot;warn&quot;)</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">glint.log(&quot;payment retried&quot;, { order: order.id, attempt: 2 }, &quot;warn&quot;);</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">glint.log(&quot;checkout step&quot;, { step: 2, coupon: form.coupon.value });</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash">curl -s localhost:23600/v1/events \
+  -d &#x27;{&quot;kind&quot;:&quot;core.log&quot;,&quot;payload&quot;:{&quot;message&quot;:&quot;payment retried&quot;,&quot;fields&quot;:{&quot;attempt&quot;:2}},&quot;meta&quot;:{&quot;level&quot;:&quot;warn&quot;}}&#x27;</code></pre></div></div></div><div class="method" id="m-table"><h3><code>table(rows, columns)</code></h3><p>Rows as a table. Pass the columns to choose and order them; without them the keys of the first row are used.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">Glint\Glint::table($order-&gt;items-&gt;toArray(), [&#x27;sku&#x27;, &#x27;qty&#x27;, &#x27;price&#x27;]);</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">glint.table([{&quot;sku&quot;: i.sku, &quot;qty&quot;: i.qty, &quot;price&quot;: i.price} for i in order.items])</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">glint.table(order.items, [&quot;sku&quot;, &quot;qty&quot;, &quot;price&quot;]);</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">glint.table(cart.items, [&quot;sku&quot;, &quot;qty&quot;, &quot;price&quot;]);</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash">curl -s localhost:23600/v1/events \
+  -d &#x27;{&quot;kind&quot;:&quot;core.table&quot;,&quot;payload&quot;:{&quot;rows&quot;:[{&quot;sku&quot;:&quot;A-1&quot;,&quot;qty&quot;:2},{&quot;sku&quot;:&quot;B-7&quot;,&quot;qty&quot;:1}]}}&#x27;</code></pre></div></div></div><div class="method" id="m-exception"><h3><code>exception(error)</code></h3><p>An error with its class, message and stack. The window shows the code around the line it was thrown from. glint(error) does the same.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">try {
+    $gateway-&gt;charge($order);
+} catch (Throwable $e) {
+    glint($e);                       // or Glint\Glint::exception($e)
+    throw $e;
+}</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">try:
+    gateway.charge(order)
+except Exception as err:
+    glint(err)                       # or glint.exception(err)
+    raise</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">try {
+  await gateway.charge(order);
+} catch (err) {
+  glint(err);                        // or glint.exception(err)
+  throw err;
+}</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">window.addEventListener(&quot;error&quot;, (e) =&gt; glint(e.error)); // already done for you; for caught errors:
+try { renderCart(cart); } catch (err) { glint(err); }</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash">curl -s localhost:23600/v1/events -d &#x27;{&quot;kind&quot;:&quot;core.exception&quot;,&quot;payload&quot;:{
+  &quot;class&quot;:&quot;TypeError&quot;,&quot;message&quot;:&quot;coupon is null&quot;,
+  &quot;frames&quot;:[{&quot;file&quot;:&quot;/srv/shop/cart.js&quot;,&quot;line&quot;:11,&quot;fn&quot;:&quot;total&quot;}]}}&#x27;</code></pre></div></div></div><div class="method" id="m-measure"><h3><code>measure(name, fn)</code> time it, nest what it sends</h3><p>Runs fn, sends how long it took, and returns what fn returns. Everything sent while fn runs nests under the measure, inner measures too, so a run reads as a call tree. In Node and Python the nesting follows await; in the browser only the synchronous part of fn nests.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">$total = Glint\Glint::measure(&#x27;pricing&#x27;, function () use ($cart) {
+    $rates = Glint\Glint::measure(&#x27;load rates&#x27;, fn () =&gt; Rate::forCart($cart)); // nests
+    return $cart-&gt;total($rates);
+});</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">def price():
+    rates = glint.measure(&quot;load rates&quot;, lambda: Rate.for_cart(cart))  # nests
+    return cart.total(rates)
 
-<section id="d-code">
-<h2>From your code</h2>
-<p>No import, no setup: after <code>glint install</code>, <code>glint()</code> exists everywhere. A project that vendors the SDK itself (from <code>sdks/php</code>, <code>sdks/python</code>, <code>sdks/js</code> in the Glint repository) keeps its own copy.</p>
-<div class="tabbed">
-  <div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="other">Other languages</button></div>
-  <div class="pane" data-pane="php">
-<pre class="code"><code>glint($order);                                   <span class="c">// any value: arrays, objects, models</span>
-glint($order)-&gt;label('before save')-&gt;green();     <span class="c">// label, colour: gray green orange red blue purple</span>
-glint($a, $b, $c);                               <span class="c">// several at once</span>
-Glint\Glint::log('payment retried', ['attempt' =&gt; 2], 'warn');
-Glint\Glint::table($rows);
-glint($e);                                       <span class="c">// a Throwable is shown as an exception with its stack</span>
-$total = Glint\Glint::measure('pricing', fn () =&gt; price($cart));   <span class="c">// timing; what it sends nests under it</span>
-Glint\Glint::send('sql.query', ['sql' =&gt; $sql, 'bindings' =&gt; $b, 'duration_ms' =&gt; 3.2]);</code></pre>
-<p>Runs: each request (or CLI script) is one run, named by its first log line, e.g. <code>GET /checkout/8</code>.</p>
-  </div>
-  <div class="pane" data-pane="python" hidden>
-<pre class="code"><code>glint(order)                                     <span class="c"># any value: dicts, dataclasses, objects</span>
-glint(order).label("before save").green()
-glint.log("payment retried", {"attempt": 2}, level="warn")
-glint.table(rows)
-glint(err)                                       <span class="c"># an exception is shown with its traceback</span>
-total = glint.measure("pricing", lambda: price(cart))   <span class="c"># also takes async functions</span>
-glint.send("sql.query", {"sql": sql, "bindings": b, "duration_ms": 3.2})</code></pre>
-  </div>
-  <div class="pane" data-pane="node" hidden>
-<pre class="code"><code>glint(order);
-glint(order).label("before save").green();
-glint.log("payment retried", { attempt: 2 }, "warn");
-glint.table(rows);
-glint(err);                                      <span class="c">// an Error is shown with its stack</span>
-const total = await glint.measure("pricing", async () =&gt; price(cart));
-const answer = await glint.pause("check the discount before charging");   <span class="c">// waits for Continue in Glint</span>
-glint.send("sql.query", { sql, bindings, duration_ms: 3.2 });</code></pre>
-<p><code>glint.pause()</code> stops the program until someone presses <b>Continue</b> (here, or an agent through MCP) and returns the value given, e.g. <code>{"approve": true}</code>.</p>
-  </div>
-  <div class="pane" data-pane="browser" hidden>
-<p>Add one tag to the page while you develop (not to production builds):</p>
-<pre class="cmd"><code>&lt;script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"&gt;&lt;/script&gt;</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
-<pre class="code"><code>glint(cart);                                     <span class="c">// window.glint, same as everywhere</span>
-glint.log("checkout opened", { step: 2 });
-glint.exception(err);</code></pre>
-<p>It also reports, with no code, uncaught errors, unhandled promise rejections, <code>console.error</code>/<code>warn</code>, failed requests and resources that failed to load. Each page load is a run, <code>Page /path</code>. Only pages on <code>localhost</code>, <code>127.0.0.1</code>, <code>*.localhost</code> or <code>*.test</code> can send.</p>
-  </div>
-  <div class="pane" data-pane="other" hidden>
-<p>Any language can POST JSON:</p>
-<pre class="cmd"><code>curl -s localhost:23600/v1/events -d '{"kind":"core.value","payload":{"value":{"id":7}}}'</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
-<p>Or from a shell: <code>glint send '{"id":7}'</code>, and <code>your-command 2&gt;&amp;1 | glint pipe</code> to forward a program's output line by line (levels and stack traces are recognised).</p>
-<p><b>Ray</b> client libraries (<code>ray()</code> in PHP, JS, Python, Go, Ruby…) work unchanged: Glint listens on Ray's port 23517. <b>OpenTelemetry</b>: point an exporter at <code>http://127.0.0.1:4318</code>; GenAI spans become LLM calls with the transcript, tokens and cost.</p>
-  </div>
-</div>
-</section>
-
-<section id="d-nocode">
-<h2>With no code at all</h2>
-<ul>
-<li><b>PHP</b>: uncaught exceptions and fatal errors (out of memory, parse errors). PHP still prints its error and exits as before. Works for scripts, php-fpm, Valet, Herd and <code>php -S -t public</code>; not for a <code>php -S</code> router script (<code>artisan serve</code>), where PHP skips the prepend file.</li>
-<li><b>Python</b>: uncaught exceptions, in any thread. The traceback is still printed.</li>
-<li><b>Node</b>: uncaught exceptions and unhandled rejections. The process still crashes as it would.</li>
-<li><b>Browser</b>: with the tag above.</li>
-</ul>
-<p class="aside">A framework that catches exceptions itself to render an error page (Laravel, Express, Django) keeps them from being "uncaught": call <code>glint($e)</code> in its error handler.</p>
-</section>
-
-<section id="d-tree">
-<h2>Call tree &amp; timing</h2>
-<p>Everything sent inside <code>measure()</code> nests under it, inner measures too, across <code>await</code> in Node:</p>
-<pre class="code"><code>Glint\Glint::measure('checkout', function () use ($id) {
-    $order = Glint\Glint::measure('load order', fn () =&gt; load($id));   <span class="c">// its SQL nests here</span>
-    glint($order)-&gt;label('order');
-});</code></pre>
-<p>A run then reads as a tree: <code>checkout → load order → select …</code>. Click the arrow left of a node to fold it. The bars on the right are a small waterfall: where in the run each piece of work started and how long it took. OpenTelemetry spans nest the same way.</p>
-</section>
-
-<section id="d-expect">
-<h2>Checks: <code>glint expect</code></h2>
-<p>Markers become a test. Wait until events match each expectation, in order, and fail as soon as a program errors:</p>
-<pre class="cmd"><code>glint expect 'label:cart payload.value.total&gt;0' 'kind:sql.query text:"insert into orders"' 'label:"order saved"' -- ./checkout.sh 7</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+total = glint.measure(&quot;pricing&quot;, price)</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">const total = await glint.measure(&quot;pricing&quot;, async () =&gt; {
+  const rates = await glint.measure(&quot;load rates&quot;, () =&gt; loadRates(cart)); // nests
+  return cart.total(rates);
+});</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">const html = glint.measure(&quot;render cart&quot;, () =&gt; renderCart(cart));</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash"># a measure is an event with a duration; children name it as parent
+curl -s localhost:23600/v1/events -d &#x27;[
+  {&quot;id&quot;:&quot;m1&quot;,&quot;kind&quot;:&quot;core.measure&quot;,&quot;payload&quot;:{&quot;name&quot;:&quot;pricing&quot;,&quot;duration_ms&quot;:38.9}},
+  {&quot;kind&quot;:&quot;sql.query&quot;,&quot;parent&quot;:&quot;m1&quot;,&quot;payload&quot;:{&quot;sql&quot;:&quot;select * from rates&quot;,&quot;duration_ms&quot;:3.4}}]&#x27;</code></pre></div></div></div><div class="method" id="m-pause"><h3><code>pause(reason)</code> stop until you answer</h3><p>Stops the program at this line until someone presses Continue in the window (or C), or a coding agent answers through MCP. It returns the value given with Continue, for example {&quot;approve&quot;: true}, or nothing. Stop raises GlintStop. pause returns at once when Glint is off or unreachable, and on CI unless GLINT_FORCE_PAUSE is set; after 5 minutes it gives up and carries on.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">$answer = Glint\Glint::pause(&quot;refund {$order-&gt;total} EUR for order {$order-&gt;id}?&quot;);
+if ($answer[&#x27;approve&#x27;] ?? false) {
+    $gateway-&gt;refund($order);
+}</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">answer = glint.pause(f&quot;refund {order.total} EUR for order {order.id}?&quot;)
+if answer and answer.get(&quot;approve&quot;):
+    gateway.refund(order)</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">const answer = await glint.pause(`refund ${order.total} EUR for order ${order.id}?`);
+if (answer?.approve) await gateway.refund(order);</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">const answer = await glint.pause(&quot;check the discount before charging&quot;);
+if (answer?.discount) cart.discount = answer.discount;</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash"># 1. send the pause with an id you choose
+curl -s localhost:23600/v1/events -d &#x27;{&quot;id&quot;:&quot;p-42&quot;,&quot;kind&quot;:&quot;ctl.pause&quot;,&quot;payload&quot;:{&quot;reason&quot;:&quot;refund?&quot;}}&#x27;
+# 2. wait for the answer: 204 = still waiting (ask again), 200 = {&quot;action&quot;:&quot;continue&quot;,&quot;value&quot;:...}
+curl -s &quot;localhost:23600/v1/ctl/p-42?timeout_s=25&quot;</code></pre></div></div></div><div class="method" id="m-send"><h3><code>send(kind, payload, meta)</code> anything else</h3><p>Sends an event of any kind as it is. Use it for SQL queries from your own query logger, HTTP calls, jobs, or kinds of your own (prefix them with x-).</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">DB::listen(fn ($q) =&gt; Glint\Glint::send(&#x27;sql.query&#x27;, [
+    &#x27;sql&#x27; =&gt; $q-&gt;sql, &#x27;bindings&#x27; =&gt; $q-&gt;bindings, &#x27;duration_ms&#x27; =&gt; $q-&gt;time, &#x27;conn&#x27; =&gt; $q-&gt;connectionName,
+]));</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">glint.send(&quot;sql.query&quot;, {&quot;sql&quot;: sql, &quot;bindings&quot;: params, &quot;duration_ms&quot;: 3.4, &quot;conn&quot;: &quot;postgres&quot;})</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">glint.send(&quot;sql.query&quot;, { sql, bindings: params, duration_ms: 3.4, conn: &quot;mysql&quot; });</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">glint.send(&quot;x-shop.step&quot;, { step: &quot;address&quot;, valid: form.checkValidity() });</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash">curl -s localhost:23600/v1/events \
+  -d &#x27;{&quot;kind&quot;:&quot;sql.query&quot;,&quot;payload&quot;:{&quot;sql&quot;:&quot;select * from orders where id = ?&quot;,&quot;bindings&quot;:[7],&quot;duration_ms&quot;:3.4}}&#x27;</code></pre></div></div></div><div class="method" id="m-flush"><h3><code>flush()</code> make sure it was sent</h3><p>SDKs send in the background without slowing your program. A short script that exits right away is flushed for you on exit; call flush yourself before a hard exit or before checking results with glint expect.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">Glint\Glint::flush();</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">glint.flush()</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">await glint.flush();</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="js">glint.flush(); // also done when the page is hidden or closed</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash"># each POST is stored before it returns</code></pre></div></div></div><div class="method" id="m-configure"><h3><code>configure</code> address, on/off, project</h3><p>Usually you need none of this: the defaults find glintd, and the project is the git repository&#x27;s name. Environment variables do the same for every language: GLINT_URL, GLINT_ENABLED, GLINT_PROJECT.</p><div class="tabbed"><div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="http">HTTP</button></div><div class="pane" data-pane="php"><pre class="code"><code data-lang="php">Glint\Glint::configure(url: &#x27;http://127.0.0.1:23600&#x27;, enabled: true, project: &#x27;shop&#x27;);</code></pre></div><div class="pane" data-pane="python" hidden><pre class="code"><code data-lang="python">glint.configure(url=&quot;http://127.0.0.1:23600&quot;, enabled=True, project=&quot;shop&quot;)</code></pre></div><div class="pane" data-pane="node" hidden><pre class="code"><code data-lang="js">glint.configure({ url: &quot;http://127.0.0.1:23600&quot;, enabled: true, project: &quot;shop&quot; });</code></pre></div><div class="pane" data-pane="browser" hidden><pre class="code"><code data-lang="html">&lt;script src=&quot;http://127.0.0.1:23600/v1/browser.js&quot; data-project=&quot;shop&quot;&gt;&lt;/script&gt;</code></pre></div><div class="pane" data-pane="http" hidden><pre class="code"><code data-lang="bash">curl -s localhost:23600/v1/events -d &#x27;{&quot;project&quot;:&quot;shop&quot;,&quot;kind&quot;:&quot;core.value&quot;,&quot;payload&quot;:{&quot;value&quot;:1}}&#x27;</code></pre></div></div></div>
+<p class="aside">A project that vendors an SDK itself (from <code>sdks/php</code>, <code>sdks/python</code> or <code>sdks/js</code> in the Glint repository) uses its own copy instead of the global one.</p>
+</section><section id="d-nocode">
+<h2>What Glint records with no code at all</h2>
+<p>Uncaught errors. PHP still prints its error and exits with the same code, Python still prints the traceback, and a Node process still crashes as before. Glint only records them.</p>
 <table class="ref">
-<tr><td><code>label:X</code></td><td>the event's label (set with <code>-&gt;label()</code>, also afterwards)</td></tr>
-<tr><td><code>kind:sql.query</code> · <code>kind:sql.*</code></td><td>the kind, or a prefix</td></tr>
-<tr><td><code>text:refund</code></td><td>the payload contains it (any case)</td></tr>
-<tr><td><code>payload.value.total&gt;0</code></td><td>a dot path compared: <code>= != &gt; &gt;= &lt; &lt;=</code>; <code>true</code>, <code>null</code>, numbers are JSON</td></tr>
+<tr><td>PHP</td><td>uncaught exceptions and fatal errors (out of memory, a parse error in an included file). Works for scripts, php-fpm, Valet, Herd and <code>php -S -t public</code>. PHP skips the prepend file for a <code>php -S</code> router script, which is what <code>artisan serve</code> uses.</td></tr>
+<tr><td>Python</td><td>uncaught exceptions in any thread.</td></tr>
+<tr><td>Node</td><td>uncaught exceptions and unhandled promise rejections.</td></tr>
+<tr><td>Browser</td><td>with one tag in the page you are developing: uncaught errors, unhandled rejections, <code>console.error</code> and <code>console.warn</code>, failed requests and resources that failed to load.</td></tr>
+</table>
+<pre class="code cmd"><code data-lang="html">&lt;script src=&quot;http://127.0.0.1:23600/v1/browser.js&quot; data-project=&quot;shop&quot;&gt;&lt;/script&gt;</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>Only pages on <code>localhost</code>, <code>127.0.0.1</code>, <code>*.localhost</code> or <code>*.test</code> can send. Leave the tag out of production builds.</p>
+<p class="aside">Frameworks that catch exceptions to render an error page (Laravel, Express, Django) stop them from being uncaught. Call <code>glint($e)</code> in the framework's error handler to see them.</p>
+</section><section id="d-tree">
+<h2>Call tree and timing</h2>
+<p>Wrap work in <code>measure()</code> and everything it sends nests under it. A checkout request then reads <code>checkout → load order → select …</code> instead of a flat list. Click the arrow left of a row to fold it. The bars on the right are a small waterfall: where in the run each piece started and how long it took. OpenTelemetry spans nest the same way.</p>
+<pre class="code"><code data-lang="php">Glint\Glint::measure(&#x27;checkout&#x27;, function () use ($id) {
+    $order = Glint\Glint::measure(&#x27;load order&#x27;, fn () =&gt; Order::find($id)); // its SQL nests here
+    glint($order)-&gt;label(&#x27;order&#x27;);
+});</code></pre>
+</section><section id="d-expect">
+<h2>Checks with glint expect</h2>
+<p>Markers you placed with <code>glint()</code> become a test. <code>glint expect</code> waits until events match each expectation, in order, and fails as soon as a program errors. It prints which event satisfied each line.</p>
+<pre class="code cmd"><code data-lang="bash">glint expect &#x27;label:cart payload.value.total&gt;0&#x27; &#x27;kind:sql.query text:&quot;insert into orders&quot;&#x27; \
+             &#x27;label:&quot;order saved&quot; payload.value.paid=true&#x27; -- ./checkout.sh 7</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<table class="ref">
+<tr><td><code>label:X</code></td><td>the event's label, also one set afterwards with <code>.label()</code></td></tr>
+<tr><td><code>kind:sql.query</code>, <code>kind:sql.*</code></td><td>the kind, or a prefix</td></tr>
+<tr><td><code>text:refund</code></td><td>the payload contains it, in any case</td></tr>
+<tr><td><code>payload.value.total&gt;0</code></td><td>a dot path compared with <code>= != &gt; &gt;= &lt; &lt;=</code>; <code>true</code>, <code>null</code> and numbers are JSON</td></tr>
 <tr><td><code>has:payload.value.email</code></td><td>present and not null</td></tr>
 <tr><td><code>count&gt;=2</code></td><td>how many matching events are needed</td></tr>
 </table>
-<p>Exit 0 pass, 1 fail, 2 could not check. Without <code>-- command</code> it also looks at the last 30 s and waits (<code>--timeout</code>) while you click through. <code>--unordered</code>, <code>--allow-errors</code>, <code>-p project</code>. Agents use the same check as the MCP tool <code>glint_expect</code>.</p>
-</section>
-
-<section id="d-agents">
+<p>It exits with 0 when everything matched, 1 when something did not, and 2 when it could not check. Without <code>-- command</code> it also looks at the last 30 seconds and waits while you click through the app (<code>--timeout</code>). Other flags: <code>--unordered</code>, <code>--allow-errors</code>, <code>-p project</code>. Agents run the same check through the MCP tool <code>glint_expect</code>.</p>
+</section><section id="d-agents">
 <h2>Coding agents</h2>
-<p><code>glint install</code> registers Glint's MCP server with the agents it finds. Claude Code also gets hooks, so its own session shows up here next to your program, and Glint can talk to it:</p>
+<p><code>glint install</code> registers Glint's MCP server with the agents it finds. Claude Code also gets hooks, so its session shows up here next to your program and Glint can tell it things:</p>
 <ul>
-<li><b>At session start</b> it learns that Glint is recording this project, that <code>glint()</code> needs no import, and which failures happened in the last day.</li>
-<li><b>With each of your prompts</b> it gets the failures that are new since the last one. You say "it's broken", it already sees <code>TypeError … cart.js:11</code>.</li>
-<li><b>When it wants to finish</b> while programs of the project failed during its turn, it is sent back once to fix them or say why they are expected (<code>GLINT_STOP_GUARD=0</code> turns that off). Failures in code it edited afterwards don't count.</li>
+<li>At session start it learns that Glint records this project, that <code>glint()</code> needs no import, and which failures happened in the last day.</li>
+<li>With each of your prompts it gets the failures that are new since the previous one. When you write "it's broken", it already has <code>TypeError … cart.js:11</code>.</li>
+<li>When it wants to finish a turn during which your programs failed, it is sent back once to fix them or explain why they are expected. Failures in files it edited afterwards don't count.</li>
 </ul>
+<p>Both can be turned off in Settings.</p>
 <table class="ref">
-<tr><td><code>glint_last_error</code></td><td>the newest failure with its stack and values: where to start</td></tr>
-<tr><td><code>glint_events</code> · <code>glint_event</code> · <code>glint_runs</code></td><td>look around: filter, one full event, recent runs</td></tr>
-<tr><td><code>glint_wait_for</code></td><td>edit → run → wait for the result, instead of reading terminal output</td></tr>
-<tr><td><code>glint_expect</code></td><td>prove a change works: markers arrive with the right values, nothing fails</td></tr>
-<tr><td><code>glint_pauses</code> · <code>glint_resume</code></td><td>answer a program stopped at <code>pause()</code></td></tr>
-<tr><td><code>glint_annotate</code> · <code>glint_show</code></td><td>leave a note on an event; put markdown or a diagram in front of you</td></tr>
-<tr><td><code>glint_llm_calls</code> · <code>glint_clear</code></td><td>LLM calls with tokens and cost; start a fresh view</td></tr>
+<tr><td><code>glint_last_error</code></td><td>the newest failure with its stack and values</td></tr>
+<tr><td><code>glint_events</code>, <code>glint_event</code>, <code>glint_runs</code></td><td>filter events, read one in full, list recent runs</td></tr>
+<tr><td><code>glint_wait_for</code></td><td>wait for the next matching event after an edit</td></tr>
+<tr><td><code>glint_expect</code></td><td>check that markers arrived with the right values and nothing failed</td></tr>
+<tr><td><code>glint_pauses</code>, <code>glint_resume</code></td><td>answer a program stopped at <code>pause()</code></td></tr>
+<tr><td><code>glint_annotate</code>, <code>glint_show</code></td><td>leave a note on an event; show you markdown or a diagram</td></tr>
+<tr><td><code>glint_llm_calls</code>, <code>glint_clear</code></td><td>LLM calls with tokens and cost; start a clean view</td></tr>
 </table>
-<p>By hand: <code>claude mcp add --scope user --transport http glint http://127.0.0.1:23600/mcp</code>, and <code>glint hook --print-config</code> for the hooks.</p>
-</section>
-
-<section id="d-cli">
+<p>To set it up by hand:</p>
+<pre class="code cmd"><code data-lang="bash">claude mcp add --scope user --transport http glint http://127.0.0.1:23600/mcp</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<pre class="code cmd"><code data-lang="bash">glint hook --print-config</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+</section><section id="d-cli">
 <h2>Command line</h2>
 <table class="ref">
 <tr><td><code>glint send 42 '{"a":1}' hello</code></td><td>send values; <code>--kind core.log --level warn</code>, <code>--label</code></td></tr>
-<tr><td><code>npm run dev 2&gt;&amp;1 | glint pipe -l web</code></td><td>forward a program's output, line by line</td></tr>
-<tr><td><code>glint expect … -- cmd</code></td><td>a check from markers (above)</td></tr>
-<tr><td><code>glint install</code> · <code>--only php,node</code> · <code>--dry-run</code></td><td>set up this machine (service, php, python, node, agents)</td></tr>
-<tr><td><code>glint doctor</code></td><td>is glintd up, does <code>glint()</code> work in each language, which agents know</td></tr>
+<tr><td><code>npm run dev 2&gt;&amp;1 | glint pipe -l web</code></td><td>forward a program's output line by line; levels and stack traces are recognised</td></tr>
+<tr><td><code>glint expect … -- command</code></td><td>a check from markers</td></tr>
+<tr><td><code>glint install</code></td><td>set up this machine; <code>--only service,php,python,node,agents</code>, <code>--dry-run</code></td></tr>
+<tr><td><code>glint doctor</code></td><td>is glintd up, does <code>glint()</code> work in each language, which agents know Glint, how big the data is</td></tr>
 <tr><td><code>glint uninstall</code></td><td>undo install; your data in <code>~/.glint</code> stays</td></tr>
-<tr><td><code>glint mcp</code> · <code>glint hook</code></td><td>MCP over stdio; the agent hook command</td></tr>
-<tr><td><code>glint conformance -- node my-sdk.mjs</code></td><td>check a new language SDK against the spec</td></tr>
+<tr><td><code>glint mcp</code>, <code>glint hook</code></td><td>MCP over stdio; the command agent hooks run</td></tr>
+<tr><td><code>glint conformance -- node my-sdk.mjs</code></td><td>check an SDK for a new language against the spec</td></tr>
 </table>
-</section>
-
-<section id="d-app">
+</section><section id="d-app">
 <h2>Using this window</h2>
-<p>The top line answers first: what failed and where, a program waiting for you, or all quiet. Below it, one run at a time; switch runs and projects with the menus at the top or <kbd>⌘K</kbd>.</p>
+<p>The top line says what failed and where, which program waits for you, or that all is quiet. Below it is one run at a time. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>.</p>
 <table class="ref">
-<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action, choose the editor ("Open files in …")</td></tr>
-<tr><td><kbd>E</kbd> · <kbd>C</kbd></td><td>show the failure · continue a paused program</td></tr>
+<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action</td></tr>
+<tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
 <tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
-<tr><td><kbd>j</kbd> <kbd>k</kbd> · <kbd>[</kbd> <kbd>]</kbd></td><td>move between events · between runs</td></tr>
-<tr><td><kbd>?</kbd></td><td>these docs</td></tr>
+<tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
+<tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>
-<p>Click an event to open it: values as foldable JSON, code around the failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app: <kbd>⌥⌘G</kbd> shows and hides the window from anywhere; the menu-bar spark turns red on a failure and amber when a program waits.</p>
-</section>
-
-<section id="d-config">
-<h2>Settings &amp; data</h2>
-<p>Everything lives in <code>~/.glint</code>: the database, <code>config.toml</code>, the SDK copies, <code>glintd.log</code>. Settings (environment variables win):</p>
-<pre class="code"><code>keep_days = 7          <span class="c"># older events are deleted        GLINT_KEEP_DAYS</span>
-max_events = 100000    <span class="c"># the oldest beyond this go       GLINT_MAX_EVENTS</span>
-editor = "cursor"      <span class="c"># vscode cursor windsurf zed phpstorm idea webstorm pycharm sublime   GLINT_EDITOR</span>
-addr = "127.0.0.1:23600"</code></pre>
-<p>Old events are removed every 10 minutes and the file shrinks with them, so the database stays small (a few hundred MB at most with the defaults). <span id="docsData"></span> Restart glintd after editing: <code>glint install --only service</code>.</p>
-</section>
-
-<section id="d-help">
+<p>Click an event to open it: values as foldable JSON, the code around a failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app, <kbd>⌥⌘G</kbd> shows and hides the window from anywhere, and the menu-bar spark turns red on a failure and amber when a program waits.</p>
+</section><section id="d-config">
+<h2>Settings and data</h2>
+<p>Open Settings with <kbd>,</kbd> or the gear at the top. There you choose how long events are kept and how many, which editor files open in, and whether coding agents hear about failures. Changes apply right away and are saved to <code>~/.glint/config.toml</code>, which you can also edit by hand. An environment variable with the same name (<code>GLINT_KEEP_DAYS</code>, <code>GLINT_EDITOR</code>, …) wins over both, and Settings shows which ones are set that way.</p>
+<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them, so it stays at a few hundred MB at most. <span id="docsData"></span></p>
+<p>Everything lives in <code>~/.glint</code>: the database, the settings, the SDK copies and <code>glintd.log</code>.</p>
+</section><section id="d-langs">
+<h2>Adding a language</h2>
+<p>Any language can send events today with an HTTP POST (the HTTP tab above). A real SDK is small, because glintd does the hard parts: storage, search, projects, worktrees, the UI and MCP. An SDK needs to:</p>
+<ol>
+<li>Build envelopes (<code>kind</code>, <code>payload</code>, <code>origin</code> with file and line of the caller) and send them in the background, in batches, never blocking or throwing into the program.</li>
+<li>Turn the language's values into JSON with types, cycles and depth limits (<code>docs/PROTOCOL.md</code> §3).</li>
+<li>Implement the methods above: value, label and the rest, log, table, exception, measure with nesting, pause, send, flush.</li>
+<li>Stay off in production and when <code>GLINT_ENABLED=0</code>.</li>
+<li>Pass the conformance suite, which checks all of this against a real glintd:</li>
+</ol>
+<pre class="code cmd"><code data-lang="bash">glint conformance -- ruby sdks/ruby/conformance.rb</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>For the zero-setup global and the uncaught-error capture, each runtime has its own hook. These are the ones Glint would use:</p>
+<table class="ref">
+<tr><td>Ruby</td><td><code>RUBYOPT=-r…/glint.rb</code> in the shell profile loads it into every process; <code>at_exit</code> with <code>$!</code> sees uncaught exceptions.</td></tr>
+<tr><td>Go</td><td>no global code injection: an import (<code>glint.V(x)</code>), with <code>defer glint.Recover()</code> for panics.</td></tr>
+<tr><td>Java, Kotlin</td><td><code>JAVA_TOOL_OPTIONS=-javaagent:glint.jar</code> loads an agent into every JVM; <code>Thread.setDefaultUncaughtExceptionHandler</code> sees crashes.</td></tr>
+<tr><td>.NET</td><td><code>DOTNET_STARTUP_HOOKS</code> runs code before Main; <code>AppDomain.UnhandledException</code> sees crashes.</td></tr>
+<tr><td>Rust</td><td>a crate with a <code>glint!()</code> macro that knows file and line; a panic hook for crashes.</td></tr>
+<tr><td>Elixir, Erlang</td><td>a Logger backend and <code>:telemetry</code> handlers, so existing logs and spans arrive with no code.</td></tr>
+</table>
+<p>Ray's client libraries already work for many of these through Glint's Ray-compatible port, and OpenTelemetry covers the rest for traces and LLM calls. <code>spec/conformance/README.md</code> has the full checklist.</p>
+</section><section id="d-help">
 <h2>When something is off</h2>
 <table class="ref">
-<tr><td><code>glint()</code> is undefined</td><td>open a new terminal (Node reads it from your shell profile); <code>php -r</code> code never gets it, a script file does; run <code>glint doctor</code></td></tr>
-<tr><td>nothing arrives</td><td>is glintd up? <code>glint doctor</code>. Production mode turns SDKs off; so does <code>GLINT_ENABLED=0</code></td></tr>
-<tr><td>a port is taken</td><td>Ray's app owns 23517, a collector 4318: Glint starts without those. Change <code>addr</code> for the main port</td></tr>
-<tr><td>the wrong project</td><td>projects are named after the git repository; set <code>GLINT_PROJECT</code> or <code>data-project</code> to choose</td></tr>
-<tr><td>start over</td><td><code>glint uninstall</code>, then delete <code>~/.glint</code></td></tr>
+<tr><td><code>glint()</code> is undefined</td><td>Open a new terminal: Node reads it from your shell profile. Code run with <code>php -r</code> never gets it; a script file does. Run <code>glint doctor</code>.</td></tr>
+<tr><td>nothing arrives</td><td>Check that glintd answers with <code>glint doctor</code>. Production mode and <code>GLINT_ENABLED=0</code> turn SDKs off.</td></tr>
+<tr><td>a port is taken</td><td>Ray's app owns 23517 and an OpenTelemetry collector 4318. Glint starts without those. Change the main address in Settings.</td></tr>
+<tr><td>the wrong project</td><td>Projects are named after the git repository. Set <code>GLINT_PROJECT</code>, or <code>data-project</code> on the browser tag.</td></tr>
+<tr><td>start over</td><td>Delete all events in Settings, or run <code>glint uninstall</code> and delete <code>~/.glint</code>.</td></tr>
 </table>
-</section>
-
-    </article>
+</section></article>
   </div>
 </div>
+<!-- docs:end -->
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -671,7 +764,7 @@ const S = {
   run: null, entries: [], byId: new Map(), pendingUpd: new Map(),
   open: new Set(), q: "", showAll: false,
   fail: null, fails: [], seen: null, ack: new Set(store.get("ack", [])), pauses: [], answered: [],
-  editor: store.get("editor", null), editors: [],
+  editor: null, editors: [],
   offline: false, loaded: false,
 };
 
@@ -694,7 +787,7 @@ function openBtn(e, frame, label, cls = "where") {
   return `<button class="${cls}" data-act="open" data-id="${esc(e.id)}"${frame != null ? ` data-frame="${frame}"` : ""} title="Open in ${esc(EDITORS[S.editor] || "editor")}">${label}</button>`;
 }
 async function openInEditor(id, frame) {
-  const q = new URLSearchParams({ event: id }); if (frame != null && frame !== "") q.set("frame", frame); if (S.editor) q.set("editor", S.editor);
+  const q = new URLSearchParams({ event: id }); if (frame != null && frame !== "") q.set("frame", frame); // glintd picks the editor
   try { const r = await api("/v1/open?" + q, { method: "POST" }); toast(`Opened in ${EDITORS[r.editor] || r.editor}`); }
   catch (err) { toast(`Could not open: ${err.message}`); }
 }
@@ -1251,6 +1344,13 @@ document.addEventListener("click", ev => {
   if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
   if (act === "docs") return openDocs();
+  if (act === "settings") return openSettings();
+  if (act === "settings-close") return closeSettings();
+  if (act === "data-prune") return api("/v1/data/prune", { method: "POST" }).then(r => { toast(r.removed ? `Removed ${r.removed} old events` : "Nothing old enough to remove"); return openSettings(); }).catch(e => toast(e.message));
+  if (act === "data-clear") {
+    if (!confirm("Delete every stored event? This cannot be undone.")) return;
+    return api("/v1/data/clear", { method: "POST" }).then(r => { toast(`Deleted ${r.removed} events`); loadAll(); return openSettings(); }).catch(e => toast(e.message));
+  }
   if (act === "docs-close") return closeDocs();
   if (act === "jtoggle") {
     const j = b.parentElement, shut = j.classList.toggle("shut");
@@ -1280,9 +1380,80 @@ document.addEventListener("click", ev => {
 $("q").addEventListener("input", e => { S.q = e.target.value; render(); });
 
 
+
+/* ---------------- settings ---------------- */
+let setInfo = null, setTimer = null;
+async function openSettings() {
+  const d = $("settings"); d.hidden = false;
+  try { setInfo = await api("/v1/settings"); } catch (err) { $("setData").textContent = `Settings are not available: ${err.message}`; return; }
+  drawSettings(); d.querySelector("[data-key]")?.focus();
+}
+function closeSettings() { $("settings").hidden = true; }
+function drawSettings() {
+  const i = setInfo, st = i.settings, d = i.data;
+  $("setPath").textContent = i.path || "~/.glint/config.toml";
+  $("setData").textContent = `${d.events.toLocaleString()} events · ${(d.bytes / 1048576).toFixed(1)} MB · ${d.db}`;
+  const ed = $("s-editor");
+  const opts = [["", `First installed${i.editors.length ? ` (${EDITORS[i.editors[0]] || i.editors[0]})` : ""}`], ...Object.keys(EDITORS).map(k => [k, EDITORS[k] + (i.editors.includes(k) ? "" : " (not found here)")])];
+  ed.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+  document.querySelectorAll("#settings [data-key]").forEach(el => {
+    const k = el.dataset.key, v = st[k];
+    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+    const locked = i.from_env.includes(k); el.disabled = locked;
+    const row = el.closest(".set-row"); row.querySelector(".locked")?.remove();
+    if (locked) row.insertAdjacentHTML("beforeend", `<p class="locked">Set by ${esc(i.env_names[k])} in glintd's environment</p>`);
+  });
+}
+async function saveSetting(el) {
+  const k = el.dataset.key, v = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value.trim();
+  const saved = $("setSaved"); saved.classList.remove("err");
+  try {
+    setInfo = await api("/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ [k]: v }) });
+    saved.textContent = i18nSaved(k); drawSettings();
+    if (k === "editor") S.editor = setInfo.settings.editor || setInfo.editors[0] || "vscode";
+  } catch (err) { saved.textContent = err.message; saved.classList.add("err"); drawSettings(); } // back to what is saved
+  clearTimeout(setTimer); setTimer = setTimeout(() => { if (!saved.classList.contains("err")) saved.textContent = ""; }, 2500);
+}
+const i18nSaved = k => (setInfo.restart_keys.includes(k) ? "Saved · takes effect after a restart" : "Saved");
+$("settings").addEventListener("change", ev => { const el = ev.target.closest("[data-key]"); if (el) saveSetting(el); });
 /* ---------------- docs ---------------- */
+/* A small highlighter for the docs' code: comments, strings, numbers, keywords, variables, calls. */
+const HL_KW = {
+  php: "function fn return if else elseif try catch finally throw new use foreach as null true false static public private class echo match",
+  python: "def return if else elif try except finally raise import from as lambda None True False for in and or not with class await async",
+  js: "const let var function return if else try catch finally throw new await async import from export default null undefined true false for of in class this typeof",
+  bash: "curl export cd echo",
+};
+function highlight(src, lang) {
+  const kw = new Set((HL_KW[lang] || "").split(" "));
+  const hash = lang === "python" || lang === "bash";
+  const re = lang === "html"
+    ? /(<!--[\s\S]*?-->)|(<\/?[\w-]+)|([\w-]+)(?==)|("[^"]*")/g
+    : new RegExp([
+        hash ? "(#[^\\n]*)" : "(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)",
+        "(\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`(?:\\\\.|[^`\\\\])*`)",
+        "(\\$[A-Za-z_]\\w*)",
+        "(\\b\\d+(?:\\.\\d+)?\\b)",
+        "(\\b[A-Za-z_]\\w*)(?=\\s*\\()",
+        "(\\b[A-Za-z_]\\w*\\b)",
+      ].join("|"), "g");
+  let out = "", last = 0, m;
+  while ((m = re.exec(src))) {
+    out += esc(src.slice(last, m.index)); last = re.lastIndex;
+    const t = esc(m[0]);
+    if (lang === "html") out += m[1] ? `<span class="c">${t}</span>` : m[2] ? `<span class="k">${t}</span>` : m[3] ? `<span class="v">${t}</span>` : `<span class="s">${t}</span>`;
+    else if (m[1]) out += `<span class="c">${t}</span>`;
+    else if (m[2]) out += `<span class="s">${t}</span>`;
+    else if (m[3]) out += `<span class="v">${t}</span>`;
+    else if (m[4]) out += `<span class="n">${t}</span>`;
+    else if (m[5]) out += kw.has(m[5]) ? `<span class="k">${t}</span>` : `<span class="f">${t}</span>`;
+    else out += kw.has(m[6]) ? `<span class="k">${t}</span>` : t;
+  }
+  return out + esc(src.slice(last));
+}
 function openDocs(hash) {
   const d = $("docs"); d.hidden = false; document.body.classList.add("docs-open");
+  d.querySelectorAll("code[data-lang]:not([data-hl])").forEach(c => { c.innerHTML = highlight(c.textContent, c.dataset.lang); c.dataset.hl = "1"; });
   const lang = store.get("lang", null); if (lang) d.querySelectorAll(`[data-tab="${lang}"]`).forEach(b => selectTab(b, false));
   else d.querySelectorAll(".tabbed").forEach(t => selectTab(t.querySelector("[data-tab]"), false));
   api("/v1/info").then(i => { const x = i.data; if (x) $("docsData").textContent = `Right now: ${x.events} events, ${(x.bytes / 1048576).toFixed(1)} MB, kept ${x.keep_days} days / at most ${x.max_events} events.`; }).catch(() => {});
@@ -1292,10 +1463,15 @@ function openDocs(hash) {
 function closeDocs() { $("docs").hidden = true; document.body.classList.remove("docs-open"); }
 function selectTab(b, remember = true) {
   if (!b) return;
-  const box = b.closest(".tabbed"), id = b.dataset.tab;
-  box.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
-  box.querySelectorAll("[data-pane]").forEach(p => (p.hidden = p.dataset.pane !== id));
-  if (remember) store.set("lang", id);
+  const id = b.dataset.tab;
+  // One language for the whole page: picking Python shows Python in every example.
+  const boxes = remember ? [...$("docs").querySelectorAll(".tabbed")] : [b.closest(".tabbed")];
+  for (const box of boxes) {
+    if (!box.querySelector(`[data-tab="${id}"]`)) continue;
+    box.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.tab === id)));
+    box.querySelectorAll("[data-pane]").forEach(p => (p.hidden = p.dataset.pane !== id));
+  }
+  if (remember) { store.set("lang", id); const y = b.getBoundingClientRect().top; requestAnimationFrame(() => { const body = $("docs").querySelector(".docs-body"); body.scrollTop += b.getBoundingClientRect().top - y; }); }
 }
 $("docs").addEventListener("click", ev => {
   const t = ev.target.closest("[data-tab]"); if (t) return selectTab(t);
@@ -1314,8 +1490,9 @@ function commands() {
   S.projects.filter(p => p !== S.project).forEach(p => c.push({ g: "Projects", label: `Switch to ${p}`, ico: "run", run: () => goProject(p) }));
   c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: openSearch });
   c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", hint: "?", ico: "run", run: () => openDocs() });
+  c.push({ g: "Actions", label: "Settings: data, editor, agents", hint: ",", ico: "run", run: () => openSettings() });
   if (S.fail) c.push({ g: "Actions", label: "Copy the last failure for your agent", ico: "copy", run: () => copyException(S.fail.id) });
-  (S.editors.length ? S.editors : Object.keys(EDITORS)).forEach(id => c.push({ g: "Editor", label: `Open files in ${EDITORS[id] || id}${id === S.editor ? " ✓" : ""}`, ico: "run", run: () => { S.editor = id; store.set("editor", id); toast(`Files open in ${EDITORS[id] || id}`); } }));
+  (S.editors.length ? S.editors : Object.keys(EDITORS)).forEach(id => c.push({ g: "Editor", label: `Open files in ${EDITORS[id] || id}${id === S.editor ? " ✓" : ""}`, ico: "run", run: () => api("/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ editor: id }) }).then(() => { S.editor = id; toast(`Files open in ${EDITORS[id] || id}`); }).catch(e => toast(e.message)) }));
   return c;
 }
 function drawPalette() {
@@ -1349,6 +1526,7 @@ document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("palette").classList.contains("open") ? closePalette() : openPalette(); return; }
   if (e.key === "Escape" && $("palette").classList.contains("open")) { closePalette(); return; }
   if (!$("docs").hidden) { if (e.key === "Escape") closeDocs(); return; }
+  if (!$("settings").hidden) { if (e.key === "Escape") closeSettings(); return; }
   if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
     if (e.key === "e" && S.fail && !S.ack.has(S.fail.id)) return showFailure();
     if (e.key === "c" && S.pauses[0]) return answer(S.pauses[0].id, "continue");
@@ -1356,6 +1534,7 @@ document.addEventListener("keydown", e => {
     if (e.key === "]") return stepRun(1);
     if (e.key === "/") { e.preventDefault(); return openSearch(); }
     if (e.key === "?") { e.preventDefault(); return openDocs(); }
+    if (e.key === ",") { e.preventDefault(); return openSettings(); }
     if (e.key === "j" || e.key === "k") {
       const rows = [...document.querySelectorAll(".entry .row")]; if (!rows.length) return;
       const i = rows.indexOf(document.activeElement);
@@ -1369,7 +1548,9 @@ document.addEventListener("keydown", e => {
 setInterval(() => document.querySelectorAll(".ago").forEach(a => (a.textContent = rel(a.dataset.t))), 1000);
 loadAll().then(connect);
 // Which editors glintd found; the first is the default until you pick one (⌘K → "Open files in").
-api("/v1/editors").then(r => { S.editors = r.editors || []; if (!S.editor) S.editor = S.editors[0] || "vscode"; }).catch(() => { S.editor ||= "vscode"; });
+// The editor is glintd's setting (Settings, or ⌘K → "Open files in …"), the same in every window.
+api("/v1/settings").then(r => { S.editors = r.editors || []; S.editor = r.settings.editor || S.editors[0] || "vscode"; })
+  .catch(() => api("/v1/editors").then(r => { S.editors = r.editors || []; S.editor = S.editors[0] || "vscode"; }).catch(() => { S.editor = "vscode"; }));
 </script>
 </body>
 </html>

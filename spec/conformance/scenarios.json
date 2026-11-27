@@ -130,6 +130,15 @@
       "check_parents": [[0, 3], [1, 2], [2, 3]]
     },
     {
+      "name": "pause",
+      "do": "v = glint.pause(\"conformance\") (await it where the language needs that), then glint(v). The runner answers the pause with continue and the value {\"ok\": true}; with Glint unreachable or disabled, pause returns at once with nothing",
+      "expect": [
+        { "kind": "ctl.pause", "payload": { "reason": "conformance" } },
+        { "kind": "ctl.resume", "payload": { "action": "continue", "by": "conformance" } },
+        { "kind": "core.value", "payload": { "value": { "ok": true } } }
+      ]
+    },
+    {
       "name": "origin",
       "do": "glint(\"origin-check\") on a line that also carries a comment containing glint:origin",
       "expect": [

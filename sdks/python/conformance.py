@@ -113,6 +113,9 @@ glint.send("x-conformance.custom", {"a": 1}, {"label": "raw"})
 begin("measure-nesting")
 glint.measure("outer", lambda: (glint("in outer"), glint.measure("inner", lambda: glint("in inner"))))
 
+begin("pause")
+glint(glint.pause("conformance"))
+
 begin("origin")
 glint("origin-check")  # glint:origin
 

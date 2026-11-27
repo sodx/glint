@@ -41,6 +41,23 @@ Values are encoded faithfully: objects keep their fields and report their class 
 `"NaN"` / `"Infinity"` / `"-Infinity"`. Depth beyond 10 becomes `{"$truncated": true}`.
 
 `measure` also works with coroutine functions: it returns an awaitable that is timed when awaited.
+What the callback sends nests under the measure (a ContextVar carries it through threads' contexts
+and asyncio tasks), so the window shows the run as a call tree.
+
+## Pause
+
+```python
+from glint import glint, GlintStop
+
+answer = glint.pause(f"refund {order.total} EUR?")
+if answer and answer.get("approve"):
+    refund(order)
+```
+
+`pause` blocks until someone presses Continue in the Glint window, or a coding agent answers through
+MCP, and returns the value they gave (or `None`). Stop raises `GlintStop`, also reachable as
+`glint.GlintStop` from the global. It returns at once when Glint is off or unreachable, and on CI
+unless `GLINT_FORCE_PAUSE` is set. After 5 minutes it gives up and carries on.
 
 ## Configuration
 

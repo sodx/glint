@@ -1,18 +1,18 @@
-# Mapping: OpenTelemetry (OTLP/HTTP) → Glint
+# Mapping: OpenTelemetry (OTLP/HTTP) to Glint
 
 Adapter: `crates/glint-ingest/src/otlp/` (decoding and mapping), `crates/glint-server/src/otlp.rs`
-(receiver). Listens on `127.0.0.1:4318` (`GLINT_OTLP_ADDR`, `off` disables; skipped if a real
-collector owns the port). Accepts `POST /v1/traces` and `POST /v1/logs`, protobuf
-(`application/x-protobuf`, the SDK default) or JSON. Compressed bodies are refused with 415:
-set `OTEL_EXPORTER_OTLP_COMPRESSION=none`.
+(receiver). Listens on `127.0.0.1:4318` (`GLINT_OTLP_ADDR`; `off` disables it, and it is skipped if a real
+collector owns the port). Accepts `POST /v1/traces` and `POST /v1/logs`, in protobuf
+(`application/x-protobuf`, the SDK default) or JSON. Compressed bodies are refused with 415, so set
+`OTEL_EXPORTER_OTLP_COMPRESSION=none`.
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py   # any OTel SDK, any language
 ```
 
 Verified on 2026-11-27 with the Python SDK and `opentelemetry-exporter-otlp-proto-http` 1.45.2
-(protobuf): a GenAI chat span, a tool span, a DB span, an error span with a recorded exception,
-a server span and a `logging` record all arrived and mapped as below.
+(protobuf). A GenAI chat span, a tool span, a DB span, an error span with a recorded exception,
+a server span and a `logging` record all arrived and mapped as described below.
 
 ## Envelope fields
 
@@ -64,10 +64,11 @@ Messages, first match wins:
 2. Span events `gen_ai.<role>.message` (`content`) and `gen_ai.choice` (`message`, `finish_reason`).
 3. OpenLLMetry attributes `gen_ai.prompt.<i>.<field>` / `gen_ai.completion.<i>.<field>`.
 
-Glint does not ship model prices: cost appears only when the instrumentation reports it.
+Glint does not ship model prices. Cost appears only when the instrumentation reports it.
 
 ## Logs
 
-`core.log`: body → `message` (non-strings as JSON), attributes (minus `code.*`) → `fields`,
-`event_name` kept in fields and as the label, severity number → level (1–4 trace … 21–24 fatal,
-else the severity text). Trace and span ids link the record to its span (`run`, `parent`).
+`core.log`: the body becomes `message` (non-strings as JSON), and attributes (minus `code.*`) become `fields`.
+`event_name` is kept in fields and as the label. The severity number sets the level: 1 to 4 is trace,
+21 to 24 is fatal, and any other number uses the severity text. Trace and span ids link the record to its
+span (`run`, `parent`).

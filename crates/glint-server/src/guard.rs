@@ -69,8 +69,18 @@ pub async fn check(State(allow): State<Allowlist>, req: Request, next: Next) -> 
     if allow.origin_ok(&origin) {
         return next.run(req).await;
     }
-    // Pages of local dev servers may send events, and nothing else.
-    let events = req.uri().path() == "/v1/events";
+    // Pages of local dev servers may send events and wait for an answer to their own pause
+    // (`GET /v1/ctl/{id}`, whose id only the page knows), and nothing else.
+    let path = req.uri().path();
+    let events = path == "/v1/events";
+    let own_pause = req.method() == axum::http::Method::GET && path.starts_with("/v1/ctl/") && !path.ends_with("/resume") && path.len() > "/v1/ctl/".len();
+    if own_pause && dev_origin(&origin) {
+        let mut r = next.run(req).await;
+        if let Ok(v) = header::HeaderValue::from_str(&origin) {
+            r.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, v);
+        }
+        return r;
+    }
     if events && dev_origin(&origin) {
         let cors = |mut r: Response| {
             let h = r.headers_mut();

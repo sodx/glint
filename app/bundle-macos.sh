@@ -9,8 +9,11 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
-cargo build --release -p glintd -p glint-cli
-(cd app && cargo build --release)
+# GLINT_SKIP_BUILD=1 bundles binaries that are already built (handy when disk is short).
+if [ -z "${GLINT_SKIP_BUILD:-}" ]; then
+  cargo build --release -p glintd -p glint-cli
+  (cd app && cargo build --release)
+fi
 
 out="$root/target/release/Glint.app"
 rm -rf "$out"

@@ -196,10 +196,10 @@ impl Evaluator {
     pub fn feed(&mut self, e: &Envelope) -> Option<Verdict> {
         match e.kind.as_str() {
             "core.update" => {
-                if let Some(i) = e.payload.get("target").and_then(Value::as_str).and_then(|t| self.index.get(t)) {
-                    if let Some(label) = e.payload.pointer("/meta/label").and_then(Value::as_str) {
-                        self.seen[*i].meta.label = Some(label.to_owned());
-                    }
+                if let Some(i) = e.payload.get("target").and_then(Value::as_str).and_then(|t| self.index.get(t))
+                    && let Some(label) = e.payload.pointer("/meta/label").and_then(Value::as_str)
+                {
+                    self.seen[*i].meta.label = Some(label.to_owned());
                 }
             }
             "ctl.resume" => return None,

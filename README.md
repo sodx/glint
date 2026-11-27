@@ -1,137 +1,144 @@
 # Glint
 
-A local debug desk for developers **and their AI agents**.
-
-Send anything from any program — values, logs, SQL queries, exceptions, timings, LLM calls, agent
-steps — and watch it land in a live, searchable feed on your desktop. Your coding agent sees the same
-feed over MCP, so it can read what your program actually did instead of guessing.
+Glint is a local debugging desk for developers and their coding agents. Programs in any language send
+it values, logs, SQL queries, exceptions, timings and LLM calls. You watch them arrive in a live,
+searchable window, and your agent reads the same events over MCP instead of guessing what the
+program did.
 
 ```php
 glint($order)->label('before save')->orange();
 ```
 ```python
-glint(user, request.headers).pause()
+answer = glint.pause("check the discount before charging")   # waits until you press Continue
 ```
 ```bash
-npm run dev 2>&1 | glint pipe --label web     # output still prints; Glint gets levels, JSON logs, stack traces
+npm run dev 2>&1 | glint pipe --label web   # output still prints; Glint picks up levels, JSON logs and stack traces
 glint send '{"user":{"id":7}}' --label checkout
 ```
 
-## Why
-
-- **Every language.** Tiny native protocol (POST JSON) plus what you already emit: OpenTelemetry,
-  Ray-compatible payloads, stdin, log files.
-- **AI-native.** LLM calls and agent steps are first-class events. MCP tools let agents query runs,
-  read the last error, wait for an event and resume a paused program.
-- **Local and private.** One daemon, one SQLite file, loopback only.
-- **Small and fast.** Rust core, Tauri app.
+Any language can send events with a JSON POST. Glint also accepts what programs already emit:
+OpenTelemetry, Ray's protocol, piped output and log lines. Everything stays on your machine, in one
+SQLite file behind a daemon that listens on loopback only.
 
 ## Requirements
 
-Rust 1.88+ to build. The zero-config `glint()` covers PHP 8.0+, Python 3.9+ and Node 18+ (the
-`python3`, `php` and `node` on your PATH). macOS and Linux; the desktop app is macOS for now
-(`app/bundle-macos.sh`, needs the Xcode command line tools and about 1 GB of build space).
+You need Rust 1.88 or newer to build. The zero-setup `glint()` works with PHP 8.0+, Python 3.9+
+and Node 18+ (the `php`, `python3` and `node` on your PATH). Glint runs on macOS and Linux. The
+desktop app is macOS only for now; building it needs the Xcode command line tools and about 1 GB of
+disk.
 
-## Try it
-
-```bash
-cargo run -p glintd                     # UI at http://127.0.0.1:23600
-cargo run -q -p glint-cli -- send 42 hello
-```
-
-Set it up once and forget it: `glint install` starts glintd at login (launchd / systemd) and makes
-`glint()` a global in every PHP, Python and Node program on the machine — no package, no import,
-no config. SDKs stay off when `NODE_ENV` / `APP_ENV` is `production`.
+## Install
 
 ```bash
 cargo build --release -p glintd -p glint-cli && target/release/glint install
-glint doctor        # is glintd up, does glint() work in each language?
-glint uninstall     # removes everything install wrote; keeps ~/.glint
+glint doctor      # is glintd up, does glint() work in each language, which agents know about Glint
+glint uninstall   # removes what install wrote and keeps your data in ~/.glint
 ```
 
-`glint install` also tells the coding agents it finds about Glint: Claude Code gets the MCP
-server at user scope (every project) plus the hooks that put its session next to your program's
-events; Cursor, VS Code, Windsurf and Gemini CLI get the MCP server over HTTP, Codex over stdio.
-Existing settings are kept, each edited file gets a one-time `.glint-backup`, and `glint uninstall`
-takes back exactly what was added. The server's MCP instructions tell a connected agent when to
-use it, including dropping `glint(value)` into code instead of print statements.
+`glint install` starts glintd at login (launchd or systemd) and makes `glint()` a global in every
+PHP, Python and Node program on the machine, with no package, import or configuration. It also
+reports their uncaught errors. SDKs send nothing when `NODE_ENV` or `APP_ENV` is `production`.
 
-Data stays small: glintd keeps 7 days and at most 100,000 events by default, removes older ones
-every 10 minutes and gives the space back. Settings live in `~/.glint/config.toml` (written by
-`glint install`; `keep_days`, `max_events`, `editor`, addresses), each overridable by an
-environment variable. The window's Docs (`?`) explain everything with examples per language.
+PHP gets the global through `auto_prepend_file` (an existing prepend file keeps working), Python
+through a `.pth` file in the user site-packages, and Node through `NODE_OPTIONS=--import` in your
+shell profile. A project that vendors its own copy of the SDK uses that copy. `--only php,node`
+and `--dry-run` narrow the install down.
 
-PHP gets it through `auto_prepend_file` (an existing prepend file keeps working), Python through a
-`.pth` file in the user site-packages of the `python3` on PATH, Node through `NODE_OPTIONS=--import`
-in your shell profile. `--only php,node` and `--dry-run` narrow it down. A project's own copy of the
-SDK always wins over the global one. One gap: PHP never prepends to a `php -S` *router* script
-(`php -S host:port router.php`, also what `artisan serve` runs); serve a document root instead
-(`php -S host:port -t public`) or require the SDK in that project.
+PHP skips the prepend file for a `php -S` router script (`php -S host:port router.php`, which is
+also what `artisan serve` runs). Serve a document root instead (`php -S host:port -t public`), or
+require the SDK in that project.
 
-For vibe coding, where an agent writes the code and you click through the app:
+To try it without installing:
 
-- uncaught errors of PHP, Python and Node processes reach Glint with no code at all (the global
-  install chains the language's own handlers; output and exit codes stay as they were);
-- a web front end in development gets the same with one tag, which also reports
-  `console.error`, failed requests and `window.glint()` markers:
-  `<script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"></script>`;
-- Claude Code hears about it without asking: new failures come with your next prompt, and when it
-  wants to finish a turn during which your programs failed, it is sent back once to fix them or
-  say why they are expected (`GLINT_STOP_GUARD=0` turns that off).
+```bash
+cargo run -p glintd                       # the window at http://127.0.0.1:23600
+cargo run -q -p glint-cli -- send 42 hello
+```
 
-Markers become tests. `glint expect` (and the MCP tool `glint_expect`, for agents) waits until
-events match each expectation, in order, and fails as soon as a program errors:
+## Coding agents
+
+`glint install` registers Glint's MCP server with the agents it finds. Claude Code gets it at user
+scope, so every project sees it, plus hooks that put its own session next to your program's events.
+Cursor, VS Code, Windsurf and Gemini CLI get the server over HTTP, and Codex over stdio. Existing
+settings are kept, each edited file gets a one-time `.glint-backup` copy, and `glint uninstall`
+removes exactly what was added.
+
+The hooks also let Glint talk to Claude Code. At the start of a session it learns that Glint
+records the project. With each of your prompts it gets the failures that happened since the
+previous one, so when you write "it's broken" it already has the error and the line. When it wants
+to finish a turn during which your programs failed, it is sent back once to fix them or say why they
+are expected. Both behaviours can be turned off in Settings.
+
+To connect an agent by hand:
+
+```bash
+claude mcp add --transport http glint http://127.0.0.1:23600/mcp   # or: claude mcp add glint -- glint mcp
+glint hook --print-config                                          # Claude Code hooks for .claude/settings.json
+```
+
+## Errors with no code
+
+The global install chains each language's own handlers, so uncaught errors of PHP, Python and
+Node processes reach Glint while output and exit codes stay as they were. A web front end in
+development gets the same with one tag, which also reports `console.error`, failed requests and
+markers sent with `window.glint()`:
+
+```html
+<script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"></script>
+```
+
+## Call tree, pauses and checks
+
+Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends nests under it:
+values, SQL, logs and inner measures. The window shows the run as a call tree with a small waterfall
+of where the time went. OpenTelemetry spans nest the same way.
+
+`glint.pause(reason)` stops the program until someone presses Continue in the window, or an agent
+answers through MCP, and returns the value they gave. It works in PHP, Python, Node and the browser.
+
+Markers become tests. `glint expect`, and the MCP tool `glint_expect` for agents, waits until
+events match each expectation in order and fails as soon as a program errors:
 
 ```bash
 glint expect 'label:cart payload.value.total>0' 'kind:sql.query text:"insert into orders"' \
              'label:"order saved" payload.value.paid=true' -- ./scripts/checkout.sh 7
 ```
 
-Terms (all must hold for one event): `label:X`, `kind:X` / `kind:sql.*`, `text:X`, `has:PATH`,
-`PATH=VALUE` (also `!= > >= < <=`), `count>=N`. Exit 0 pass, 1 fail, 2 could not check. Without a
-command it also looks at the last 30 s and waits while you click through.
+All terms of one expectation must hold for the same event: `label:X`, `kind:X` or `kind:sql.*`,
+`text:X`, `has:PATH`, `PATH=VALUE` (also `!= > >= < <=`) and `count>=N`. It exits with 0 when
+everything matched, 1 when something did not, and 2 when it could not check. Without a command it
+also looks at the last 30 seconds and waits while you click through the app.
 
-Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends (values, SQL,
-logs, inner measures) nests under it: the UI shows the run as a call tree with a small waterfall
-of where the time went. OpenTelemetry spans nest the same way.
+## Data and settings
 
-`python3 examples/e2e/run.py` drives a PHP shop, a Python worker and a Node API (with a pause)
-through the global `glint()` and checks what glintd stored.
+glintd keeps 7 days and at most 100,000 events by default. Every 10 minutes it deletes older events
+and the database file shrinks with them. The Settings view in the window (`,`) changes how long
+events are kept, which editor files open in, and whether agents hear about failures. It saves to
+`~/.glint/config.toml`, which you can also edit by hand; an environment variable of the same name
+wins over both. The window's Docs view (`?`) has an example of every method in every language.
 
-The desktop app (macOS for now) puts Glint in the menu bar: the spark turns red when something
-fails and amber when a program waits for you, a notification tells you which, and ⌥⌘G opens the
-window from anywhere.
+## More
 
-```bash
-app/bundle-macos.sh --install     # builds Glint.app (with glintd inside) into ~/Applications
-```
+Ray client libraries work unchanged, because glintd also listens on Ray's port `23517`.
 
-Existing Ray client libraries work unchanged: glintd also listens on Ray's port `23517`.
-
-Connect your coding agent:
-
-```bash
-claude mcp add --transport http glint http://127.0.0.1:23600/mcp   # or: claude mcp add glint -- glint mcp
-```
-
-It can then read the last error with its context, wait for the next run after an edit, resume
-paused programs and leave notes next to events.
-
-Trace LLM calls with zero Glint code: point any OpenTelemetry exporter at Glint and GenAI spans
-(OpenLLMetry, vendor instrumentors, the GenAI semantic conventions) become LLM cards with the
+To trace LLM calls without Glint code, point any OpenTelemetry exporter at Glint. GenAI spans
+(from OpenLLMetry, vendor instrumentors, or the GenAI semantic conventions) become LLM calls with the
 transcript, tokens and latency:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
 ```
 
-See what the agent does, next to what your program does:
+The desktop app puts Glint in the menu bar. The spark turns red when something fails and amber when
+a program waits for you, a notification says which, and ⌥⌘G opens the window from anywhere.
 
 ```bash
-glint hook --print-config   # Claude Code hooks → paste into .claude/settings.json
+app/bundle-macos.sh --install   # builds Glint.app, with glintd inside, into ~/Applications
 ```
 
-## Status
+`python3 examples/e2e/run.py` drives a PHP shop, a Python worker and a Node API through the global
+`glint()` and checks what glintd stored.
 
-M0 and part of M1 are done (daemon, live UI, Ray-compatible ingest, `glint send` / `glint pipe`). Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/PROTOCOL.md](docs/PROTOCOL.md).
+How it is built: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The wire format and API:
+[docs/PROTOCOL.md](docs/PROTOCOL.md). Adding a language: the Docs view, and
+[spec/conformance/README.md](spec/conformance/README.md).

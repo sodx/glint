@@ -102,6 +102,15 @@ impl SqliteStore {
         if boundary == 0 {
             return Ok(0);
         }
+        self.delete_upto(boundary)
+    }
+
+    /// Deletes every event.
+    pub fn clear(&self) -> Result<u64, StoreError> {
+        self.delete_upto(i64::MAX)
+    }
+
+    fn delete_upto(&self, boundary: i64) -> Result<u64, StoreError> {
         let mut removed = 0u64;
         loop {
             let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());

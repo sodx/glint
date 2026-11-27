@@ -113,6 +113,18 @@ async fn recorder() -> Result<(Hub, String), String> {
     let listener = TcpListener::bind("127.0.0.1:0").await.map_err(|e| e.to_string())?;
     let addr = listener.local_addr().map_err(|e| e.to_string())?;
     tokio::spawn(glint_server::serve(listener, hub.clone(), glint_server::Options::default(), std::future::pending()));
+    // Plays the human for the `pause` scenario: continues each pause with {"ok": true}.
+    let answering = hub.clone();
+    let mut rx = hub.subscribe();
+    tokio::spawn(async move {
+        while let Ok(e) = rx.recv().await {
+            if e.kind == "ctl.pause" {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let ok = glint_core::Resolution::Continue { value: Some(serde_json::json!({ "ok": true })) };
+                let _ = answering.resume(&e.id, ok, "conformance").await;
+            }
+        }
+    });
     Ok((hub, format!("http://{addr}")))
 }
 
@@ -121,6 +133,8 @@ async fn exec(program: &str, args: &[String], env: &[(&str, &str)]) -> Result<st
     cmd.args(args)
         .env_remove("NODE_ENV")
         .env_remove("APP_ENV")
+        .env_remove("CI") // SDKs skip pauses on CI
+        .env("GLINT_FORCE_PAUSE", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

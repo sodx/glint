@@ -263,14 +263,13 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
         }
     }
     let codex = a.home.join(".codex/config.toml");
-    if let Ok(text) = fs::read_to_string(&codex) {
-        if text.contains(crate::install::MARK_BEGIN) {
+    if let Ok(text) = fs::read_to_string(&codex)
+        && text.contains(crate::install::MARK_BEGIN) {
             steps.push(match write(a, &codex, &without_block(&text)) {
                 Ok(()) => done("agents", format!("Codex: removed from {}", codex.display())),
                 Err(e) => fail("agents", format!("Codex: {e}")),
             });
         }
-    }
     if steps.is_empty() {
         steps.push(skip("agents", "not installed".into()));
     }

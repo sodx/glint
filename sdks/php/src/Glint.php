@@ -64,6 +64,53 @@ final class Glint
         }
     }
 
+    /**
+     * Stops here until someone presses Continue in Glint (or an agent answers through MCP), then
+     * returns the value they gave, or null. A Stop throws GlintStop. Returns at once when Glint
+     * is off or unreachable, and on CI (unless GLINT_FORCE_PAUSE is set).
+     */
+    public static function pause(?string $reason = null, float $timeout = 300.0): mixed
+    {
+        try {
+            if (Transport::env('CI') && !Transport::env('GLINT_FORCE_PAUSE')) {
+                return null;
+            }
+            $id = Transport::emit('ctl.pause', $reason === null ? new \stdClass() : ['reason' => $reason]);
+            if ($id === null) {
+                return null;
+            }
+            Transport::flush(5.0); // the pause must be stored before we ask about it
+            $url = Transport::url() . '/v1/ctl/' . rawurlencode($id) . '?timeout_s=25';
+            $deadline = microtime(true) + $timeout;
+            while (microtime(true) < $deadline) {
+                $ctx = stream_context_create(['http' => ['timeout' => 30, 'ignore_errors' => true]]);
+                $body = @file_get_contents($url, false, $ctx);
+                $status = 0;
+                foreach ($http_response_header ?? [] as $h) {
+                    if (preg_match('#^HTTP/\S+ (\d{3})#', $h, $m)) {
+                        $status = (int) $m[1];
+                    }
+                }
+                if ($status === 204) {
+                    continue;
+                }
+                if ($status !== 200 || $body === false) {
+                    return null; // unknown pause (glintd restarted) or Glint went away: carry on
+                }
+                $answer = json_decode($body, true);
+                if (($answer['action'] ?? null) === 'stop') {
+                    throw new GlintStop('stopped from Glint');
+                }
+                return $answer['value'] ?? null;
+            }
+        } catch (GlintStop $stop) {
+            throw $stop;
+        } catch (Throwable) {
+            // a debugging aid never breaks the program
+        }
+        return null;
+    }
+
     public static function exception(Throwable $e): Entry
     {
         try {

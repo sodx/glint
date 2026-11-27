@@ -117,6 +117,9 @@ Glint::measure('outer', static function (): void {
     Glint::measure('inner', static fn () => glint('in inner'));
 });
 
+begin('pause');
+glint(Glint::pause('conformance'));
+
 begin('origin');
 glint('origin-check'); // glint:origin
 

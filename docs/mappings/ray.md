@@ -1,4 +1,4 @@
-# Mapping: Ray → Glint
+# Mapping: Ray to Glint
 
 Adapter: `crates/glint-ingest/src/ray/` (translation), `crates/glint-server/src/ray.rs` (HTTP).
 Background on the Ray protocol: `docs/research/ray.md`.
@@ -6,7 +6,7 @@ Background on the Ray protocol: `docs/research/ray.md`.
 Pause verified end to end on 2026-11-27: `ray()->pause()` held a PHP script until an agent
 called `glint_resume` through `glint mcp`.
 
-Verified end to end with `spatie/ray` 1.48.1 (PHP 8.1) on 2026-11-27: every call in
+Verified end to end with `spatie/ray` 1.48.1 (PHP 8.1) on 2026-11-27. Every call in
 `newScreen, ray(string|object|array|int|bool|null), label, orange, table, text, html, toJson,
 measure, separator, caller, exception, remove, hide, count, pause` arrived with the right kind,
 file and line.
@@ -16,12 +16,12 @@ file and line.
 | Ray client expects | Glint answers |
 |--------------------|---------------|
 | `POST /` | translate, store, `200` once stored |
-| `GET /_availability_check` | `404` — the PHP client reads an HTTP error status as "app is up" |
-| `GET /locks/{name}` | `{"active": true}` while the pause waits; Continue → `{"active": false}`, Stop → `{"stop_execution": true}` (PHP throws `StopExecutionRequested`); unknown lock → continue |
+| `GET /_availability_check` | `404`. The PHP client reads an HTTP error status as "app is up". |
+| `GET /locks/{name}` | `{"active": true}` while the pause waits. Continue gives `{"active": false}`, and Stop gives `{"stop_execution": true}` (PHP throws `StopExecutionRequested`). Unknown lock: continue. |
 | `GET /windows`, `GET /theme` | `[]`, `{}` |
 
-Port `127.0.0.1:23517` (`GLINT_RAY_ADDR`, `off` disables). If the port is busy — usually because
-the Ray app is running — glintd starts without the adapter and says so; `/v1/info` lists the
+Port `127.0.0.1:23517` (`GLINT_RAY_ADDR`; `off` disables it). If the port is busy, usually because
+the Ray app is running, glintd starts without the adapter and says so. `/v1/info` lists the
 adapters that are actually running. `Host: host.docker.internal:<port>` is accepted for clients in
 containers.
 
@@ -30,8 +30,8 @@ containers.
 - The `n`-th data payload for a uuid gets id `ray-<uuid>` (n = 1) or `ray-<uuid>-<n>`.
 - Commands (`color`, `label`, `size`, `hide`, `remove`) become `core.update` envelopes, one per
   entry of that uuid. A command that arrives before any data targets `ray-<uuid>`.
-- The adapter remembers the last 10 000 uuids. After a daemon restart a reused uuid starts again
-  at `ray-<uuid>`, which the store ignores as a duplicate id; real clients generate a fresh uuid
+- The adapter remembers the last 10 000 uuids. After a daemon restart, a reused uuid starts again
+  at `ray-<uuid>`. The store ignores it as a duplicate id. Real clients generate a fresh uuid
   per `ray()` call, so this does not happen in practice.
 
 ## Envelope fields
@@ -50,7 +50,7 @@ containers.
 | Ray `type` | Glint kind | Notes |
 |------------|------------|-------|
 | `log`, all values scalar | `core.value` | one value → `value`; several → array |
-| `log`, any HtmlDumper value | `core.text` | `content` = `meta[0].clipboard_data` (PlainTextDumper, depth 5, ≤ 20 000 chars); `html` keeps the original; UI toggles. No clipboard text → `core.html` |
+| `log`, any HtmlDumper value | `core.text` | `content` = `meta[0].clipboard_data` (PlainTextDumper, depth 5, ≤ 20 000 chars); `html` keeps the original; the UI can toggle between them. With no clipboard text, the kind is `core.html`. |
 | `custom` label `Boolean` / `Null` | `core.value` | |
 | `custom` label `Text` / `XML` | `core.text` | `&nbsp;`, `<br />`, entities undone |
 | `custom` label `HTML` / `Image` / `""` | `core.html` | rendered in a sandboxed iframe |
@@ -76,6 +76,6 @@ containers.
 ## Not verified yet
 
 - node-ray's availability probe (`locks/__availabilty_check`) gets the lock route's `200` JSON
-  answer; whether node-ray reads that as "up" has not been tested with the real client.
+  answer. Whether node-ray reads that as "up" has not been tested with the real client.
 - Laravel watchers beyond `executed_query` were mapped from source, not from live traffic.
-- Ray 4 may have changed endpoints; clients tested here are the current open-source ones.
+- Ray 4 may have changed endpoints. The clients tested here are the current open-source ones.

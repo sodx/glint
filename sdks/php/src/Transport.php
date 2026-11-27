@@ -68,6 +68,13 @@ final class Transport
         }
     }
 
+    /** glintd's base URL, without a trailing slash. */
+    public static function url(): string
+    {
+        self::boot();
+        return rtrim(self::$url, '/');
+    }
+
     public static function env(string $key): ?string
     {
         $v = getenv($key);

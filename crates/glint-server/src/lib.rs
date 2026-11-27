@@ -8,7 +8,7 @@ mod guard;
 mod otlp;
 mod ray;
 mod routes;
-mod source;
+pub(crate) mod source;
 
 use std::future::Future;
 use std::net::SocketAddr;
@@ -29,8 +29,9 @@ pub const INDEX_HTML: &str = include_str!("../../../ui/index.html");
 pub struct Options {
     /// Adapters running in this daemon, reported by `/v1/info`.
     pub adapters: Vec<String>,
-    /// What `/v1/info` says about stored data: retention settings and current size.
-    pub data: Option<DataInfo>,
+    /// Settings and data management (the Settings page); absent in tests and the conformance
+    /// runner, where those endpoints answer 404.
+    pub admin: Option<Arc<dyn Admin>>,
     /// The editor files open in when the request names none (config `editor`, `GLINT_EDITOR`).
     pub editor: Option<String>,
 }
@@ -41,14 +42,25 @@ impl std::fmt::Debug for Options {
     }
 }
 
-/// Reports stored events and database size for `/v1/info`.
-pub type DataInfo = Arc<dyn Fn() -> serde_json::Value + Send + Sync>;
+/// What the daemon lets the Settings page see and do.
+pub trait Admin: Send + Sync {
+    /// `{settings, from_env, restart_keys, editors, data: {db, events, bytes}, path}`.
+    fn settings(&self) -> serde_json::Value;
+    /// Applies changes (only the keys given), saves the file, returns `settings()`.
+    fn update(&self, changes: &serde_json::Map<String, serde_json::Value>) -> Result<serde_json::Value, String>;
+    /// Runs retention now; returns how many events went.
+    fn prune_now(&self) -> Result<u64, String>;
+    /// Deletes every event; returns how many.
+    fn clear_all(&self) -> Result<u64, String>;
+}
+
+pub use source::{installed as installed_editors, set_default_editor};
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             adapters: vec!["native".to_owned(), "hooks:claude-code".to_owned()],
-            data: None,
+            admin: None,
             editor: None,
         }
     }
@@ -63,7 +75,7 @@ pub fn router(hub: Hub, addr: SocketAddr, stop: watch::Receiver<bool>, opts: Opt
         hub,
         stop,
         adapters: Arc::new(opts.adapters),
-        data: opts.data,
+        admin: opts.admin,
     };
     routes::router(state).layer(axum::middleware::from_fn_with_state(Allowlist::for_addr(addr), guard::check))
 }

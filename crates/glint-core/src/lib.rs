@@ -5,6 +5,7 @@
 pub mod control;
 mod hub;
 mod normalise;
+pub mod config;
 pub mod expect;
 pub mod project;
 mod query;

@@ -40,6 +40,24 @@ Objects keep their fields (including private and protected ones) and report thei
 the strings `"NaN"`, `"Infinity"`, `"-Infinity"`. Nesting deeper than 10 levels becomes
 `{"$truncated": true}`.
 
+## Pause
+
+```php
+use Glint\Glint;
+use Glint\GlintStop;
+
+$answer = Glint::pause("refund {$order->total} EUR?");
+if ($answer['approve'] ?? false) {
+    $gateway->refund($order);
+}
+```
+
+`pause` blocks until someone presses Continue in the Glint window, or a coding agent answers through
+MCP, and returns the value they gave (or `null`). Stop throws `GlintStop`. It returns at once when
+Glint is off or unreachable, and on CI unless `GLINT_FORCE_PAUSE` is set. After 5 minutes it gives
+up and carries on. What `measure`'s callback sends nests under the measure, so the window shows the
+request as a call tree.
+
 ## Configuration
 
 | Variable | Default | Meaning |

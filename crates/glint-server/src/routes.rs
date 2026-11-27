@@ -51,7 +51,7 @@ pub struct AppState {
     pub stop: watch::Receiver<bool>,
     /// Adapters this daemon runs, for `/v1/info`.
     pub adapters: std::sync::Arc<Vec<String>>,
-    pub data: Option<crate::DataInfo>,
+    pub admin: Option<std::sync::Arc<dyn crate::Admin>>,
 }
 
 impl axum::extract::FromRef<AppState> for Hub {
@@ -71,6 +71,9 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/hooks/{agent}", post(hook))
         .route("/v1/browser.js", get(browser_js))
         .route("/v1/expect", post(expect))
+        .route("/v1/settings", get(settings_get).put(settings_put))
+        .route("/v1/data/prune", post(data_prune))
+        .route("/v1/data/clear", post(data_clear))
         .route("/v1/source", get(crate::source::source))
         .route("/v1/open", post(crate::source::open))
         .route("/v1/editors", get(crate::source::editors))
@@ -100,6 +103,46 @@ async fn expect(State(hub): State<Hub>, Json(r): Json<glint_core::expect::Reques
     }
 }
 
+// ---- settings and data (the Settings page)
+
+fn no_admin() -> Response {
+    error(StatusCode::NOT_FOUND, "settings are not available here".into())
+}
+
+async fn settings_get(State(s): State<AppState>) -> Response {
+    match &s.admin {
+        Some(a) => Json(a.settings()).into_response(),
+        None => no_admin(),
+    }
+}
+
+async fn settings_put(State(s): State<AppState>, Json(changes): Json<serde_json::Map<String, serde_json::Value>>) -> Response {
+    let Some(a) = s.admin.clone() else { return no_admin() };
+    match tokio::task::spawn_blocking(move || a.update(&changes)).await {
+        Ok(Ok(v)) => Json(v).into_response(),
+        Ok(Err(e)) => error(StatusCode::BAD_REQUEST, e),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+async fn data_prune(State(s): State<AppState>) -> Response {
+    let Some(a) = s.admin.clone() else { return no_admin() };
+    match tokio::task::spawn_blocking(move || a.prune_now()).await {
+        Ok(Ok(n)) => Json(json!({ "removed": n })).into_response(),
+        Ok(Err(e)) => error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+async fn data_clear(State(s): State<AppState>) -> Response {
+    let Some(a) = s.admin.clone() else { return no_admin() };
+    match tokio::task::spawn_blocking(move || a.clear_all()).await {
+        Ok(Ok(n)) => Json(json!({ "removed": n })).into_response(),
+        Ok(Err(e)) => error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
 /// The browser SDK (`sdks/browser/glint.js`), for a `<script>` tag in a page under development.
 async fn browser_js() -> Response {
     (
@@ -119,7 +162,8 @@ async fn info(State(s): State<AppState>) -> Json<serde_json::Value> {
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": [PROTOCOL_VERSION],
         "adapters": *s.adapters,
-        "data": s.data.as_ref().map(|f| f()),
+        "data": s.admin.as_ref().map(|a| a.settings()["data"].clone()),
+        "settings": s.admin.as_ref().map(|a| a.settings()["settings"].clone()),
         "kinds": KNOWN_KINDS,
     }))
 }

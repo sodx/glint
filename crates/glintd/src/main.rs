@@ -15,21 +15,17 @@
 //!
 //! `RUST_LOG` sets the log filter (default `info`).
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use glint_core::config::{KEYS, Settings};
 use glint_core::{Hub, HubConfig};
 use glint_store_sqlite::SqliteStore;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
-const DEFAULT_ADDR: &str = "127.0.0.1:23600";
-const DEFAULT_RAY_ADDR: &str = "127.0.0.1:23517";
-const DEFAULT_OTLP_ADDR: &str = "127.0.0.1:4318";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,24 +34,12 @@ async fn main() -> Result<()> {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
 
-    let cfg = Config::load();
-    let addr: SocketAddr = cfg
-        .get("GLINT_ADDR", "addr")
-        .unwrap_or_else(|| DEFAULT_ADDR.to_owned())
-        .parse()
-        .context("addr (GLINT_ADDR) must be host:port")?;
+    let (settings, from_env) = glint_core::config::load();
+    let addr: SocketAddr = settings.addr.parse().context("addr (GLINT_ADDR) must be host:port")?;
     if !addr.ip().is_loopback() {
         tracing::warn!(%addr, "listening beyond loopback; anyone who can reach this address can read and write events");
     }
-    let db = match cfg.get("GLINT_DB", "db") {
-        Some(p) => match (p.strip_prefix("~/"), home()) {
-            (Some(rest), Some(h)) => h.join(rest),
-            _ => PathBuf::from(p),
-        },
-        None => db_path()?,
-    };
-    let keep_days: u32 = cfg.get("GLINT_KEEP_DAYS", "keep_days").and_then(|v| v.parse().ok()).unwrap_or(7);
-    let max_events: u64 = cfg.get("GLINT_MAX_EVENTS", "max_events").and_then(|v| v.parse().ok()).unwrap_or(100_000);
+    let db = glint_core::config::expand(&settings.db);
     trim_log();
     if let Some(dir) = db.parent() {
         std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
@@ -63,33 +47,29 @@ async fn main() -> Result<()> {
 
     let store = Arc::new(SqliteStore::open(&db).with_context(|| format!("opening {}", db.display()))?);
     let (hub, writer) = Hub::start(store.clone(), HubConfig::default());
+    let admin = Arc::new(Admin { store: store.clone(), settings: RwLock::new(settings.clone()), from_env, db: db.display().to_string() });
+    glint_server::set_default_editor(Some(settings.editor.clone()));
 
-    // Retention: shortly after start, then every 10 minutes.
-    let pruner = store.clone();
+    // Retention: shortly after start, then every 10 minutes, with the settings of the moment.
+    let pruner = admin.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(20)).await;
         loop {
-            let s = pruner.clone();
-            match tokio::task::spawn_blocking(move || s.prune(Some(keep_days), Some(max_events))).await {
-                Ok(Ok(n)) if n > 0 => tracing::info!(removed = n, keep_days, max_events, "pruned old events"),
+            let a = pruner.clone();
+            match tokio::task::spawn_blocking(move || a.prune()).await {
+                Ok(Ok(n)) if n > 0 => tracing::info!(removed = n, "pruned old events"),
                 Ok(Err(e)) => tracing::warn!(%e, "pruning failed"),
                 _ => {}
             }
             tokio::time::sleep(Duration::from_secs(600)).await;
         }
     });
-    let stats_store = store.clone();
-    let db_shown = db.display().to_string();
-    let data: glint_server::DataInfo = Arc::new(move || {
-        let (events, bytes) = stats_store.stats().unwrap_or((0, 0));
-        serde_json::json!({ "db": db_shown, "events": events, "bytes": bytes, "keep_days": keep_days, "max_events": max_events })
-    });
     let listener = TcpListener::bind(addr)
         .await
         .with_context(|| format!("binding {addr}; is another glintd running?"))?;
 
-    let ray_listener = optional_listener(&cfg, "GLINT_RAY_ADDR", "ray_addr", DEFAULT_RAY_ADDR, "Ray-compatible ingest", "is the Ray app running?").await?;
-    let otlp_listener = optional_listener(&cfg, "GLINT_OTLP_ADDR", "otlp_addr", DEFAULT_OTLP_ADDR, "OTLP receiver", "is an OpenTelemetry collector running?").await?;
+    let ray_listener = optional_listener(&settings.ray_addr, "ray_addr (GLINT_RAY_ADDR)", "Ray-compatible ingest", "is the Ray app running?").await?;
+    let otlp_listener = optional_listener(&settings.otlp_addr, "otlp_addr (GLINT_OTLP_ADDR)", "OTLP receiver", "is an OpenTelemetry collector running?").await?;
 
     let mut adapters = vec!["native".to_owned()];
     if ray_listener.is_some() {
@@ -120,7 +100,7 @@ async fn main() -> Result<()> {
 
     let ray = ray_listener.map(|l| tokio::spawn(glint_server::serve_ray(l, hub.clone(), stopped())));
     let otlp = otlp_listener.map(|l| tokio::spawn(glint_server::serve_otlp(l, hub.clone(), stopped())));
-    glint_server::serve(listener, hub, glint_server::Options { adapters, data: Some(data), editor: cfg.get("GLINT_EDITOR", "editor") }, stopped()).await?;
+    glint_server::serve(listener, hub, glint_server::Options { adapters, admin: Some(admin), editor: Some(settings.editor.clone()) }, stopped()).await?;
     if let Some(ray) = ray {
         ray.await.context("ray listener")??;
     }
@@ -140,12 +120,11 @@ async fn main() -> Result<()> {
 
 /// Binds an optional listener from `var` (`off` disables). A taken port is not fatal: the
 /// daemon starts without that adapter and says why.
-async fn optional_listener(cfg: &Config, var: &str, key: &str, default: &str, what: &str, hint: &str) -> Result<Option<TcpListener>> {
-    let value = cfg.get(var, key).unwrap_or_else(|| default.to_owned());
+async fn optional_listener(value: &str, name: &str, what: &str, hint: &str) -> Result<Option<TcpListener>> {
     if value == "off" {
         return Ok(None);
     }
-    let addr: SocketAddr = value.parse().with_context(|| format!("{var} must be host:port or `off`"))?;
+    let addr: SocketAddr = value.parse().with_context(|| format!("{name} must be host:port or `off`"))?;
     match TcpListener::bind(addr).await {
         Ok(l) => Ok(Some(l)),
         Err(err) => {
@@ -155,52 +134,11 @@ async fn optional_listener(cfg: &Config, var: &str, key: &str, default: &str, wh
     }
 }
 
-fn db_path() -> Result<PathBuf> {
-    if let Ok(p) = std::env::var("GLINT_DB") {
-        return Ok(PathBuf::from(p));
-    }
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .context("cannot find home directory; set GLINT_DB")?;
-    Ok(PathBuf::from(home).join(".glint").join("glint.db"))
-}
-
-/// `~/.glint/config.toml`: plain `key = value` lines (a TOML subset: numbers, "strings", bare
-/// words; `#` comments). Environment variables win over it.
-struct Config(HashMap<String, String>);
-
-impl Config {
-    fn load() -> Self {
-        let path = std::env::var_os("GLINT_CONFIG").map(PathBuf::from).or_else(|| home().map(|h| h.join(".glint/config.toml")));
-        let text = path.and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
-        Self(parse_config(&text))
-    }
-
-    fn get(&self, env: &str, key: &str) -> Option<String> {
-        std::env::var(env).ok().filter(|v| !v.is_empty()).or_else(|| self.0.get(key).cloned())
-    }
-}
-
-fn parse_config(text: &str) -> HashMap<String, String> {
-    text.lines()
-        .filter_map(|l| {
-            let l = l.split_once('#').map_or(l, |(a, _)| if a.matches('"').count() % 2 == 0 { a } else { l }).trim();
-            let (k, v) = l.split_once('=')?;
-            let v = v.trim();
-            let v = v.strip_prefix('"').and_then(|x| x.strip_suffix('"')).unwrap_or(v);
-            Some((k.trim().to_owned(), v.to_owned())).filter(|(k, _)| !k.is_empty() && !k.starts_with('['))
-        })
-        .collect()
-}
-
-fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from)
-}
 
 /// launchd and systemd append glintd's output to ~/.glint/glintd.log; keep it from growing
 /// without end.
 fn trim_log() {
-    if let Some(log) = home().map(|h| h.join(".glint/glintd.log"))
+    if let Some(log) = glint_core::config::home().map(|h| h.join(".glint/glintd.log"))
         && std::fs::metadata(&log).is_ok_and(|m| m.len() > 10 * 1024 * 1024)
         && let Ok(f) = std::fs::OpenOptions::new().write(true).open(&log)
     {
@@ -208,16 +146,84 @@ fn trim_log() {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// What the Settings page sees and changes: settings applied live (retention, editor, agent
+/// switches) and saved to the config file; data stats, prune, delete all.
+struct Admin {
+    store: Arc<SqliteStore>,
+    settings: RwLock<Settings>,
+    /// Keys an environment variable sets: shown, not editable.
+    from_env: Vec<String>,
+    db: String,
+}
 
-    #[test]
-    fn config_lines() {
-        let c = parse_config("# Glint\nkeep_days = 14\neditor = \"cursor\" # mine\naddr=127.0.0.1:23700\n[section]\n\nbad line\n");
-        assert_eq!(c.get("keep_days").map(String::as_str), Some("14"));
-        assert_eq!(c.get("editor").map(String::as_str), Some("cursor"));
-        assert_eq!(c.get("addr").map(String::as_str), Some("127.0.0.1:23700"));
-        assert_eq!(c.len(), 3);
+impl Admin {
+    fn current(&self) -> Settings {
+        self.settings.read().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    fn prune(&self) -> Result<u64, String> {
+        let s = self.current();
+        self.store.prune(Some(s.keep_days), Some(s.max_events)).map_err(|e| e.to_string())
+    }
+}
+
+impl glint_server::Admin for Admin {
+    fn settings(&self) -> serde_json::Value {
+        let (events, bytes) = self.store.stats().unwrap_or((0, 0));
+        serde_json::json!({
+            "settings": self.current(),
+            "from_env": self.from_env,
+            "restart_keys": KEYS.iter().filter(|k| k.2).map(|k| k.0).collect::<Vec<_>>(),
+            "env_names": KEYS.iter().map(|k| (k.0, k.1)).collect::<std::collections::HashMap<_, _>>(),
+            "editors": glint_server::installed_editors(),
+            "path": glint_core::config::path().map(|p| p.display().to_string()),
+            "data": { "db": self.db, "events": events, "bytes": bytes },
+        })
+    }
+
+    fn update(&self, changes: &serde_json::Map<String, serde_json::Value>) -> Result<serde_json::Value, String> {
+        let mut next = self.current();
+        for (k, v) in changes {
+            if !KEYS.iter().any(|x| x.0 == k) {
+                return Err(format!("unknown setting `{k}`"));
+            }
+            if self.from_env.contains(k) {
+                return Err(format!("`{k}` is set by an environment variable; change it there"));
+            }
+            let text = match v {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            next.set(k, &text);
+        }
+        next.validate()?;
+        // The file gets the new values; keys the environment sets keep their file values.
+        let mut file_view = glint_core::config::load_file();
+        let json = serde_json::to_value(&next).unwrap_or_default();
+        for (k, _, _) in KEYS {
+            if !self.from_env.iter().any(|e| e == k) {
+                let text = match json.get(*k) {
+                    Some(serde_json::Value::String(s)) => s.clone(),
+                    Some(other) => other.to_string(),
+                    None => continue,
+                };
+                file_view.set(k, &text);
+            }
+        }
+        file_view.save()?;
+        glint_server::set_default_editor(Some(next.editor.clone()));
+        *self.settings.write().unwrap_or_else(|p| p.into_inner()) = next;
+        tracing::info!(?changes, "settings changed");
+        Ok(glint_server::Admin::settings(self))
+    }
+
+    fn prune_now(&self) -> Result<u64, String> {
+        self.prune()
+    }
+
+    fn clear_all(&self) -> Result<u64, String> {
+        let n = self.store.clear().map_err(|e| e.to_string())?;
+        tracing::info!(removed = n, "all events deleted from the Settings page");
+        Ok(n)
     }
 }

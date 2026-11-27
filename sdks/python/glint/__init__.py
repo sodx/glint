@@ -11,8 +11,13 @@ from __future__ import annotations
 
 import contextvars
 import inspect
+import json
+import os
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from types import FrameType
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -20,7 +25,11 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 from . import _config, _encode, _ids, _origin, _transport
 
 __version__ = "0.1.0"
-__all__ = ["glint", "Entry", "__version__"]
+__all__ = ["glint", "Entry", "GlintStop", "__version__"]
+
+
+class GlintStop(Exception):
+    """Raised by glint.pause() when someone answers the pause with Stop."""
 
 COLORS = ("gray", "green", "orange", "red", "blue", "purple")
 RUN = "python-" + _ids.ulid()  # one run per process
@@ -221,6 +230,32 @@ class _Glint:
         except Exception:
             pass
 
+    def pause(self, reason: Optional[str] = None, timeout: float = 300.0) -> Any:
+        """Stops here until someone presses Continue in Glint (or an agent answers through MCP),
+        then returns the value they gave, or None. A Stop raises GlintStop. Returns at once when
+        Glint is off or unreachable, and on CI (unless GLINT_FORCE_PAUSE is set)."""
+        settings = _config.settings
+        if not settings.enabled or (os.environ.get("CI") and not os.environ.get("GLINT_FORCE_PAUSE")):
+            return None
+        pause_id = _emit("ctl.pause", {} if reason is None else {"reason": str(reason)}, None, _origin.call_site())
+        if not pause_id:
+            return None
+        self.flush(5.0)  # the pause must be stored before we ask about it
+        url = f"{settings.url.rstrip('/')}/v1/ctl/{urllib.parse.quote(pause_id)}?timeout_s=25"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=30) as res:
+                    if res.status == 204:
+                        continue
+                    answer = json.loads(res.read() or b"{}")
+            except Exception:
+                return None  # unknown pause (glintd restarted) or Glint went away: carry on
+            if answer.get("action") == "stop":
+                raise GlintStop()
+            return answer.get("value")
+        return None
+
     def configure(self, url: Optional[str] = None, enabled: Optional[bool] = None, project: Optional[str] = None) -> None:
         if url:
             _config.settings.url = url
@@ -231,3 +266,4 @@ class _Glint:
 
 
 glint = _Glint()
+_Glint.GlintStop = GlintStop  # reachable from the global too: `except glint.GlintStop`

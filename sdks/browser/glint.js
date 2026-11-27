@@ -69,9 +69,15 @@
     return f ? { file: f.file, line: f.line, col: f.col, fn: f.fn } : {};
   }
 
-  function send(kind, payload, meta, origin) {
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : "b-" + Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const scopes = []; // measures being run: what is sent inside nests under them
+
+  function send(kind, payload, meta, origin, fixedId) {
+    const id = fixedId || newId();
     try {
-      const e = { ts: new Date().toISOString(), run, kind, payload, origin: { lang: "js", runtime: "browser", sdk: SDK, host: location.host, ...origin } };
+      const e = { id, ts: new Date().toISOString(), run, kind, payload, origin: { lang: "js", runtime: "browser", sdk: SDK, host: location.host, ...origin } };
+      const parent = scopes[scopes.length - 1];
+      if (parent && parent !== id) e.parent = parent;
       if (project) e.project = project;
       if (meta && Object.keys(meta).length) e.meta = meta;
       queue.push(e);
@@ -80,6 +86,25 @@
     } catch {
       // never break the page
     }
+    return id;
+  }
+
+  /** What glint() returns: changes how the events just sent are shown. */
+  function entry(ids) {
+    const update = (change) => {
+      ids.forEach((target) => send("core.update", { target, ...change }, {}, {}));
+      return e;
+    };
+    const e = {
+      label: (label) => update({ meta: { label: String(label) } }),
+      color: (color) => update({ meta: { color: String(color) } }),
+      small: () => update({ meta: { size: "sm" } }),
+      large: () => update({ meta: { size: "lg" } }),
+      hide: () => update({ hidden: true }),
+      remove: () => update({ removed: true }),
+    };
+    for (const c of ["gray", "green", "orange", "red", "blue", "purple"]) e[c] = () => e.color(c);
+    return e;
   }
 
   function flush() {
@@ -101,7 +126,7 @@
     const e = err instanceof Error ? err : new Error(typeof err === "string" ? err : JSON.stringify(encode(err)));
     const fr = frames(e.stack);
     const top = fr.find((f) => !f.vendor) || fr[0] || {};
-    send("core.exception", { class: e.name || "Error", message: e.message, frames: fr }, label ? { label } : {}, { file: top.file, line: top.line, fn: top.fn });
+    return send("core.exception", { class: e.name || "Error", message: e.message, frames: fr }, label ? { label } : {}, { file: top.file, line: top.line, fn: top.fn });
   }
 
   // ---- what the page does, without code
@@ -180,15 +205,62 @@
   // ---- markers
   function glint(...values) {
     const at = site();
-    for (const v of values) {
-      if (v instanceof Error) exception(v);
-      else send("core.value", { value: encode(v) }, {}, at);
-    }
+    return entry(values.map((v) => (v instanceof Error ? exception(v) : send("core.value", { value: encode(v) }, {}, at))));
   }
-  glint.log = (message, fields, level = "info") => send("core.log", fields === undefined ? { message: String(message) } : { message: String(message), fields: encode(fields) }, { level }, site());
-  glint.exception = (err) => exception(err);
-  glint.table = (rows) => send("core.table", { rows: encode(Array.from(rows || [])) }, {}, site());
+  glint.log = (message, fields, level = "info") => entry([send("core.log", fields === undefined ? { message: String(message) } : { message: String(message), fields: encode(fields) }, { level }, site())]);
+  glint.exception = (err) => entry([exception(err)]);
+  glint.table = (rows, columns) => entry([send("core.table", columns ? { rows: encode(Array.from(rows || [])), columns: Array.from(columns, String) } : { rows: encode(Array.from(rows || [])) }, {}, site())]);
+  glint.send = (kind, payload, meta) => entry([send(String(kind), encode(payload), meta ? encode(meta) : {}, site())]);
+  /** Times fn (sync or async); what it sends meanwhile nests under the measure. */
+  glint.measure = (name, fn) => {
+    const id = newId(), at = site(), t = performance.now();
+    const done = () => send("core.measure", { name: String(name), duration_ms: Math.round((performance.now() - t) * 1000) / 1000 }, {}, at, id);
+    scopes.push(id);
+    let result;
+    try {
+      result = fn();
+    } finally {
+      scopes.pop();
+    }
+    if (result && typeof result.then === "function") return result.finally(done);
+    done();
+    return result;
+  };
   glint.flush = flush;
+  /** Stops here (await it) until someone presses Continue in Glint, then gives back the value they
+      gave, or undefined. A Stop rejects with an error named GlintStop. */
+  glint.pause = async (reason) => {
+    if (!realFetch) return undefined;
+    const id = (crypto.randomUUID && crypto.randomUUID()) || "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+    queue.push({ id, ts: new Date().toISOString(), run, kind: "ctl.pause", payload: reason === undefined ? {} : { reason: String(reason) }, ...(project ? { project } : {}), origin: { lang: "js", runtime: "browser", sdk: SDK, host: location.host, ...site() } });
+    clearTimeout(timer);
+    timer = null;
+    const body = JSON.stringify(queue.splice(0));
+    try {
+      await realFetch(base + "/v1/events", { method: "POST", headers: { "content-type": "application/json" }, body });
+    } catch {
+      return undefined;
+    }
+    const deadline = Date.now() + 300000;
+    while (Date.now() < deadline) {
+      let res;
+      try {
+        res = await realFetch(`${base}/v1/ctl/${encodeURIComponent(id)}?timeout_s=25`);
+      } catch {
+        return undefined;
+      }
+      if (res.status === 204) continue;
+      if (res.status !== 200) return undefined;
+      const answer = await res.json();
+      if (answer.action === "stop") {
+        const e = new Error("stopped from Glint");
+        e.name = "GlintStop";
+        throw e;
+      }
+      return answer.value;
+    }
+    return undefined;
+  };
   window.__glint = { run, project, flush };
   if (typeof window.glint === "undefined") window.glint = glint;
   send("core.log", { message: `${location.pathname}${location.search}`, fields: { url: location.href, title: document.title } }, { label: "page" }, {});

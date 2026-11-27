@@ -15,15 +15,15 @@ use serde_json::{Value, json};
 
 const CONTEXT: usize = 6;
 
-static DEFAULT_EDITOR: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+static DEFAULT_EDITOR: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
 
-/// The editor from glintd's configuration, used when a request names none.
+/// The editor from glintd's settings, used when a request names none. Settings change it live.
 pub fn set_default_editor(editor: Option<String>) {
-    let _ = DEFAULT_EDITOR.set(editor.filter(|e| !e.is_empty()));
+    *DEFAULT_EDITOR.write().unwrap_or_else(|p| p.into_inner()) = editor.filter(|e| !e.is_empty());
 }
 
 fn configured_editor() -> Option<String> {
-    DEFAULT_EDITOR.get().cloned().flatten().or_else(|| std::env::var("GLINT_EDITOR").ok())
+    DEFAULT_EDITOR.read().unwrap_or_else(|p| p.into_inner()).clone().or_else(|| std::env::var("GLINT_EDITOR").ok())
 }
 const MAX_FILE: u64 = 2 * 1024 * 1024;
 
@@ -122,7 +122,7 @@ const EDITORS: &[(&str, &str)] = &[
 ];
 
 /// Editors with an app bundle (macOS) or a command on PATH (elsewhere), in EDITORS order.
-fn installed() -> Vec<String> {
+pub fn installed() -> Vec<String> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     EDITORS
         .iter()

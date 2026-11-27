@@ -23,6 +23,21 @@ await glint.flush();                              // before process.exit(), if y
 Each call returns an Entry; `.label()`, `.color()` / `.red()` … `.gray()`, `.small()` / `.large()`,
 `.hide()` and `.remove()` change how the events are shown.
 
+## Pause
+
+```js
+const answer = await glint.pause(`refund ${order.total} EUR?`);
+if (answer?.approve) await refund(order);
+```
+
+`pause` stops here until someone presses Continue in the Glint window, or a coding agent answers
+through MCP, and resolves to the value they gave (or `undefined`). Stop rejects with `GlintStop`.
+It resolves at once when Glint is off or unreachable, and on CI unless `GLINT_FORCE_PAUSE` is set.
+After 5 minutes it gives up and carries on.
+
+What `measure`'s callback sends nests under the measure, across awaits (AsyncLocalStorage), so the
+window shows the run as a call tree.
+
 ## Configuration
 
 | Env | Default | |

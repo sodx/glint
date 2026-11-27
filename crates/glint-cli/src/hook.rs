@@ -42,8 +42,13 @@ pub fn run(base: &str, agent: &str) -> Result<(), String> {
 /// The `additionalContext` reply for SessionStart and UserPromptSubmit, if there is news.
 fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     let event = hook["hook_event_name"].as_str()?;
+    // The Settings page (or config.toml, or GLINT_AGENT_CONTEXT / GLINT_STOP_GUARD) can turn these off.
+    let (settings, _) = glint_core::config::load();
     if event == "Stop" {
-        return stop_guard(http, base, hook);
+        return settings.stop_guard.then(|| stop_guard(http, base, hook)).flatten();
+    }
+    if !settings.agent_context && event == "UserPromptSubmit" {
+        return None;
     }
     if event != "SessionStart" && event != "UserPromptSubmit" {
         return None;
@@ -124,7 +129,7 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
 
 /// Failures of this project's programs since the turn began keep the agent from stopping, once.
 fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
-    if hook["stop_hook_active"] == true || std::env::var("GLINT_STOP_GUARD").is_ok_and(|v| v == "0") {
+    if hook["stop_hook_active"] == true {
         return None;
     }
     let cwd = hook["cwd"].as_str()?;

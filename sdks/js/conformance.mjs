@@ -97,6 +97,9 @@ glint.measure("outer", () => {
   glint.measure("inner", () => glint("in inner"));
 });
 
+begin("pause");
+glint(await glint.pause("conformance"));
+
 begin("origin");
 glint("origin-check"); // glint:origin
 
