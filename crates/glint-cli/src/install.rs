@@ -148,7 +148,7 @@ fn install_service(a: &Args) -> Step {
     }
     let target_daemon = bin.join("glintd");
     if !a.dry_run {
-        if let Err(e) = fs::create_dir_all(&bin).and_then(|()| fs::copy(&daemon, &target_daemon)).and_then(|_| fs::copy(&here, bin.join("glint"))) {
+        if let Err(e) = fs::create_dir_all(&bin).and_then(|()| replace_file(&daemon, &target_daemon)).and_then(|()| replace_file(&here, &bin.join("glint"))) {
             return fail("service", format!("copying binaries to {}: {e}", bin.display()));
         }
     }
@@ -205,6 +205,18 @@ fn install_service(a: &Args) -> Step {
     } else {
         skip("service", "automatic start is only set up on macOS and Linux; run glintd yourself".into())
     }
+}
+
+/// Copy `from` over `to` through a new file and a rename. Overwriting a binary in place keeps its
+/// inode, and macOS then kills the next launch with OS_REASON_CODESIGNING (stale signature cache);
+/// a rename also leaves a running copy (this very `glint`, or glintd) untouched.
+fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    if from == to {
+        return Ok(());
+    }
+    let tmp = to.with_extension("new");
+    fs::copy(from, &tmp)?;
+    fs::rename(&tmp, to)
 }
 
 fn install_php(a: &Args) -> Step {

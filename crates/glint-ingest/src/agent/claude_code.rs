@@ -33,7 +33,7 @@ pub fn decode(body: &[u8]) -> Result<Vec<IncomingEnvelope>, HookError> {
         ts: None,
         run: Some(format!("claude-code:{session}")),
         parent: None,
-        project: s("cwd").and_then(basename),
+        project: None, // the normaliser names it from origin.cwd (git-aware)
         origin: Origin {
             lang: Some("agent".into()),
             framework: Some("claude-code".into()),
@@ -190,10 +190,6 @@ fn text(h: &Value, k: &str) -> Value {
     h.get(k).and_then(Value::as_str).map(|t| json!(clip_str(t, super::STRING_MAX))).unwrap_or(Value::Null)
 }
 
-fn basename(path: &str) -> Option<String> {
-    path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().filter(|s| !s.is_empty()).map(str::to_owned)
-}
-
 /// `UserPromptExpansion` → `x-claude-code.user_prompt_expansion`.
 fn vendor_kind(event: &str) -> String {
     let mut snake = String::new();
@@ -240,7 +236,7 @@ mod tests {
         assert_eq!((c.kind.as_str(), c.id.as_deref()), ("agent.tool_call", Some("cc-S1-toolu_1")));
         assert_eq!(c.payload["args"], json!({"command": "cargo test"}));
         assert_eq!(c.run.as_deref(), Some("claude-code:S1"));
-        assert_eq!(c.project.as_deref(), Some("shop"));
+        assert_eq!(c.origin.cwd.as_deref().map(|c| c.ends_with("shop")), Some(true));
         assert_eq!(c.origin.framework.as_deref(), Some("claude-code"));
         assert_eq!(c.meta.label.as_deref(), Some("Bash"));
 
@@ -289,7 +285,7 @@ mod tests {
             "tool_input":{"file_path":"C:\\x.txt","old_string":"a","new_string":"b","replace_all":false},"permission_suggestions":[]}"#;
         let e = decode(perm.as_bytes()).unwrap();
         assert_eq!(e[0].kind, "agent.permission");
-        assert_eq!(e[0].project.as_deref(), Some("payments-service"));
+        assert!(e[0].origin.cwd.as_deref().is_some_and(|c| c.ends_with("payments-service")));
         assert_eq!(e[0].meta.level, Some(Level::Warn));
 
         let exp = r#"{"session_id":"S","cwd":"/a","hook_event_name":"UserPromptExpansion","prompt_id":"p","expansion":"x"}"#;

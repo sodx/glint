@@ -1,12 +1,16 @@
 use chrono::{DateTime, Utc};
 use glint_protocol::{Envelope, IncomingEnvelope, PROTOCOL_VERSION};
+use serde_json::Value;
 use ulid::Generator;
+
+use crate::project::{ProjectResolver, folder_name};
 
 /// Fills in what a client left out. Server-assigned ids are monotonic ULIDs, so they sort
 /// in arrival order.
 #[derive(Default)]
 pub struct Normaliser {
     ids: Generator,
+    projects: ProjectResolver,
 }
 
 impl Normaliser {
@@ -14,7 +18,7 @@ impl Normaliser {
         Self::default()
     }
 
-    pub fn normalise(&mut self, e: IncomingEnvelope, now: DateTime<Utc>) -> Envelope {
+    pub fn normalise(&mut self, mut e: IncomingEnvelope, now: DateTime<Utc>) -> Envelope {
         let id = e.id.filter(|s| !s.is_empty()).unwrap_or_else(|| {
             // The generator only fails after 2^80 ids in one millisecond.
             self.ids.generate().map(|u| u.to_string()).unwrap_or_else(|_| ulid::Ulid::new().to_string())
@@ -26,10 +30,25 @@ impl Normaliser {
                 _ => "default".to_owned(),
             }
         });
+        // The project is the git repository, so all worktrees of one repository share it (see
+        // project.rs): looked up from the calling file's folder, then the cwd, else the cwd's name.
+        let file_dir = e.origin.file.as_deref().filter(|f| f.starts_with('/') || f.contains(":\\")).and_then(parent);
+        let resolved = file_dir
+            .and_then(|d| self.projects.resolve(d))
+            .or_else(|| e.origin.cwd.as_deref().and_then(|d| self.projects.resolve(d)));
+        if let Some(r) = &resolved {
+            for (k, v) in [("worktree", &r.worktree), ("branch", &r.branch)] {
+                if let Some(v) = v {
+                    e.origin.extra.entry(k.to_owned()).or_insert_with(|| Value::String(v.clone()));
+                }
+            }
+        }
         let project = e
             .project
+            .take()
             .filter(|s| !s.is_empty())
-            .or_else(|| e.origin.cwd.as_deref().and_then(basename))
+            .or_else(|| resolved.map(|r| r.project))
+            .or_else(|| e.origin.cwd.as_deref().and_then(folder_name))
             .unwrap_or_else(|| "default".to_owned());
         Envelope {
             v: PROTOCOL_VERSION,
@@ -46,12 +65,8 @@ impl Normaliser {
     }
 }
 
-fn basename(path: &str) -> Option<String> {
-    path.trim_end_matches(['/', '\\'])
-        .rsplit(['/', '\\'])
-        .next()
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
+fn parent(file: &str) -> Option<&str> {
+    file.rsplit_once(['/', '\\']).map(|(d, _)| d).filter(|d| !d.is_empty())
 }
 
 #[cfg(test)]
@@ -92,5 +107,15 @@ mod tests {
         let a = n.normalise(incoming(r#"{"kind":"core.value","payload":1}"#), Utc::now()).id;
         let b = n.normalise(incoming(r#"{"kind":"core.value","payload":1}"#), Utc::now()).id;
         assert!(a < b);
+    }
+
+    #[test]
+    fn worktrees_share_their_repository_project() {
+        let e = Normaliser::new().normalise(
+            incoming(r#"{"kind":"core.value","payload":1,"origin":{"cwd":"/home/u","file":"/srv/shop/.claude/worktrees/feat-x/src/cart.ts"}}"#),
+            Utc::now(),
+        );
+        assert_eq!(e.project, "shop");
+        assert_eq!(e.origin.extra.get("worktree").and_then(Value::as_str), Some("feat-x"));
     }
 }

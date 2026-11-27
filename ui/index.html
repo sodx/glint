@@ -224,6 +224,7 @@ ol.entries::before { content: ""; position: absolute; left: 20.5px; top: 20px; b
 
 /* project switcher, first run, offline */
 .proj-wrap { position: relative; }
+.run-switch .wt{font-family:var(--mono);font-size:.92em;color:var(--text)}
 .run-head[hidden] { display: none; }
 .onboard .code { position: relative; padding-right: 48px; }
 .cc { position: absolute; right: 6px; top: 6px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--faint); }
@@ -679,7 +680,10 @@ function runHead() {
   $("runHead").hidden = !r;
   if (!r) return;
   const errs = S.entries.filter(e => rowLevel(e) === "error").length;
-  $("runSwitch").innerHTML = `<span class="title">${esc(runTitle(r.run))}</span><span class="meta">${S.entries.length} event${S.entries.length === 1 ? "" : "s"}${errs ? " · " + errs + " error" + (errs > 1 ? "s" : "") : ""} · ${rel(r.last)}</span><svg class="i"><use href="#i-down"/></svg>`;
+  // Events from a linked git worktree carry origin.worktree / origin.branch (see project.rs).
+  const wo = S.entries.find(e => e.origin && (e.origin.branch || e.origin.worktree))?.origin;
+  const wt = wo ? `<span class="wt" title="Git worktree ${esc(wo.worktree || "")}">${esc(wo.branch || wo.worktree)}</span> · ` : "";
+  $("runSwitch").innerHTML = `<span class="title">${esc(runTitle(r.run))}</span><span class="meta">${wt}${S.entries.length} event${S.entries.length === 1 ? "" : "s"}${errs ? " · " + errs + " error" + (errs > 1 ? "s" : "") : ""} · ${rel(r.last)}</span><svg class="i"><use href="#i-down"/></svg>`;
   $("runMenu").innerHTML = S.runs.slice(0, 40).map(x => {
     const paused = S.pauses.some(p => p.run === x.run);
     const st = paused ? ["pause", "waiting"] : x.errors ? ["error", x.errors + " error" + (x.errors > 1 ? "s" : "")] : ["ok", x.events + (x.events === 1 ? " event" : " events")];

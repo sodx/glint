@@ -5,6 +5,7 @@
 pub mod control;
 mod hub;
 mod normalise;
+pub mod project;
 mod query;
 
 pub use control::{PauseInfo, PauseState, Resolution};
