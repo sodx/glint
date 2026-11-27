@@ -1,9 +1,33 @@
-# Glint
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+    <img alt="Glint" src="docs/assets/banner-light.png" width="100%">
+  </picture>
+</p>
 
-Glint is a local debugging desk for developers and their coding agents. Programs in any language send
-it values, logs, SQL queries, exceptions, timings and LLM calls. You watch them arrive in a live,
-searchable window, and your agent reads the same events over MCP instead of guessing what the
+<p align="center">
+  <a href="https://github.com/sodx/glint-releases/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sodx/glint-releases?label=release&color=a8d62a&labelColor=181a21"></a>
+  <img alt="macOS app, Linux CLI" src="https://img.shields.io/badge/macOS%20app-Linux%20CLI-181a21?labelColor=181a21">
+  <img alt="PHP, Python, Node, browser" src="https://img.shields.io/badge/PHP%20%C2%B7%20Python%20%C2%B7%20Node%20%C2%B7%20browser-181a21?labelColor=181a21">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-Claude%20Code%20%C2%B7%20Cursor%20%C2%B7%20Codex-181a21?labelColor=181a21">
+</p>
+
+<p align="center">
+  <a href="https://github.com/sodx/glint-releases/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="docs/INSTALL.md">Install guide</a> (<a href="docs/INSTALL.ru.md">по-русски</a>) ·
+  <a href="#coding-agents">Coding agents</a> ·
+  <a href="docs/ARCHITECTURE.md">How it works</a>
+</p>
+
+Glint is a local debugging desk for developers and their coding agents. Programs in any language
+send it values, logs, SQL queries, exceptions, timings and LLM calls. You watch them arrive in a
+live, searchable window, and your agent reads the same events over MCP instead of guessing what the
 program did.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/run-dark.png">
+  <img alt="A failed checkout in Glint: the request, a call tree with timings, the SQL query, a warning and the exception with its stack" src="docs/assets/run-light.png">
+</picture>
 
 ```php
 glint($order)->label('before save')->orange();
@@ -20,21 +44,28 @@ Any language can send events with a JSON POST. Glint also accepts what programs 
 OpenTelemetry, Ray's protocol, piped output and log lines. Everything stays on your machine, in one
 SQLite file behind a daemon that listens on loopback only.
 
-## Install the Mac app
-
-Download `Glint-<version>-macos-arm64.dmg`, drag Glint into Applications, and follow
-[docs/INSTALL.md](docs/INSTALL.md) (in Russian: [docs/INSTALL.ru.md](docs/INSTALL.ru.md)). The
-app's menu has "Set up this Mac…", which does what `glint install` does below. To build the disk
-image yourself: `app/bundle-macos.sh --dmg`.
-
-## Requirements
-
-You need Rust 1.88 or newer to build. The zero-setup `glint()` works with PHP 8.0+, Python 3.9+
-and Node 18+ (the `php`, `python3` and `node` on your PATH). Glint runs on macOS and Linux. The
-desktop app is macOS only for now; building it needs the Xcode command line tools and about 1 GB of
-disk.
-
 ## Install
+
+### The Mac app
+
+Download `Glint-<version>-macos-arm64.dmg` from the
+[latest release](https://github.com/sodx/glint-releases/releases/latest), drag Glint into
+Applications and open it. The window lists what is set up on this Mac, and **Set up this Mac** does
+the rest in a few seconds. [docs/INSTALL.md](docs/INSTALL.md) walks through it, including the one
+macOS prompt you see the first time (in Russian: [docs/INSTALL.ru.md](docs/INSTALL.ru.md)).
+
+<img alt="Glint's first-run screen: what is set up on this Mac, a Set up this Mac button, commands to try in each language and a prompt for your coding agent" src="docs/assets/first-run.png">
+
+The app lives in the menu bar. The spark turns red when something fails and amber when a program
+waits for you, a notification says which, and ⌥⌘G opens the window from anywhere. Glint updates
+itself: when a new version is out, the menu shows **Update to x.y.z…** and one click installs it
+with glintd and the `glint` command.
+
+### From source
+
+You need Rust 1.88 or newer. The zero-setup `glint()` works with PHP 8.0+, Python 3.9+ and Node 18+
+(the `php`, `python3` and `node` on your PATH). glintd and the CLI run on macOS and Linux; the
+desktop app is macOS only for now.
 
 ```bash
 cargo build --release -p glintd -p glint-cli && target/release/glint install
@@ -51,9 +82,8 @@ through a `.pth` file in the user site-packages, and Node through `NODE_OPTIONS=
 shell profile. A project that vendors its own copy of the SDK uses that copy. `--only php,node`
 and `--dry-run` narrow the install down.
 
-PHP skips the prepend file for a `php -S` router script (`php -S host:port router.php`, which is
-also what `artisan serve` runs). Serve a document root instead (`php -S host:port -t public`), or
-require the SDK in that project.
+PHP skips the prepend file for a `php -S` router script (`php -S host:port router.php`). Serve a
+document root instead (`php -S host:port -t public`), or require the SDK in that project.
 
 To try it without installing:
 
@@ -64,17 +94,27 @@ cargo run -q -p glint-cli -- send 42 hello
 
 ## Coding agents
 
-`glint install` registers Glint's MCP server with the agents it finds. Claude Code gets it at user
-scope, so every project sees it, plus hooks that put its own session next to your program's events.
-Cursor, VS Code, Windsurf and Gemini CLI get the server over HTTP, and Codex over stdio. Existing
-settings are kept, each edited file gets a one-time `.glint-backup` copy, and `glint uninstall`
-removes exactly what was added.
+`glint install` registers Glint's MCP server with the agents it finds, by their settings folder,
+their app or their command. Claude Code gets it at user scope, so every project sees it, plus hooks
+that put its own session next to your program's events. Cursor, VS Code, Windsurf and Gemini CLI
+get the server over HTTP, and Codex over stdio. Existing settings are kept, each edited file gets a
+one-time `.glint-backup` copy, and `glint uninstall` removes exactly what was added. An agent loads
+Glint when a session starts, so start a new one after setup.
 
 The hooks also let Glint talk to Claude Code. At the start of a session it learns that Glint
 records the project. With each of your prompts it gets the failures that happened since the
 previous one, so when you write "it's broken" it already has the error and the line. When it wants
 to finish a turn during which your programs failed, it is sent back once to fix them or say why they
 are expected. Both behaviours can be turned off in Settings.
+
+<img alt="The Agents view: tool calls by Claude Code and Cursor, which tools they used, and how soon a failure reached them" src="docs/assets/agents.png">
+
+The Agents view (`g`) shows what agents did with Glint: which ones connected, which tools they
+called, how many failures they read and how soon after the failure happened. Inside a run, events
+an agent read carry a "read by" mark. `glint stats` prints the same numbers. All of it is recorded
+on this machine and kept as long as events. `examples/agent-eval/` is an opt-in experiment that
+runs seeded bugs with and without Glint, to measure whether it helps; it costs model usage, so it
+never runs in tests.
 
 To connect an agent by hand:
 
@@ -93,6 +133,34 @@ markers sent with `window.glint()`:
 ```html
 <script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"></script>
 ```
+
+## Frameworks
+
+Laravel, Django, Flask, FastAPI, Express, Next.js and WordPress need no package, middleware or
+settings: the global install hooks into them when they load. Each request becomes a run with one
+summary at its root (method, route, controller or view, status, time, memory, number of queries),
+and under it every SQL query with the line in your code that ran it, the framework's exceptions
+with their request, log records, and outgoing HTTP calls that failed.
+
+| Framework | Hooked through | SQL from |
+| --- | --- | --- |
+| Laravel (also `artisan serve` and queue workers, one run per job) | the PHP prepend file, as the app boots | every connection (`DB::listen`) |
+| Django | the Python shim, when the request handler loads | every connection (`execute_wrapper`) |
+| Flask, FastAPI, Starlette | the Python shim | SQLAlchemy |
+| Express, Next.js, any `node:http` server | the Node shim (`NODE_OPTIONS`) | `pg`, `mysql2`, `node:sqlite` |
+| WordPress, Gutenberg included | the PHP prepend file, before WordPress loads | `$wpdb`, with the theme or plugin line behind each query |
+
+WordPress also reports database errors, `WP_Error`s, `_doing_it_wrong()` and deprecation notices,
+mail sent with `wp_mail()`, HTTP API calls and REST responses with an error status. The browser
+script goes into the front end, wp-admin and the login page, and in the block editor invalid blocks
+and notices such as "Updating failed" arrive with the reason. `Glint\WordPress` adds `post()`,
+`user()`, `query()`, `hooks('save_post')`, `template()`, `conditionals()`, `options()` and
+`queries()` for code. A production site is left alone, and `GLINT_WP` chooses what to report.
+
+`sdks/js/src/vite.js` is a Vite plugin that puts the browser script on dev server pages and nothing
+in a production build. `examples/frameworks/` holds a small app for each framework, and
+`python3 examples/frameworks/check.py` runs the ones whose toolchain is installed against a sandbox
+glintd and checks what arrives.
 
 ## Docker and remote machines
 
@@ -129,43 +197,11 @@ Over SSH, keep glintd on the Mac and open a reverse tunnel, `ssh -R 23600:127.0.
 reads). `glint docker --ssh devbox` prints how to copy the SDK there and what to put in the remote
 shell profile.
 
-## WordPress
-
-A WordPress site on this machine needs no plugin. Glint hooks in before WordPress loads and reports
-each request with its summary (template, queries, memory, time), every `$wpdb` query with the
-theme or plugin line behind it, database errors, `WP_Error`s, `_doing_it_wrong()` and deprecation
-notices, mail sent with `wp_mail()`, HTTP API calls, and REST responses with an error status. The
-browser script goes into the front end, wp-admin and the login page. In the block editor, invalid
-blocks and error notices such as "Updating failed" arrive with the reason. `Glint\WordPress` adds
-methods for code: `post()`, `user()`, `query()`, `hooks('save_post')`, `template()`,
-`conditionals()`, `options()` and `queries()`. A production site is left alone, and `GLINT_WP`
-chooses what to report.
-
-## Laravel, Django, Flask, FastAPI, Express, Next.js and Vite
-
-These need no package, middleware or settings either: the global install hooks into them when
-they load. Each request becomes a run with one summary at its root (method, route, controller or
-view, status, time, memory, number of queries), and under it every SQL query with the line in your
-code that ran it, the framework's exceptions with their request, log records, and outgoing HTTP
-calls that failed.
-
-| Framework | Hooked through | SQL from |
-| --- | --- | --- |
-| Laravel (also `artisan serve` and queue workers, one run per job) | the PHP prepend file, as the app boots | every connection (`DB::listen`) |
-| Django | the Python shim, when the request handler loads | every connection (`execute_wrapper`) |
-| Flask, FastAPI, Starlette | the Python shim | SQLAlchemy |
-| Express, Next.js, any `node:http` server | the Node shim (`NODE_OPTIONS`) | `pg`, `mysql2`, `node:sqlite` |
-
-`sdks/js/src/vite.js` is a Vite plugin that puts the browser script on dev server pages and
-nothing in a production build. `examples/frameworks/` holds a small app for each, and
-`python3 examples/frameworks/check.py` runs the ones whose toolchain is installed against a
-sandbox glintd and checks what arrives. The in-app docs have a page per framework.
-
 ## Call tree, pauses and checks
 
 Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends nests under it:
 values, SQL, logs and inner measures. The window shows the run as a call tree with a small waterfall
-of where the time went. OpenTelemetry spans nest the same way.
+of where the time went, as in the picture at the top. OpenTelemetry spans nest the same way.
 
 `glint.pause(reason)` stops the program until someone presses Continue in the window, or an agent
 answers through MCP, and returns the value they gave. It works in PHP, Python, Node and the browser.
@@ -183,14 +219,6 @@ All terms of one expectation must hold for the same event: `label:X`, `kind:X` o
 everything matched, 1 when something did not, and 2 when it could not check. Without a command it
 also looks at the last 30 seconds and waits while you click through the app.
 
-## Data and settings
-
-glintd keeps 7 days and at most 100,000 events by default. Every 10 minutes it deletes older events
-and the database file shrinks with them. The Settings view in the window (`,`) changes how long
-events are kept, which editor files open in, and whether agents hear about failures. It saves to
-`~/.glint/config.toml`, which you can also edit by hand; an environment variable of the same name
-wins over both. The window's Docs view (`?`) has an example of every method in every language.
-
 ## Secrets
 
 glintd replaces passwords, tokens and keys in every event before storing it, so they never reach
@@ -206,6 +234,23 @@ Settings, under Secrets, adds key names and regular expressions, lists keys neve
 turns it off. In `~/.glint/config.toml` these are `redact`, `redact_keys`, `redact_patterns` and
 `redact_allow` (environment: `GLINT_REDACT`, `GLINT_REDACT_KEYS`, ...).
 
+## Data, settings and docs
+
+glintd keeps 7 days and at most 100,000 events by default. Every 10 minutes it deletes older events
+and the database file shrinks with them. The Settings view (`,`) changes how long events are kept,
+which editor files open in, and whether agents hear about failures. It saves to
+`~/.glint/config.toml`, which you can also edit by hand; an environment variable of the same name
+wins over both.
+
+When something does not work, **Send diagnostics** in Settings (or `glint report`) writes one file
+to your Downloads folder with versions, what setup found, its log and glintd's log. Nothing is
+sent anywhere; you pass the file on yourself.
+
+<img alt="Glint's Docs view: a page per topic, with an example of every method in PHP, Python, Node, the browser and HTTP" src="docs/assets/docs.png">
+
+The Docs view (`?`) has an example of every method in every language, a page per framework, and
+how to add a language of your own.
+
 ## More
 
 Ray client libraries work unchanged, because glintd also listens on Ray's port `23517`.
@@ -218,15 +263,19 @@ transcript, tokens and latency:
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
 ```
 
-The desktop app puts Glint in the menu bar. The spark turns red when something fails and amber when
-a program waits for you, a notification says which, and ⌥⌘G opens the window from anywhere.
+## Development
 
 ```bash
-app/bundle-macos.sh --install   # builds Glint.app, with glintd inside, into ~/Applications
+cargo test --release --workspace                 # unit and integration tests
+python3 examples/e2e/run.py                      # a PHP shop, a Python worker and a Node API through the global glint()
+python3 examples/frameworks/check.py             # each framework example against a sandbox glintd
+scripts/clean-mac-check.sh                       # a new tester on a clean Mac, in a sandbox HOME
+app/bundle-macos.sh --install                    # builds Glint.app, with glintd inside, into ~/Applications
 ```
 
-`python3 examples/e2e/run.py` drives a PHP shop, a Python worker and a Node API through the global
-`glint()` and checks what glintd stored.
+`app/release.sh` builds, signs and publishes a release that installed apps pick up
+([docs/RELEASING.md](docs/RELEASING.md)). `node docs/assets/shoot.mjs` remakes the pictures in this
+README from a running glintd.
 
 How it is built: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The wire format and API:
 [docs/PROTOCOL.md](docs/PROTOCOL.md). Adding a language: the Docs view, and
