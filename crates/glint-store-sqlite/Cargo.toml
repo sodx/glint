@@ -1,0 +1,18 @@
+[package]
+name = "glint-store-sqlite"
+description = "SQLite + FTS5 implementation of the Glint store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+glint-protocol.workspace = true
+glint-core.workspace = true
+chrono.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+

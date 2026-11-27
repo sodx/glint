@@ -27,8 +27,13 @@ Content-Type: application/json
 
 - A single envelope object (not wrapped in an array) MUST also be accepted.
 - With `application/x-ndjson`, one envelope per line; the server MAY process lines as they stream.
-- Response: `202 Accepted` with `{"accepted": n, "rejected": [{"index": i, "error": "..."}]}`.
-  A batch is never rejected as a whole because one envelope is invalid.
+- Response: `202 Accepted` with `{"accepted": n, "ids": [...], "rejected": [{"index": i, "error": "..."}]}`,
+  sent **after** the accepted envelopes are stored, so a read issued afterwards sees them. `ids`
+  lists the final ids of accepted envelopes in body order. A batch is never rejected as a whole
+  because one envelope is invalid.
+- A repeated `id` is treated as a client retry: the first stored copy wins, later ones are ignored.
+- Loopback servers only answer requests whose `Host` is `127.0.0.1:<port>`, `localhost:<port>` or
+  `[::1]:<port>` (DNS-rebinding guard).
 - Max body: 16 MiB. Max envelope: 1 MiB (larger → `413` for that envelope; use blobs, §6).
 
 ## 3. Envelope

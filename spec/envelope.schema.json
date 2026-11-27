@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:glint:spec:v1:envelope",
+  "title": "Glint envelope (as sent by a client)",
+  "description": "Protocol v1. Only kind and payload are required; the server fills the rest. See docs/PROTOCOL.md.",
+  "type": "object",
+  "required": ["kind", "payload"],
+  "properties": {
+    "v": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "description": "ULID recommended; a repeated id is treated as a retry and ignored." },
+    "ts": { "type": "string", "format": "date-time" },
+    "run": { "type": "string" },
+    "parent": { "type": ["string", "null"] },
+    "project": { "type": "string" },
+    "origin": { "$ref": "#/$defs/origin" },
+    "kind": { "type": "string", "pattern": "^(core|sql|http|llm|agent|ctl|x-[a-z0-9-]+)\\.[a-z0-9_.]+$" },
+    "payload": { "description": "Kind-specific. Schemas for known kinds live in spec/kinds/." },
+    "meta": { "$ref": "#/$defs/meta" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "origin": {
+      "type": "object",
+      "properties": {
+        "lang": { "type": "string" }, "runtime": { "type": "string" }, "framework": { "type": "string" },
+        "sdk": { "type": "string", "description": "<name>/<semver>" },
+        "file": { "type": "string" }, "line": { "type": "integer", "minimum": 0 }, "col": { "type": "integer", "minimum": 0 },
+        "fn": { "type": "string" }, "host": { "type": "string" }, "pid": { "type": "integer", "minimum": 0 },
+        "thread": { "type": "string" }, "cwd": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "level": { "enum": ["trace", "debug", "info", "warn", "error", "fatal"] },
+        "color": { "enum": ["gray", "green", "orange", "red", "blue", "purple"] },
+        "label": { "type": "string" },
+        "screen": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "size": { "enum": ["sm", "md", "lg"] },
+        "hidden": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "frame": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string" }, "line": { "type": "integer" }, "col": { "type": "integer" },
+        "fn": { "type": "string" }, "class": { "type": "string" }, "vendor": { "type": "boolean" },
+        "snippet": { "type": "object", "properties": { "start": { "type": "integer" }, "lines": { "type": "array", "items": { "type": "string" } } } }
+      }
+    }
+  }
+}

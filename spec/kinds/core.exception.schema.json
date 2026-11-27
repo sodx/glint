@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:glint:spec:v1:kind:core.exception",
+  "title": "core.exception — an exception with its stack",
+  "description": "Default level is error.",
+  "type": "object",
+  "required": ["class", "message"],
+  "properties": {
+    "class": { "type": "string" },
+    "message": { "type": "string" },
+    "frames": { "type": "array", "items": { "$ref": "urn:glint:spec:v1:envelope#/$defs/frame" }, "description": "Innermost frame first." },
+    "cause": { "$ref": "#" }
+  }
+}

@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glint</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
+    --accent: #c2410c; --code: #f1f1ed;
+    --c-gray: #9ca3af; --c-green: #16a34a; --c-orange: #ea580c; --c-red: #dc2626; --c-blue: #2563eb; --c-purple: #7c3aed;
+    --j-str: #15803d; --j-num: #1d4ed8; --j-bool: #9333ea; --j-null: #6b7280; --j-key: #374151;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413; --panel: #1c1c1a; --text: #ecece8; --muted: #9a9a93; --line: #2c2c29;
+      --accent: #fb923c; --code: #232320;
+      --j-str: #86efac; --j-num: #93c5fd; --j-bool: #d8b4fe; --j-null: #9ca3af; --j-key: #d4d4d0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .02em; }
+  header h1 span { color: var(--accent); }
+  input, select, button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  button { cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  #q { flex: 1 1 200px; min-width: 120px; }
+  #status { width: 9px; height: 9px; border-radius: 50%; background: var(--c-red); }
+  #status.live { background: var(--c-green); }
+  #count { color: var(--muted); font-variant-numeric: tabular-nums; }
+  main { padding: 12px 16px 64px; max-width: 1200px; margin: 0 auto; }
+  .empty { color: var(--muted); text-align: center; padding: 64px 16px; }
+  .empty code { background: var(--code); padding: 2px 6px; border-radius: 4px; }
+  .ev { position: relative; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 6px; margin: 0 0 8px; padding: 8px 12px; overflow: hidden; }
+  .ev.sm .body { max-height: 4.5em; overflow: hidden; }
+  .ev.lg .body { font-size: 15px; }
+  .ev[data-color="gray"] { border-left-color: var(--c-gray); } .ev[data-color="green"] { border-left-color: var(--c-green); }
+  .ev[data-color="orange"] { border-left-color: var(--c-orange); } .ev[data-color="red"] { border-left-color: var(--c-red); }
+  .ev[data-color="blue"] { border-left-color: var(--c-blue); } .ev[data-color="purple"] { border-left-color: var(--c-purple); }
+  .head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .kind { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+  .label { color: var(--accent); font-weight: 600; }
+  .origin { margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); text-decoration: none; overflow-wrap: anywhere; }
+  a.origin:hover { color: var(--accent); }
+  .body { overflow-x: auto; }
+  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre.block { background: var(--code); padding: 6px 8px; border-radius: 4px; }
+  .j { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .j details { padding-left: 14px; } .j summary { margin-left: -14px; cursor: pointer; list-style: none; }
+  .j summary::before { content: "▸ "; color: var(--muted); } .j details[open] > summary::before { content: "▾ "; }
+  .j .row { padding-left: 14px; } .j .k { color: var(--j-key); } .j .s { color: var(--j-str); } .j .n { color: var(--j-num); }
+  .j .b { color: var(--j-bool); } .j .z { color: var(--j-null); } .j .t { color: var(--muted); }
+  .exc-title { font-weight: 600; color: var(--c-red); } .exc-msg { margin: 2px 0 6px; }
+  .frames { list-style: none; margin: 0; padding: 0; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .frames li.vendor { opacity: .5; } .frames .fn { color: var(--text); } .frames .loc { color: var(--muted); }
+  table { border-collapse: collapse; font-size: 12px; } th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--code); }
+  iframe { width: 100%; min-height: 60px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+  hr.sep { border: 0; border-top: 2px dashed var(--line); margin: 14px 0; }
+  .note { color: var(--muted); font-style: italic; margin: 6px 0; }
+  .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  @media (max-width: 600px) { .origin { margin-left: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>g<span>l</span>int</h1>
+  <span id="status" title="disconnected"></span>
+  <input id="q" type="search" placeholder="Filter (text, kind, label)…" aria-label="Filter">
+  <select id="level" aria-label="Minimum level">
+    <option value="">all levels</option><option value="1">debug+</option><option value="2">info+</option>
+    <option value="3">warn+</option><option value="4">error+</option>
+  </select>
+  <button id="follow" aria-pressed="true" title="Scroll to new events">Follow</button>
+  <button id="clear" title="Clear the view (events stay stored)">Clear</button>
+  <span id="count"></span>
+</header>
+<main id="feed"></main>
+
+<script>
+"use strict";
+const LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
+const MAX_EVENTS = 5000;
+const feed = document.getElementById("feed");
+const $q = document.getElementById("q"), $level = document.getElementById("level");
+const $follow = document.getElementById("follow"), $status = document.getElementById("status"), $count = document.getElementById("count");
+
+let events = [];            // displayed history, oldest first
+const byId = new Map();     // id -> event, for updates
+const pendingUpdates = new Map(); // target id -> [update payloads] that arrived first
+let lastId = null;
+const seen = new Set();     // every id accepted, including updates, so backfill and live never double up
+
+// ---------- helpers ----------
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function levelOf(e) {
+  const l = e.meta && e.meta.level;
+  if (l) return LEVELS.indexOf(l);
+  return e.kind === "core.exception" ? 4 : 1;
+}
+function time(ts) {
+  const d = new Date(ts);
+  return isNaN(d) ? "" : d.toLocaleTimeString([], { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
+}
+function matchesFilter(e) {
+  const min = $level.value === "" ? -1 : Number($level.value);
+  if (levelOf(e) < min) return false;
+  const q = $q.value.trim().toLowerCase();
+  if (!q) return true;
+  const hay = (e.kind + " " + ((e.meta && e.meta.label) || "") + " " + JSON.stringify(e.payload)).toLowerCase();
+  return hay.includes(q);
+}
+function editorLink(o) {
+  if (!o || !o.file) return null;
+  const loc = o.file + (o.line ? ":" + o.line : "");
+  const a = el(o.file.startsWith("/") ? "a" : "span", "origin", (o.fn ? o.fn + " · " : "") + shortPath(o.file) + (o.line ? ":" + o.line : ""));
+  a.title = loc;
+  if (a.tagName === "A") a.href = "vscode://file" + o.file + (o.line ? ":" + o.line + (o.col ? ":" + o.col : "") : "");
+  return a;
+}
+function shortPath(p) {
+  const parts = p.split(/[\\/]/);
+  return parts.length > 3 ? "…/" + parts.slice(-3).join("/") : p;
+}
+
+// ---------- JSON tree ----------
+function jsonTree(v, depth = 0, key = null) {
+  const wrap = el("div", depth === 0 ? "j" : "");
+  wrap.appendChild(jsonNode(v, depth, key));
+  return wrap;
+}
+function jsonNode(v, depth, key) {
+  const keyEl = () => { const k = el("span", "k", key === null ? "" : JSON.stringify(key).replace(/^"|"$/g, "") + ": "); return k; };
+  if (v !== null && typeof v === "object") {
+    const isArr = Array.isArray(v);
+    const entries = isArr ? v.map((x, i) => [i, x]) : Object.entries(v);
+    // Protocol markers for values the SDK could not send as plain JSON.
+    if (!isArr && entries.length === 1 && "$ref" in v) return leaf(keyEl(), "↺ " + v.$ref, "z");
+    if (!isArr && "$truncated" in v) return leaf(keyEl(), "… truncated", "z");
+    const d = el("details");
+    if (depth < 2 && entries.length <= 50) d.open = true;
+    const s = el("summary");
+    s.appendChild(keyEl());
+    s.appendChild(el("span", "t", isArr ? `Array(${entries.length})` : `{${entries.length}}`));
+    d.appendChild(s);
+    // Render children lazily so big payloads don't stall the feed.
+    const fill = () => {
+      if (d.dataset.filled) return;
+      d.dataset.filled = "1";
+      for (const [k, x] of entries.slice(0, 1000)) d.appendChild(jsonNode(x, depth + 1, isArr ? k : k));
+      if (entries.length > 1000) d.appendChild(el("div", "row t", `… ${entries.length - 1000} more`));
+    };
+    if (d.open) fill(); else d.addEventListener("toggle", fill, { once: true });
+    return d;
+  }
+  const cls = typeof v === "string" ? "s" : typeof v === "number" ? "n" : typeof v === "boolean" ? "b" : "z";
+  return leaf(keyEl(), typeof v === "string" ? JSON.stringify(v) : String(v), cls);
+}
+function leaf(keyNode, text, cls) {
+  const r = el("div", "row");
+  r.appendChild(keyNode);
+  r.appendChild(el("span", cls, text));
+  return r;
+}
+
+// ---------- renderers by kind ----------
+const renderers = {
+  "core.value"(p) {
+    if (p && typeof p === "object" && !Array.isArray(p) && "value" in p) {
+      const box = el("div");
+      if (p.type) box.appendChild(el("div", "meta-line", p.type));
+      box.appendChild(jsonTree(p.value));
+      return box;
+    }
+    return jsonTree(p);
+  },
+  "core.log"(p) {
+    const box = el("div");
+    box.appendChild(el("pre", "", typeof p === "string" ? p : (p && p.message) ?? JSON.stringify(p)));
+    if (p && p.fields && Object.keys(p.fields).length) box.appendChild(jsonTree(p.fields));
+    return box;
+  },
+  "core.text": p => el("pre", "", typeof p === "string" ? p : String(p && p.content)),
+  "core.markdown": p => el("pre", "", String(p && p.content)),
+  "core.json": p => jsonTree(p && "content" in p ? p.content : p),
+  "core.html"(p) {
+    // Untrusted: an empty sandbox means no scripts, no forms, no same-origin access.
+    const f = el("iframe");
+    f.setAttribute("sandbox", "");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    f.srcdoc = String(p && p.content);
+    return f;
+  },
+  "core.table"(p) {
+    const rows = (p && p.rows) || [];
+    const cols = (p && p.columns) || (rows[0] && !Array.isArray(rows[0]) ? Object.keys(rows[0]) : []);
+    const t = el("table");
+    if (cols.length) { const tr = el("tr"); cols.forEach(c => tr.appendChild(el("th", "", c))); t.appendChild(tr); }
+    rows.slice(0, 500).forEach(r => {
+      const tr = el("tr");
+      const cells = Array.isArray(r) ? r : cols.map(c => r[c]);
+      cells.forEach(c => { const td = el("td"); td.appendChild(c !== null && typeof c === "object" ? jsonTree(c) : el("span", "", String(c))); tr.appendChild(td); });
+      t.appendChild(tr);
+    });
+    return t;
+  },
+  "core.exception": function exc(p) {
+    const box = el("div");
+    box.appendChild(el("div", "exc-title", (p && p.class) || "Exception"));
+    box.appendChild(el("div", "exc-msg", (p && p.message) || ""));
+    const ul = el("ul", "frames");
+    ((p && p.frames) || []).slice(0, 200).forEach(f => {
+      const li = el("li", f.vendor ? "vendor" : "");
+      li.appendChild(el("span", "fn", (f.class ? f.class + "::" : "") + (f.fn || "{main}")));
+      li.appendChild(el("span", "loc", "  " + (f.file || "?") + (f.line ? ":" + f.line : "")));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    if (p && p.cause) { box.appendChild(el("div", "note", "caused by")); box.appendChild(exc(p.cause)); }
+    return box;
+  },
+  "core.measure": p => el("pre", "", `${(p && p.name) || "measure"}: ${p && p.duration_ms != null ? p.duration_ms + " ms" : "?"}` +
+    (p && p.memory_bytes != null ? `, ${(p.memory_bytes / 1048576).toFixed(1)} MiB` : "")),
+  "sql.query"(p) {
+    const box = el("div");
+    box.appendChild(el("pre", "block", (p && p.sql) || ""));
+    const bits = [];
+    if (p && p.duration_ms != null) bits.push(p.duration_ms + " ms");
+    if (p && p.conn) bits.push(p.conn);
+    if (p && p.rows != null) bits.push(p.rows + " rows");
+    if (bits.length) box.appendChild(el("div", "meta-line", bits.join(" · ")));
+    if (p && p.bindings && p.bindings.length) box.appendChild(jsonTree(p.bindings));
+    return box;
+  },
+};
+
+function renderEvent(e) {
+  if (e.kind === "core.separator") return el("hr", "sep");
+  const n = el("article", "ev");
+  n.dataset.id = e.id;
+  const head = el("div", "head");
+  head.appendChild(el("span", "", time(e.ts)));
+  head.appendChild(el("span", "kind", e.kind));
+  const label = el("span", "label");
+  head.appendChild(label);
+  if (e.project && e.project !== "default") head.appendChild(el("span", "", e.project));
+  const link = editorLink(e.origin);
+  if (link) head.appendChild(link);
+  n.appendChild(head);
+  const body = el("div", "body");
+  const r = renderers[e.kind];
+  try { body.appendChild(r ? r(e.payload) : jsonTree(e.payload)); }
+  catch (err) { body.appendChild(jsonTree(e.payload)); }
+  n.appendChild(body);
+  applyMeta(n, e.meta || {});
+  return n;
+}
+function applyMeta(n, m) {
+  if (m.color) n.dataset.color = m.color;
+  if (m.label != null) n.querySelector(".label").textContent = m.label;
+  n.classList.remove("sm", "lg");
+  if (m.size === "sm" || m.size === "lg") n.classList.add(m.size);
+  n.hidden = !!m.hidden || !!m.removed;
+}
+
+// ---------- feed state ----------
+function accept(e) {
+  if (seen.has(e.id)) return;
+  seen.add(e.id);
+  lastId = e.id;
+  if (e.kind === "core.update") {
+    const p = e.payload || {};
+    const target = byId.get(p.target);
+    if (target) mergeUpdate(target, p);
+    else pendingUpdates.set(p.target, [...(pendingUpdates.get(p.target) || []), p]);
+    return;
+  }
+  if (e.kind === "core.clear") { clearView(); return; }
+  byId.set(e.id, e);
+  for (const u of pendingUpdates.get(e.id) || []) mergeUpdate(e, u, false);
+  pendingUpdates.delete(e.id);
+  events.push(e);
+  if (events.length > MAX_EVENTS) {
+    const gone = events.splice(0, events.length - MAX_EVENTS);
+    gone.forEach(g => { byId.delete(g.id); const n = feed.querySelector(`[data-id="${CSS.escape(g.id)}"]`); if (n) n.remove(); });
+  }
+  if (matchesFilter(e)) append(renderEvent(e));
+  updateCount();
+}
+function mergeUpdate(e, u, redraw = true) {
+  e.meta = Object.assign({}, e.meta, u.meta || {});
+  if (u.hidden != null) e.meta.hidden = u.hidden;
+  if (u.removed) e.meta.removed = true;
+  if (!redraw) return;
+  const n = feed.querySelector(`[data-id="${CSS.escape(e.id)}"]`);
+  if (n) applyMeta(n, e.meta);
+}
+function append(node) {
+  const empty = feed.querySelector(".empty");
+  if (empty) empty.remove();
+  feed.appendChild(node);
+  if ($follow.getAttribute("aria-pressed") === "true") node.scrollIntoView({ block: "end" });
+}
+function rerender() {
+  feed.replaceChildren();
+  const shown = events.filter(matchesFilter);
+  if (!shown.length) showEmpty();
+  const frag = document.createDocumentFragment();
+  shown.forEach(e => frag.appendChild(renderEvent(e)));
+  feed.appendChild(frag);
+  updateCount();
+}
+function clearView() { events = []; byId.clear(); rerender(); }
+function updateCount() { $count.textContent = events.length ? `${events.length} events` : ""; }
+function showEmpty() {
+  const d = el("div", "empty");
+  d.appendChild(el("p", "", "Waiting for events. Send one:"));
+  d.appendChild(el("code", "", `curl -d '{"kind":"core.value","payload":{"value":42}}' ${location.origin}/v1/events`));
+  feed.appendChild(d);
+}
+
+// ---------- transport ----------
+let retry = 500;
+function connect() {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/v1/stream");
+  const buffered = [];
+  let ready = false;
+  ws.onopen = async () => {
+    retry = 500;
+    $status.className = "live"; $status.title = "live";
+    // Subscribe first, then backfill, so nothing falls in the gap.
+    try {
+      const url = "/v1/events?limit=1000" + (lastId ? "&after=" + encodeURIComponent(lastId) : "");
+      const res = await fetch(url);
+      const { events: history } = await res.json();
+      history.forEach(accept);
+    } catch (err) { console.warn("glint: backfill failed", err); }
+    ready = true;
+    buffered.splice(0).forEach(accept);
+    if (!events.length) rerender();
+  };
+  ws.onmessage = m => {
+    let e;
+    try { e = JSON.parse(m.data); } catch { return; }
+    if (e.glint === "lagged") { append(el("div", "note", `… skipped ${e.skipped} events (feed was too fast)`)); return; }
+    if (ready) accept(e); else buffered.push(e);
+  };
+  ws.onclose = () => {
+    $status.className = ""; $status.title = "disconnected — retrying";
+    setTimeout(connect, retry);
+    retry = Math.min(retry * 2, 5000);
+  };
+}
+
+$q.addEventListener("input", rerender);
+$level.addEventListener("change", rerender);
+$follow.addEventListener("click", () => $follow.setAttribute("aria-pressed", String($follow.getAttribute("aria-pressed") !== "true")));
+document.getElementById("clear").addEventListener("click", clearView);
+document.addEventListener("keydown", ev => {
+  if ((ev.metaKey || ev.ctrlKey) && ev.key === "k") { ev.preventDefault(); clearView(); }
+  if (ev.key === "/" && document.activeElement !== $q) { ev.preventDefault(); $q.focus(); }
+});
+showEmpty();
+connect();
+</script>
+</body>
+</html>

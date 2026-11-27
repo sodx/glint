@@ -11,8 +11,12 @@ Read before non-trivial work:
 
 ## Status
 
-Pre-code. Docs and architecture exist; the Cargo workspace is not scaffolded yet. See `docs/ROADMAP.md`
-for the next milestone.
+M0 done: `glintd` ingests the native protocol, stores in SQLite + FTS5, streams over WebSocket and
+serves a single-file live-feed UI (`ui/index.html`, no build step yet; Vite + TS arrives with M1).
+Next: M1 in `docs/ROADMAP.md`.
+
+Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native only),
+`glint-server`, `glintd`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack
 
@@ -36,11 +40,14 @@ for the next milestone.
 4. **Dependency direction:** `glint-protocol ← glint-core ← {store-sqlite, ingest, mcp, ai} ←
    glint-server ← {glintd, app, glint-cli}`. `glint-core` must not depend on axum, Tauri, SQLite or
    any LLM client.
-5. **SDKs never hurt the host program**: no throws, no blocking network calls (except `pause`),
+5. **Read-your-writes.** `POST /v1/events` answers only after the events are stored; the writer
+   still batches concurrent requests into one transaction. Events are stored before they are
+   published on the bus.
+6. **SDKs never hurt the host program**: no throws, no blocking network calls (except `pause`),
    bounded queues, disabled in production by default.
-6. **Local-first and private.** Loopback by default. Nothing goes to a remote model unless the user
+7. **Local-first and private.** Loopback by default. Nothing goes to a remote model unless the user
    enables `glint-ai`, and redaction runs first.
-7. **MCP output is token-budgeted.** Tools return compact projections first; full payloads on request.
+8. **MCP output is token-budgeted.** Tools return compact projections first; full payloads on request.
 
 ## Adding things
 
@@ -54,16 +61,17 @@ for the next milestone.
 - **New framework integration:** `integrations/<framework>/`, builds on the language SDK, emits only
   existing kinds or `x-<framework>.*` kinds, ships a manifest of the kinds it emits.
 
-## Commands (once scaffolded)
+## Commands
 
 ```bash
-cargo check --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-cargo run -p glintd
-cd ui && pnpm dev
-cd app && pnpm tauri dev
+cargo run -p glintd                      # http://127.0.0.1:23600, DB at ~/.glint/glint.db
+GLINT_DB=/tmp/g.db GLINT_ADDR=127.0.0.1:23700 cargo run -p glintd
+curl -d '{"kind":"core.value","payload":{"value":42}}' http://127.0.0.1:23600/v1/events
 ```
+
+`ui/index.html` is compiled into the binary (`include_str!`): rebuild `glintd` after editing it.
 
 ## Conventions
 

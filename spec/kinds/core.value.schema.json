@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:glint:spec:v1:kind:core.value",
+  "title": "core.value — a dumped value",
+  "description": "The structured form of dump()/console.log(x). Renderers show `value` as a JSON tree. SDKs encode values JSON cannot hold with the markers below.",
+  "type": "object",
+  "required": ["value"],
+  "properties": {
+    "value": { "description": "Any JSON. Markers: {\"$ref\": path} for cycles, {\"$bin\": base64} for bytes, {\"$truncated\": true} where depth/size limits cut." },
+    "type": { "type": "string", "description": "Source-language type name, e.g. App\\Models\\Order, dict, Map<String, int>." }
+  }
+}
