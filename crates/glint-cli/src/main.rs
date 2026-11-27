@@ -9,6 +9,7 @@
 //! glint install                          # glintd at login + glint() in PHP, Python, Node
 //! ```
 
+mod agents;
 mod client;
 mod conformance;
 mod hook;
@@ -92,8 +93,10 @@ enum Command {
     /// Claude Code: `claude mcp add glint -- glint mcp`, or connect over HTTP directly:
     /// `claude mcp add --transport http glint http://127.0.0.1:23600/mcp`.
     Mcp,
-    /// Set Glint up on this machine: glintd starts at login, and glint() works in every PHP,
-    /// Python and Node program with no setup (SDKs stay off when NODE_ENV/APP_ENV=production).
+    /// Set Glint up on this machine: glintd starts at login, glint() works in every PHP, Python
+    /// and Node program with no setup (SDKs stay off when NODE_ENV/APP_ENV=production), and the
+    /// coding agents found here (Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex) get
+    /// Glint's MCP server; Claude Code also gets the hooks that show its session in Glint.
     Install {
         #[command(flatten)]
         setup: Setup,
@@ -137,7 +140,7 @@ struct Common {
 
 #[derive(Args)]
 struct Setup {
-    /// Only these parts: service, php, python, node (comma-separated).
+    /// Only these parts: service, php, python, node, agents (comma-separated).
     #[arg(long, value_delimiter = ',', value_parser = install::Target::parse)]
     only: Vec<install::Target>,
     /// Show what would be done without changing anything.
@@ -152,10 +155,10 @@ struct Setup {
 }
 
 impl Setup {
-    fn args(self) -> Result<install::Args, String> {
+    fn args(self, url: &str) -> Result<install::Args, String> {
         let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is not set")?;
         let targets = if self.only.is_empty() { install::Target::ALL.to_vec() } else { self.only };
-        Ok(install::Args { targets, dry_run: self.dry_run, home, php_ini_dir: self.php_ini_dir, shell_profile: self.shell_profile })
+        Ok(install::Args { targets, dry_run: self.dry_run, home, php_ini_dir: self.php_ini_dir, shell_profile: self.shell_profile, url: url.to_owned() })
     }
 }
 
@@ -220,14 +223,14 @@ fn main() -> ExitCode {
         }
         Command::Install { setup: s } => {
             let dry = s.dry_run;
-            s.args().and_then(|a| setup(&install::install(&a), dry, "Done. Open a new shell, then try glint(\"hello\") in any PHP, Python or Node program."))
+            s.args(&cli.url).and_then(|a| setup(&install::install(&a), dry, "Done. Open a new shell, then try glint(\"hello\") in any PHP, Python or Node program."))
         }
         Command::Uninstall { setup: s } => {
             let dry = s.dry_run;
-            s.args().and_then(|a| setup(&install::uninstall(&a), dry, ""))
+            s.args(&cli.url).and_then(|a| setup(&install::uninstall(&a), dry, ""))
         }
         Command::Doctor => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None }
-            .args()
+            .args(&cli.url)
             .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "")),
         Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };

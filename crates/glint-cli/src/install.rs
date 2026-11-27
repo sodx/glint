@@ -16,8 +16,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const MARK_BEGIN: &str = "# >>> glint >>>";
-const MARK_END: &str = "# <<< glint <<<";
+pub(crate) const MARK_BEGIN: &str = "# >>> glint >>>";
+pub(crate) const MARK_END: &str = "# <<< glint <<<";
 const SERVICE_LABEL: &str = "local.glint.glintd";
 
 macro_rules! sdk_files {
@@ -38,17 +38,19 @@ pub enum Target {
     Php,
     Python,
     Node,
+    Agents,
 }
 
 impl Target {
-    pub const ALL: [Target; 4] = [Target::Service, Target::Php, Target::Python, Target::Node];
+    pub const ALL: [Target; 5] = [Target::Service, Target::Php, Target::Python, Target::Node, Target::Agents];
     pub fn parse(s: &str) -> Result<Target, String> {
         match s {
             "service" => Ok(Target::Service),
             "php" => Ok(Target::Php),
             "python" => Ok(Target::Python),
             "node" | "js" => Ok(Target::Node),
-            other => Err(format!("unknown target `{other}` (service, php, python, node)")),
+            "agents" | "mcp" => Ok(Target::Agents),
+            other => Err(format!("unknown target `{other}` (service, php, python, node, agents)")),
         }
     }
 }
@@ -59,6 +61,8 @@ pub struct Args {
     pub home: PathBuf,
     pub php_ini_dir: Option<PathBuf>,
     pub shell_profile: Option<PathBuf>,
+    /// Where glintd listens; agents get `<url>/mcp`.
+    pub url: String,
 }
 
 impl Args {
@@ -74,13 +78,13 @@ pub struct Step {
     pub skipped: bool,
 }
 
-fn done(name: &'static str, detail: String) -> Step {
+pub(crate) fn done(name: &'static str, detail: String) -> Step {
     Step { name, result: Ok(detail), skipped: false }
 }
-fn skip(name: &'static str, why: String) -> Step {
+pub(crate) fn skip(name: &'static str, why: String) -> Step {
     Step { name, result: Ok(why), skipped: true }
 }
-fn fail(name: &'static str, err: String) -> Step {
+pub(crate) fn fail(name: &'static str, err: String) -> Step {
     Step { name, result: Err(err), skipped: false }
 }
 
@@ -104,16 +108,17 @@ pub fn print(steps: &[Step]) -> bool {
 pub fn install(a: &Args) -> Vec<Step> {
     a.targets
         .iter()
-        .map(|t| match t {
-            Target::Service => install_service(a),
-            Target::Php => install_php(a),
-            Target::Python => install_python(a),
-            Target::Node => install_node(a),
+        .flat_map(|t| match t {
+            Target::Service => vec![install_service(a)],
+            Target::Php => vec![install_php(a)],
+            Target::Python => vec![install_python(a)],
+            Target::Node => vec![install_node(a)],
+            Target::Agents => crate::agents::install(a),
         })
         .collect()
 }
 
-fn write(a: &Args, path: &Path, contents: &str) -> Result<(), String> {
+pub(crate) fn write(a: &Args, path: &Path, contents: &str) -> Result<(), String> {
     if a.dry_run {
         return Ok(());
     }
@@ -210,7 +215,7 @@ fn install_service(a: &Args) -> Step {
 /// Copy `from` over `to` through a new file and a rename. Overwriting a binary in place keeps its
 /// inode, and macOS then kills the next launch with OS_REASON_CODESIGNING (stale signature cache);
 /// a rename also leaves a running copy (this very `glint`, or glintd) untouched.
-fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
     if from == to {
         return Ok(());
     }
@@ -461,6 +466,7 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
                     None => skip("node", "unknown shell".into()),
                 });
             }
+            Target::Agents => steps.extend(crate::agents::uninstall(a)),
         }
     }
     steps.push(skip("data", format!("kept {} (events, SDK copies); delete it to remove everything", a.glint_dir().display())));
@@ -498,6 +504,7 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
     steps.push(check("php", "php", &[], "<?php echo function_exists('glint') ? 'yes' : 'no';", "run `glint install --only php`"));
     steps.push(check("python", "python3", &["-c", "import builtins; print('yes' if hasattr(builtins, 'glint') else 'no')"], "", "run `glint install --only python`"));
     steps.push(check("node", "node", &["-e", "console.log(typeof glint === 'function' ? 'yes' : 'no')"], "", "run `glint install --only node`, then open a new shell"));
+    steps.extend(crate::agents::doctor(a));
     steps
 }
 

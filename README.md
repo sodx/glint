@@ -43,6 +43,13 @@ glint doctor        # is glintd up, does glint() work in each language?
 glint uninstall     # removes everything install wrote; keeps ~/.glint
 ```
 
+`glint install` also tells the coding agents it finds about Glint: Claude Code gets the MCP
+server at user scope (every project) plus the hooks that put its session next to your program's
+events; Cursor, VS Code, Windsurf and Gemini CLI get the MCP server over HTTP, Codex over stdio.
+Existing settings are kept, each edited file gets a one-time `.glint-backup`, and `glint uninstall`
+takes back exactly what was added. The server's MCP instructions tell a connected agent when to
+use it, including dropping `glint(value)` into code instead of print statements.
+
 PHP gets it through `auto_prepend_file` (an existing prepend file keeps working), Python through a
 `.pth` file in the user site-packages of the `python3` on PATH, Node through `NODE_OPTIONS=--import`
 in your shell profile. `--only php,node` and `--dry-run` narrow it down. A project's own copy of the

@@ -20,6 +20,9 @@ pub const PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05
 const INSTRUCTIONS: &str = "Glint records what programs on this machine actually did: dumped values, logs, \
 SQL queries, exceptions, timings, LLM calls. Use it instead of guessing or adding print statements:\n\
 - glint_last_error first when something failed; glint_events / glint_runs to look around.\n\
+- To inspect a value, add glint(value) to the code instead of print/var_dump/console.log: after \
+`glint install` it is a global in PHP, Python and Node (no import; off in production), then run \
+and read it back with glint_wait_for or glint_events. Remove those calls when done.\n\
 - Edit → run → glint_wait_for to see the result of a change without reading terminal output.\n\
 - glint_pauses / glint_resume when a program is paused waiting for an answer.\n\
 - glint_annotate to leave a note the human sees next to an event; glint_show to put markdown or a \

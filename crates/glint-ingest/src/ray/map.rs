@@ -3,6 +3,8 @@
 use glint_protocol::{Level, Meta, is_valid_kind};
 use serde_json::{Map, Value, json};
 
+// Short-lived (one per Ray payload, consumed at once), so the size gap between variants is moot.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum Mapped {
     /// A feed item.
     Event { kind: String, payload: Value, meta: Meta },
