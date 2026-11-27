@@ -33,6 +33,20 @@ cargo run -p glintd                     # UI at http://127.0.0.1:23600
 cargo run -q -p glint-cli -- send 42 hello
 ```
 
+Set it up once and forget it: `glint install` starts glintd at login (launchd / systemd) and makes
+`glint()` a global in every PHP, Python and Node program on the machine — no package, no import,
+no config. SDKs stay off when `NODE_ENV` / `APP_ENV` is `production`.
+
+```bash
+cargo build --release -p glintd -p glint-cli && target/release/glint install
+glint doctor        # is glintd up, does glint() work in each language?
+glint uninstall     # removes everything install wrote; keeps ~/.glint
+```
+
+PHP gets it through `auto_prepend_file` (an existing prepend file keeps working), Python through a
+`.pth` file in the user site-packages of the `python3` on PATH, Node through `NODE_OPTIONS=--import`
+in your shell profile. `--only php,node` and `--dry-run` narrow it down.
+
 Existing Ray client libraries work unchanged: glintd also listens on Ray's port `23517`.
 
 Connect your coding agent:

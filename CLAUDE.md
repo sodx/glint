@@ -25,6 +25,12 @@ M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume fr
 Ray `pause()` works), `glint.pause()` in the JS SDK and the Claude Code hooks adapter
 (`glint hook`, `docs/mappings/claude-code.md`) are done.
 
+`glint install` / `uninstall` / `doctor` (`crates/glint-cli/src/install.rs`): glintd as a login
+service and a zero-config global `glint()` for PHP (auto_prepend_file), Python (.pth → builtins)
+and Node (NODE_OPTIONS --import); the SDKs are embedded with `include_str!`, so SDK edits ship with
+the next `glint` build. Test it with `HOME=<tmp>` plus `--php-ini-dir` / `--shell-profile`, never
+against the real home.
+
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
 (`docs/mappings/otlp.md`), LLM card in the UI, MCP `glint_llm_calls`.
 

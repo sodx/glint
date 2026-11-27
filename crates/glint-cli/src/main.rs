@@ -6,11 +6,13 @@
 //! echo '{"sql":"select 1"}' | glint send --kind sql.query
 //! npm run dev 2>&1 | glint pipe --label web
 //! glint conformance -- node sdks/js/conformance.mjs
+//! glint install                          # glintd at login + glint() in PHP, Python, Node
 //! ```
 
 mod client;
 mod conformance;
 mod hook;
+mod install;
 mod lines;
 mod mcp;
 mod pipe;
@@ -90,6 +92,19 @@ enum Command {
     /// Claude Code: `claude mcp add glint -- glint mcp`, or connect over HTTP directly:
     /// `claude mcp add --transport http glint http://127.0.0.1:23600/mcp`.
     Mcp,
+    /// Set Glint up on this machine: glintd starts at login, and glint() works in every PHP,
+    /// Python and Node program with no setup (SDKs stay off when NODE_ENV/APP_ENV=production).
+    Install {
+        #[command(flatten)]
+        setup: Setup,
+    },
+    /// Undo `glint install`. Keeps ~/.glint (events and SDK copies).
+    Uninstall {
+        #[command(flatten)]
+        setup: Setup,
+    },
+    /// Check that glintd is reachable and glint() is available in each language.
+    Doctor,
     /// Check a language SDK against the conformance suite (spec/conformance/).
     ///
     /// Runs the SDK's conformance program three times against an in-memory server: normally,
@@ -118,6 +133,44 @@ struct Common {
     /// Tag, repeatable.
     #[arg(short, long = "tag")]
     tags: Vec<String>,
+}
+
+#[derive(Args)]
+struct Setup {
+    /// Only these parts: service, php, python, node (comma-separated).
+    #[arg(long, value_delimiter = ',', value_parser = install::Target::parse)]
+    only: Vec<install::Target>,
+    /// Show what would be done without changing anything.
+    #[arg(long)]
+    dry_run: bool,
+    /// PHP's ini scan directory (default: from `php --ini`).
+    #[arg(long)]
+    php_ini_dir: Option<std::path::PathBuf>,
+    /// Shell profile for PATH and NODE_OPTIONS (default: from $SHELL).
+    #[arg(long)]
+    shell_profile: Option<std::path::PathBuf>,
+}
+
+impl Setup {
+    fn args(self) -> Result<install::Args, String> {
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is not set")?;
+        let targets = if self.only.is_empty() { install::Target::ALL.to_vec() } else { self.only };
+        Ok(install::Args { targets, dry_run: self.dry_run, home, php_ini_dir: self.php_ini_dir, shell_profile: self.shell_profile })
+    }
+}
+
+fn setup(steps: &[install::Step], dry_run: bool, then: &str) -> Result<(), String> {
+    if dry_run {
+        println!("(dry run: nothing was changed)");
+    }
+    if install::print(steps) {
+        if !then.is_empty() {
+            println!("\n{then}");
+        }
+        Ok(())
+    } else {
+        Err("some steps failed (see above)".into())
+    }
 }
 
 fn parse_level(s: &str) -> Result<Level, String> {
@@ -165,6 +218,17 @@ fn main() -> ExitCode {
                 hook::run(&cli.url, &agent)
             }
         }
+        Command::Install { setup: s } => {
+            let dry = s.dry_run;
+            s.args().and_then(|a| setup(&install::install(&a), dry, "Done. Open a new shell, then try glint(\"hello\") in any PHP, Python or Node program."))
+        }
+        Command::Uninstall { setup: s } => {
+            let dry = s.dry_run;
+            s.args().and_then(|a| setup(&install::uninstall(&a), dry, ""))
+        }
+        Command::Doctor => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None }
+            .args()
+            .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "")),
         Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };
     match result {
