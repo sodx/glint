@@ -1,4 +1,0 @@
-{"ts":"2026-11-27T17:32:47.064Z","event":"tool","tool":"Bash","class":"bash","bytes":5,"ok":null,"route":"model-default","size":5,"toolChars":5,"is_error":false,"budget":null}
-{"ts":"2026-11-27T17:32:57.549Z","event":"tool","tool":"Bash","class":"bash","bytes":217,"ok":null,"route":"model-default","size":217,"toolChars":217,"is_error":true,"budget":null}
-{"ts":"2026-11-27T17:33:23.877Z","event":"tool","tool":"Bash","class":"bash","bytes":5614,"ok":null,"route":"post-tool","size":5614,"toolChars":5614,"is_error":false,"budget":512}
-{"ts":"2026-11-27T17:33:35.689Z","event":"tool","tool":"Bash","class":"bash","bytes":493,"ok":null,"route":"post-tool","size":493,"toolChars":493,"is_error":false,"budget":512}

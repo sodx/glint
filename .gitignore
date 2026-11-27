@@ -10,3 +10,4 @@ __pycache__/
 sdks/php/vendor/
 sdks/php/composer.lock
 app/gen/
+.aide/
