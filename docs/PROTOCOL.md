@@ -82,7 +82,10 @@ Unknown kinds MUST be accepted and stored. Each kind's payload schema lives in
 | `core.exception` | `{ "class": string, "message": string, "frames": Frame[], "cause"?: <exception> }` |
 | `core.trace` | `{ "frames": Frame[] }` |
 | `core.measure` | `{ "name": string, "duration_ms": number, "memory_bytes"?: int }` |
+| `core.markdown` / `core.mermaid` | `{ "content": string }` |
 | `core.separator`, `core.clear` | `{}` |
+| `core.screen` | `{ "name": string, "color"?: string }` |
+| `core.update` | `{ "target": <event id>, "meta"?: object, "hidden"?: bool, "removed"?: bool }` — modifies an earlier event; not a feed item. Target may arrive later than the update; the server buffers unresolved updates for 5 s. |
 | `sql.query` | `{ "sql": string, "bindings"?: any[], "duration_ms"?: number, "conn"?: string, "rows"?: int }` |
 | `http.request` | `{ "method", "url", "status"?, "headers"?, "body"?, "duration_ms"? }` |
 | `llm.call` | `{ "provider", "model", "messages", "tools"?, "output", "usage": {input, output, cache_read?, cache_write?}, "cost_usd"?, "latency_ms"?, "stop_reason"? }` |

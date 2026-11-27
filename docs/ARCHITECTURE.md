@@ -20,6 +20,12 @@ an agent can drive".
 | G4 | **Local-first, private by default.** | Binds to loopback, data in one SQLite file, nothing leaves the machine unless a user turns on a remote model. |
 | G5 | **Fast and small.** | Rust core, Tauri shell, single binary daemon. Ingest ≥ 50k events/s, UI stays live at 1k events/s. |
 | G6 | **Unknown is fine.** | Any payload kind renders (generic JSON tree). New kinds never break old UIs or old clients. |
+| G7 | **Data, not pictures.** | Clients send structured values; the viewer renders. Never pre-rendered HTML as the primary form (Ray's main limitation — see `docs/research/ray.md`), so events stay searchable, diffable and readable by agents. |
+| G8 | **Open and specified.** | Open source, normative spec + conformance suite. Ray has neither; its app is closed and its protocol is learned by proxying traffic. |
+
+Positioning note (2026-11): Ray 4 is a native Rust app and Ray 3 ships an MCP server, so "fast" and
+"has MCP" are table stakes, not differentiators. Glint competes on G1, G3 (tracing LLMs and agents,
+not just showing their output), G7 and G8.
 
 Non-goals (for now): production APM, multi-tenant cloud, long-term retention, distributed tracing UI at
 Jaeger scale. Glint is a *dev-time* tool.
@@ -97,6 +103,11 @@ Rules:
 - `run` is the grouping primitive. A web request, a CLI invocation, a test case, an agent session —
   all are runs. The UI and MCP are run-oriented ("show me the last run that threw").
 - `parent` gives trees: OTel spans, agent steps → tool calls → LLM calls, `measure` blocks.
+- Events are **mutable by reference**: a later `core.update { target, meta?, hidden?, removed? }`
+  changes how an earlier event is shown (color, label, size, hide, remove) without creating a feed
+  item. This is how fluent chains (`glint(x)->red()->label('a')`) and Ray's same-uuid commands map in.
+  Updates are stored, so history stays truthful; the UI shows the folded result.
+- `core.html` is untrusted: rendered sanitised in an isolated frame, no scripts, no `file://`.
 - Size cap per envelope (default 1 MiB); large blobs go to a content-addressed side store and the
   payload carries a `blob://sha256` reference.
 
@@ -108,7 +119,7 @@ Kinds are namespaced strings. The namespace says who owns the schema.
 
 | Namespace | Owner | Examples |
 |-----------|-------|----------|
-| `core.*` | Glint, stable | `core.value`, `core.log`, `core.text`, `core.html`, `core.table`, `core.json`, `core.exception`, `core.trace`, `core.measure`, `core.separator`, `core.clear`, `core.screen` |
+| `core.*` | Glint, stable | `core.value`, `core.log`, `core.text`, `core.html`, `core.markdown`, `core.mermaid`, `core.table`, `core.json`, `core.exception`, `core.trace`, `core.measure`, `core.separator`, `core.clear`, `core.screen`, `core.update` |
 | `sql.*` | Glint | `sql.query`, `sql.transaction` |
 | `http.*` | Glint | `http.request`, `http.response`, `http.client_call` |
 | `llm.*` | Glint, AI | `llm.call` (model, messages, tools, usage, cost, latency), `llm.embedding`, `llm.stream_chunk` |
@@ -141,7 +152,7 @@ Supporting every language is not "write 30 SDKs". It is three layers, cheapest f
 | Adapter | Port / source | What you get for free |
 |---------|---------------|-----------------------|
 | `otlp` | OTLP/HTTP `:4318` (`/v1/logs`, `/v1/traces`) | Every language with an OpenTelemetry SDK. Spans → trees, logs → `core.log`. **`gen_ai.*` semantic conventions → `llm.call`**, so OpenLLMetry, LangChain, LlamaIndex, Vercel AI SDK, OpenAI/Anthropic instrumentors light up with zero Glint code. |
-| `ray-compat` | HTTP `:23517` | Existing Ray client libraries (PHP/Laravel, JS, Python, Ruby, Go, Bash…) work by pointing them at Glint. Ray payload types map 1:1 onto `core.*` / `sql.*`. |
+| `ray-compat` | HTTP `:23517` | Existing Ray client libraries (PHP/Laravel, JS, Python, Ruby, Go, Bash…) work by pointing them at Glint. Data payloads map onto `core.*` / `sql.*`; same-uuid commands become `core.update`. Full mapping and quirks: `docs/research/ray.md` §9. |
 | `pipe` | `stdin` of `glint pipe` | `my-app 2>&1 \| glint pipe` — each line becomes `core.log`; JSON lines are parsed; level/timestamp sniffed. Works for literally anything. |
 | `tail` | files / globs | `storage/logs/laravel.log`, `*.log`. Multiline stack traces folded into `core.exception`. |
 | `agent-hooks` | HTTP + small hook scripts | Claude Code / Codex / Cursor hook events → `agent.*`. Glint becomes a live view of what the agent is doing next to what the app is doing. |
