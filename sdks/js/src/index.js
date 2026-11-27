@@ -198,6 +198,15 @@ try {
 } catch {
   // not Node: a plain stack below
 }
+// Node's require, for flushSync's child process; absent elsewhere.
+let nodeRequire = null;
+try {
+  const { createRequire } = await import("node:module");
+  nodeRequire = createRequire(import.meta.url);
+} catch {
+  // not Node
+}
+
 const stack = [];
 const currentParent = () => (scope ? scope.getStore() : stack[stack.length - 1]);
 function within(id, fn) {
@@ -348,6 +357,28 @@ glint.pause = async (reason, { timeoutMs = 300_000 } = {}) => {
 };
 
 /** Resolves once everything queued so far has been sent, or after `timeoutMs`. */
+/**
+ * Last words of a crashing process: sends what is queued now and waits for it, synchronously (a
+ * short-lived child process makes the request), because a crashing process exits before any
+ * asynchronous request could finish. Node only; elsewhere it does nothing.
+ */
+glint.flushSync = (timeoutMs = 1500) => {
+  if (!queue.length || !nodeRequire || typeof process === "undefined") return;
+  const batch = queue.splice(0, queue.length);
+  try {
+    const { spawnSync } = nodeRequire("node:child_process");
+    const script = `let b="";process.stdin.on("data",d=>b+=d).on("end",()=>fetch(process.argv[1],{method:"POST",headers:{"content-type":"application/json"},body:b}).catch(()=>{}))`;
+    spawnSync(process.execPath, ["-e", script, `${config.url.replace(/\/$/, "")}/v1/events`], {
+      input: JSON.stringify(batch),
+      timeout: timeoutMs,
+      stdio: ["pipe", "ignore", "ignore"],
+      env: { ...process.env, NODE_OPTIONS: "" },
+    });
+  } catch {
+    // never fail the crash itself
+  }
+};
+
 glint.flush = (timeoutMs = TIMEOUT_MS) => {
   drain();
   const all = Promise.allSettled(Array.from(inFlight));

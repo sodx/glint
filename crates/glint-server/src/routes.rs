@@ -68,6 +68,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/events/{id}", get(one))
         .route("/v1/stream", get(stream))
         .route("/v1/hooks/{agent}", post(hook))
+        .route("/v1/browser.js", get(browser_js))
         .route("/v1/source", get(crate::source::source))
         .route("/v1/open", post(crate::source::open))
         .route("/v1/editors", get(crate::source::editors))
@@ -77,6 +78,15 @@ pub fn router(state: AppState) -> Router {
         .route("/mcp", post(mcp).get(|| async { StatusCode::METHOD_NOT_ALLOWED }).delete(|| async { StatusCode::NO_CONTENT }))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
+}
+
+/// The browser SDK (`sdks/browser/glint.js`), for a `<script>` tag in a page under development.
+async fn browser_js() -> Response {
+    (
+        [(header::CONTENT_TYPE, "application/javascript; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")],
+        include_str!("../../../sdks/browser/glint.js"),
+    )
+        .into_response()
 }
 
 async fn index() -> Html<&'static str> {

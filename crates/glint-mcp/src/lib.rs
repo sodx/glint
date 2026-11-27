@@ -22,7 +22,14 @@ SQL queries, exceptions, timings, LLM calls. Use it instead of guessing or addin
 - glint_last_error first when something failed; glint_events / glint_runs to look around.\n\
 - To inspect a value, add glint(value) to the code instead of print/var_dump/console.log: after \
 `glint install` it is a global in PHP, Python and Node (no import; off in production), then run \
-and read it back with glint_wait_for or glint_events. Remove those calls when done.\n\
+and read it back with glint_wait_for or glint_events. Remove those calls when done. Uncaught \
+errors of PHP, Python and Node processes are recorded without any code.\n\
+- Web front end in development: add <script src=\"http://127.0.0.1:23600/v1/browser.js\" \
+data-project=\"<project>\"></script> to the dev page (not production builds) and the browser's \
+errors, console.error, failed requests and window.glint(value) markers land here too.\n\
+- To check that a change works, place glint() markers on the path that should run, run it (or \
+ask the user to click through it), then confirm with glint_wait_for that the markers arrived with \
+the expected values and nothing failed.\n\
 - Edit → run → glint_wait_for to see the result of a change without reading terminal output.\n\
 - glint_pauses / glint_resume when a program is paused waiting for an answer.\n\
 - glint_annotate to leave a note the human sees next to an event; glint_show to put markdown or a \

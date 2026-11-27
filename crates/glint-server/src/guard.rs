@@ -49,18 +49,50 @@ impl Allowlist {
     }
 }
 
+/// A page served by a local development server: `http(s)://localhost`, `127.0.0.1`, `[::1]`,
+/// `*.localhost` or `*.test`, any port. Only such pages may send events from a browser (the
+/// browser script, `/v1/browser.js`); a page on the internet can never have such an origin.
+pub fn dev_origin(origin: &str) -> bool {
+    let Some(rest) = origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://")) else { return false };
+    let host = if let Some(v6) = rest.strip_prefix('[') { v6.split(']').next().map(|h| format!("[{h}]")).unwrap_or_default() } else { rest.split(':').next().unwrap_or("").to_ascii_lowercase() };
+    matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]") || host.ends_with(".localhost") || host.ends_with(".test")
+}
+
 pub async fn check(State(allow): State<Allowlist>, req: Request, next: Next) -> Response {
     let host = req.headers().get(header::HOST).and_then(|v| v.to_str().ok());
     if !host.is_some_and(|h| allow.host_ok(h)) {
         return (StatusCode::FORBIDDEN, "glint: unexpected Host header").into_response();
     }
-    if let Some(origin) = req.headers().get(header::ORIGIN) {
-        let ok = origin.to_str().is_ok_and(|o| allow.origin_ok(o));
-        if !ok {
-            return (StatusCode::FORBIDDEN, "glint: origin not allowed").into_response();
+    let Some(origin) = req.headers().get(header::ORIGIN).and_then(|o| o.to_str().ok()).map(str::to_owned) else {
+        return next.run(req).await;
+    };
+    if allow.origin_ok(&origin) {
+        return next.run(req).await;
+    }
+    // Pages of local dev servers may send events, and nothing else.
+    let events = req.uri().path() == "/v1/events";
+    if events && dev_origin(&origin) {
+        let cors = |mut r: Response| {
+            let h = r.headers_mut();
+            if let Ok(v) = header::HeaderValue::from_str(&origin) {
+                h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, v);
+            }
+            h.insert(header::VARY, header::HeaderValue::from_static("Origin"));
+            r
+        };
+        if req.method() == axum::http::Method::OPTIONS {
+            let mut r = StatusCode::NO_CONTENT.into_response();
+            let h = r.headers_mut();
+            h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, header::HeaderValue::from_static("POST"));
+            h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, header::HeaderValue::from_static("content-type"));
+            h.insert(header::ACCESS_CONTROL_MAX_AGE, header::HeaderValue::from_static("600"));
+            return cors(r);
+        }
+        if req.method() == axum::http::Method::POST {
+            return cors(next.run(req).await);
         }
     }
-    next.run(req).await
+    (StatusCode::FORBIDDEN, "glint: origin not allowed").into_response()
 }
 
 #[cfg(test)]
@@ -74,5 +106,15 @@ mod tests {
         assert!(!a.host_ok("evil.example:23600") && !a.host_ok("127.0.0.1:80"));
         assert!(a.origin_ok("http://localhost:23600") && a.origin_ok("tauri://localhost"));
         assert!(!a.origin_ok("https://evil.example") && !a.origin_ok("null"));
+    }
+
+    #[test]
+    fn dev_origins() {
+        for ok in ["http://localhost:5173", "http://127.0.0.1:3000", "https://shop.test", "http://app.localhost:8080", "http://[::1]:5173"] {
+            assert!(dev_origin(ok), "{ok}");
+        }
+        for no in ["https://evil.com", "http://localhost.evil.com", "http://127.0.0.1.nip.io", "null", "file://", "https://test"] {
+            assert!(!dev_origin(no), "{no}");
+        }
     }
 }

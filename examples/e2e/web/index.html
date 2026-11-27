@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Glint browser demo</title>
+<!-- Development only: report this page's errors, failed requests and markers to Glint. -->
+<script src="http://127.0.0.1:23600/v1/browser.js" data-project="glint"></script>
+</head>
+<body>
+<h1>Cart</h1>
+<p id="total">…</p>
+<button id="pay">Pay</button>
+<script type="module">
+  const cart = { items: [{ sku: "A-1", qty: 2, price: 10.5 }], coupon: null };
+  glint(cart); // a marker an agent placed to see the cart the page works with
+  document.getElementById("total").textContent = cart.items.reduce((t, i) => t + i.qty * i.price, 0).toFixed(2);
+  // The bugs this demo is about: a missing API route, a console error, and a crash on click.
+  fetch("/api/cart/7").then((r) => r.ok || console.error("could not load cart", r.status));
+  document.getElementById("pay").addEventListener("click", () => {
+    const discount = cart.coupon.percent; // TypeError: coupon is null
+    glint({ discount });
+  });
+</script>
+</body>
+</html>

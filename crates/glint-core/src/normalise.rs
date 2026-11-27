@@ -30,6 +30,19 @@ impl Normaliser {
                 _ => "default".to_owned(),
             }
         });
+        // An exception reported by Glint's own global handlers (`glint install`) or with no call
+        // site is located where it was thrown: its first app frame.
+        let from_glint = |f: &str| f.contains("/.glint/sdk/") || f.contains("\\.glint\\sdk\\");
+        if e.kind == "core.exception" && e.origin.file.as_deref().is_none_or(from_glint) {
+            let frame = e.payload.get("frames").and_then(Value::as_array).and_then(|fs| {
+                fs.iter().find(|f| f.get("vendor") != Some(&Value::Bool(true)) && f.get("file").and_then(Value::as_str).is_some_and(|x| !from_glint(x)))
+            });
+            if let Some(f) = frame {
+                e.origin.file = f.get("file").and_then(Value::as_str).map(str::to_owned);
+                e.origin.line = f.get("line").and_then(Value::as_u64).and_then(|l| u32::try_from(l).ok());
+                e.origin.function = f.get("fn").and_then(Value::as_str).map(str::to_owned);
+            }
+        }
         // The project is the git repository, so all worktrees of one repository share it (see
         // project.rs): looked up from the calling file's folder, then the cwd, else the cwd's name.
         let file_dir = e.origin.file.as_deref().filter(|f| f.starts_with('/') || f.contains(":\\")).and_then(parent);
@@ -117,5 +130,18 @@ mod tests {
         );
         assert_eq!(e.project, "shop");
         assert_eq!(e.origin.extra.get("worktree").and_then(Value::as_str), Some("feat-x"));
+    }
+
+    #[test]
+    fn exceptions_from_glints_global_handlers_take_their_throw_site() {
+        let e = Normaliser::new().normalise(
+            incoming(r#"{"kind":"core.exception","payload":{"class":"E","message":"m","frames":[
+                {"file":"/home/u/.glint/sdk/php/autoload.php","line":24},
+                {"file":"/srv/shop/vendor/lib.php","line":3,"vendor":true},
+                {"file":"/srv/shop/pay.php","line":7,"fn":"pay"}]},
+              "origin":{"file":"/home/u/.glint/sdk/php/autoload.php","line":24}}"#),
+            Utc::now(),
+        );
+        assert_eq!((e.origin.file.as_deref(), e.origin.line, e.origin.function.as_deref()), (Some("/srv/shop/pay.php"), Some(7), Some("pay")));
     }
 }

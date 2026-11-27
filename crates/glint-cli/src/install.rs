@@ -244,24 +244,11 @@ fn install_php(a: &Args) -> Step {
     }
     // Nothing is loaded up front: the classes come from an autoloader registered last, so a
     // project's own glint/glint wins (Composer registers its autoloader first, with prepend).
-    let autoload = format!(
-        r#"<?php
-// Written by `glint install`: glint() in every PHP script on this machine.
-// Lazy on purpose: a project that requires glint/glint itself gets its own version.
-spl_autoload_register(static function (string $class): void {{
-    if (strncmp($class, 'Glint\\', 6) === 0) {{
-        $file = __DIR__ . '/src/' . substr($class, 6) . '.php';
-        if (is_file($file)) {{
-            require_once $file;
-        }}
-    }}
-}}, true, false);
-if (!function_exists('glint')) {{
-    require_once __DIR__ . '/src/helpers.php';
-}}
-{}"#,
-        if chained.is_empty() { String::new() } else { format!("// The prepend file configured before Glint, kept working:\nif (is_file({0:?})) {{ require_once {0:?}; }}\n", chained) }
-    );
+    // sdks/global/autoload.php, plus the prepend file that was configured before, kept working.
+    let mut autoload = include_str!("../../../sdks/global/autoload.php").to_owned();
+    if !chained.is_empty() {
+        autoload.push_str(&format!("\n// The prepend file configured before Glint, kept working:\nif (is_file({0:?})) {{ require_once {0:?}; }}\n", chained));
+    }
     if let Err(e) = write(a, &prepend, &autoload) {
         return fail("php", e);
     }
@@ -292,48 +279,7 @@ fn install_python(a: &Args) -> Step {
     // Only the shim is on sys.path; the SDK is imported on first use, and a project's own
     // `glint` package wins over this copy.
     let shim_dir = a.glint_dir().join("sdk/python-shim");
-    let shim = format!(
-        r#"# Written by `glint install`: glint() as a builtin in every Python on this machine.
-# Lazy: nothing is imported until glint is used, and a project's own `glint` package wins.
-import builtins as _b
-import sys as _sys
-
-_SDK = {sdk:?}
-
-
-def _load():
-    try:
-        import glint as m
-    except ImportError:
-        if _SDK not in _sys.path:
-            _sys.path.append(_SDK)
-        import glint as m
-    try:  # this file is not the caller: report the line that called glint()
-        o = m._origin
-        inner = o._in_package
-        o._in_package = lambda f: f == __file__ or inner(f)
-    except Exception:
-        pass
-    _b.glint = m.glint
-    return m.glint
-
-
-class _Lazy:
-    def __call__(self, *a, **k):
-        return _load()(*a, **k)
-
-    def __getattr__(self, name):
-        return getattr(_load(), name)
-
-    def __repr__(self):
-        return "<glint (loads on first use)>"
-
-
-if not hasattr(_b, "glint"):
-    _b.glint = _Lazy()
-"#,
-        sdk = sdk.display().to_string()
-    );
+    let shim = include_str!("../../../sdks/global/glint_builtin.py").replace("__GLINT_SDK__", &sdk.display().to_string().replace('\\', "\\\\"));
     if let Err(e) = write(a, &shim_dir.join("glint_builtin.py"), &shim) {
         return fail("python", e);
     }
@@ -354,7 +300,7 @@ fn install_node(a: &Args) -> Step {
         return fail("node", e);
     }
     let global = sdk.join("global.mjs");
-    if let Err(e) = write(a, &global, "// Written by `glint install`: glint() as a global in every Node process on this machine.\nimport glint from \"./src/index.js\";\nif (typeof globalThis.glint === \"undefined\") globalThis.glint = glint;\n") {
+    if let Err(e) = write(a, &global, include_str!("../../../sdks/global/global.mjs")) {
         return fail("node", e);
     }
     let Some(profile) = a.shell_profile.clone().or_else(|| default_profile(&a.home)) else {

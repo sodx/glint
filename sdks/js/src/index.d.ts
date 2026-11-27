@@ -36,6 +36,8 @@ export interface Glint {
    */
   pause<T = unknown>(reason?: string, options?: { timeoutMs?: number }): Promise<T | undefined>;
   /** Resolves once queued events are sent, or after `timeoutMs`. */
+  /** Sends what is queued synchronously; for a crashing process (Node only). */
+  flushSync(timeoutMs?: number): void;
   flush(timeoutMs?: number): Promise<void>;
   configure(options: { url?: string; enabled?: boolean; project?: string }): void;
 }

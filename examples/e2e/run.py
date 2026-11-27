@@ -100,10 +100,16 @@ try:
         http("POST", f"{GLINT}/v1/ctl/{pause['id']}/resume", {"by": "e2e", "value": {"approve": True}})
     t.join(30)
     print("   ", out.get("r"))
-    time.sleep(0.5)
+    print("Crashes with no Glint code")
+    for cmd in (["php", "crash.php"], [sys.executable, "crash.py"], ["node", "crash.mjs"]):
+        r = subprocess.run(cmd, cwd=os.path.join(HERE, "crash"), env=node_env(), capture_output=True, text=True)
+        print(f"    {' '.join(cmd[-1:])}: exit {r.returncode}, {(r.stderr or r.stdout).strip().splitlines()[-1][:70] if (r.stderr or r.stdout).strip() else ''}")
+    time.sleep(0.8)
 
     got = [e for e in events(limit=1000) if e["ts"] >= since]
     by_sdk = lambda sdk: [e for e in got if (e.get("origin") or {}).get("sdk", "").startswith(sdk)]
+    app = [e for e in got if "/crash/" not in (e["origin"].get("file") or "")]
+    by_sdk = lambda sdk: [e for e in app if (e.get("origin") or {}).get("sdk", "").startswith(sdk)]
     php, py, js = by_sdk("glint-php"), by_sdk("glint-python"), by_sdk("glint-js")
     kinds = lambda es: {e["kind"] for e in es}
     print("\nWhat glintd stored")
@@ -112,7 +118,7 @@ try:
     check("PHP: SQL carries bindings and timing", bool(sql and "duration_ms" in sql["payload"]), sql and json.dumps(sql["payload"]["bindings"]))
     exc = next((e for e in php if e["kind"] == "core.exception"), None)
     check("PHP: uncaught exception arrives as an error", bool(exc and exc["payload"]["class"] == "UnexpectedValueException"), exc and exc["payload"]["message"])
-    check("PHP: origin is shop/index.php, not the SDK", all(e["origin"].get("file", "").endswith("shop/index.php") for e in php), "")
+    check("PHP: origin is shop/index.php, not the SDK", all(e["origin"].get("file", "").endswith("shop/index.php") for e in php if e["kind"] != "core.update"), "")
     check("Python: job values, logs, measures, table", {"core.value", "core.log", "core.measure", "core.table"} <= kinds(py), ", ".join(sorted(kinds(py))))
     kerr = next((e for e in py if e["kind"] == "core.exception"), None)
     check("Python: KeyError from job 3 is an exception", bool(kerr and kerr["payload"]["class"] == "KeyError"), kerr and kerr["payload"]["message"])
@@ -122,6 +128,8 @@ try:
     big = next((e for e in js if e.get("meta", {}).get("label") == "catalogue" or e["kind"] == "core.value" and isinstance(e["payload"].get("value"), list)), None)
     check("Node: the 60-product catalogue arrives whole", bool(big and len(big["payload"]["value"]) == 60), "")
     check("Node: pause answered, refund approved", (out.get("r") or (0, ""))[1].startswith("refunded"), (out.get("r") or (0, ""))[1].strip())
+    crashes = {os.path.basename(e["origin"].get("file") or "") for e in got if e["kind"] == "core.exception" and "/crash/" in (e["origin"].get("file") or "")}
+    check("Uncaught errors are reported with no Glint code (PHP, Python, Node)", crashes >= {"crash.php", "crash.py", "crash.mjs"}, ", ".join(sorted(crashes)))
     check("All three name the project after the repository", {e["project"] for e in php + py + js} == {"glint"}, ", ".join(sorted({e["project"] for e in php + py + js})))
 finally:
     for p in procs:

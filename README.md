@@ -57,6 +57,17 @@ SDK always wins over the global one. One gap: PHP never prepends to a `php -S` *
 (`php -S host:port router.php`, also what `artisan serve` runs); serve a document root instead
 (`php -S host:port -t public`) or require the SDK in that project.
 
+For vibe coding, where an agent writes the code and you click through the app:
+
+- uncaught errors of PHP, Python and Node processes reach Glint with no code at all (the global
+  install chains the language's own handlers; output and exit codes stay as they were);
+- a web front end in development gets the same with one tag, which also reports
+  `console.error`, failed requests and `window.glint()` markers:
+  `<script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"></script>`;
+- Claude Code hears about it without asking: new failures come with your next prompt, and when it
+  wants to finish a turn during which your programs failed, it is sent back once to fix them or
+  say why they are expected (`GLINT_STOP_GUARD=0` turns that off).
+
 Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends (values, SQL,
 logs, inner measures) nests under it: the UI shows the run as a call tree with a small waterfall
 of where the time went. OpenTelemetry spans nest the same way.

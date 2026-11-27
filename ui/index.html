@@ -496,6 +496,7 @@ function runTitle(id) {
   }
   if ((m = id.match(/^claude-code:(.+)$/))) return "Agent session " + m[1].slice(0, 8);
   if ((m = id.match(/^otel-(.+)$/))) return "Trace " + m[1].slice(0, 8);
+  if (/^browser-/.test(id)) { const r = S.allRuns.find(x => x.run === id); return r?.head?.startsWith("/") ? "Page " + r.head : "Browser page"; }
   if (/^pipe-/.test(id)) return "glint pipe";
   if (/^send-/.test(id)) return "glint send";
   if ((m = id.match(/^(js|python|php)-/))) return { js: "Node", python: "Python", php: "PHP" }[m[1]] + " process";
@@ -962,8 +963,9 @@ function onEvent(e) {
   if (inProject && e.run === S.run) fold(e, true);
   if (e.kind === "ctl.pause" || e.kind === "ctl.resume") api("/v1/ctl").then(r => { S.pauses = r.pauses.filter(p => p.project === S.project); render(); }).catch(() => {});
   if (inProject && levelOf(e) >= 4 && !["core.update", "ctl.resume"].includes(e.kind)) { S.fails.push(e); pickFail(); }
-  clearTimeout(runsTimer);
-  runsTimer = setTimeout(() => { const prev = S.run; loadRuns().then(() => prev !== S.run ? loadRun() : null).then(render).catch(() => {}); }, 250);
+  // The run list is refreshed at most once a second, however busy the stream (an agent's hooks
+  // alone send several events a second).
+  if (!runsTimer) runsTimer = setTimeout(() => { runsTimer = null; const prev = S.run; loadRuns().then(() => prev !== S.run ? loadRun() : null).then(render).catch(() => {}); }, 1000);
   if (inProject && e.kind !== "core.update") glint();
   render();
 }

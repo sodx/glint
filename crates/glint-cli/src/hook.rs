@@ -6,6 +6,10 @@
 //! the failures that are new since the previous prompt. That puts runtime failures the agent
 //! cannot see in a terminal (a request in the browser, a queue worker) in front of it, without
 //! it having to think of asking. Nothing is printed when there is nothing new.
+//!
+//! And when the agent wants to stop, programs of this project that failed during its turn keep
+//! it going once: it is told what failed and asked to fix it or say why it is expected (Claude
+//! Code's Stop `decision: block`; never twice in a row; `GLINT_STOP_GUARD=0` turns it off).
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -38,6 +42,9 @@ pub fn run(base: &str, agent: &str) -> Result<(), String> {
 /// The `additionalContext` reply for SessionStart and UserPromptSubmit, if there is news.
 fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     let event = hook["hook_event_name"].as_str()?;
+    if event == "Stop" {
+        return stop_guard(http, base, hook);
+    }
     if event != "SessionStart" && event != "UserPromptSubmit" {
         return None;
     }
@@ -85,8 +92,11 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
             "Glint (local debug desk, MCP server `glint`) is recording what programs in project `{project}` do: \
              values sent with glint(), logs, SQL, exceptions, timings, LLM calls. glint(value) works in PHP, Python \
              and Node without an import; prefer it over print/var_dump/console.log to inspect values, read them \
-             back with glint_wait_for or glint_events, and remove those calls when done. When something fails at \
-             runtime, start with glint_last_error."
+             back with glint_wait_for or glint_events, and remove those calls when done. Uncaught errors of \
+             PHP, Python and Node processes are recorded with no code; for a web front end in development add \
+             <script src=\"http://127.0.0.1:23600/v1/browser.js\" data-project=\"{project}\"></script> to the dev \
+             page. To prove a change works: place glint() markers, run it, confirm them with glint_wait_for. \
+             When something fails at runtime, start with glint_last_error."
         );
         if !fails.is_empty() {
             t.push_str(&format!("\nRecent failures in {project} (last 24 h):\n{}", list(&fails)));
@@ -104,6 +114,36 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         )
     };
     Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string())
+}
+
+/// Failures of this project's programs since the turn began keep the agent from stopping, once.
+fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
+    if hook["stop_hook_active"] == true || std::env::var("GLINT_STOP_GUARD").is_ok_and(|v| v == "0") {
+        return None;
+    }
+    let cwd = hook["cwd"].as_str()?;
+    let project = glint_core::project::resolve(cwd).map(|r| r.project).or_else(|| glint_core::project::folder_name(cwd))?;
+    let seen = state_file(hook["session_id"].as_str().unwrap_or("unknown"))?;
+    let mark = std::fs::read_to_string(&seen).ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())?;
+    let url = format!("{base}/v1/events?project={}&level=error&limit=20&after={}", enc(&project), enc(&mark));
+    let got: Value = http.get(&url).call().ok()?.into_json().ok()?;
+    let events: Vec<Envelope> = serde_json::from_value(got["events"].clone()).ok()?;
+    if let Some(newest) = events.last() {
+        let _ = std::fs::write(&seen, &newest.id); // reported once
+    }
+    let fails: Vec<&Envelope> = events.iter().filter(|e| e.origin.lang.as_deref() != Some("agent")).collect();
+    if fails.is_empty() {
+        return None;
+    }
+    let reason = format!(
+        "Before you finish: Glint recorded {} failure{} in {project} while you worked on this turn (programs, not your tools):\n{}\n\
+         Look at them (glint_event <id> has the stack and values) and fix what your change broke, or tell the user \
+         why they are expected. You will not be stopped twice.",
+        fails.len(),
+        if fails.len() == 1 { "" } else { "s" },
+        list(&fails)
+    );
+    Some(json!({ "decision": "block", "reason": reason }).to_string())
 }
 
 fn list(fails: &[&Envelope]) -> String {
