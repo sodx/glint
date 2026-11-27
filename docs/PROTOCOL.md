@@ -47,6 +47,7 @@ Only `kind` and `payload` are required. Everything else is filled by the server 
 | `ts` | RFC 3339 string, µs precision | no | server receive time |
 | `run` | string | no | server derives from `origin.pid` + process start; SDKs SHOULD set one per request/test/CLI run |
 | `parent` | string (event id) | no | `null` |
+| `parent` | string | no | the id of the event this one happened inside: SDKs set it to the enclosing `glint.measure()`, OTLP to the parent span; the UI nests by it |
 | `project` | string | no | the git repository of `origin.file`, else of `origin.cwd` (linked worktrees name their main repository and add `origin.worktree` / `origin.branch`), else the cwd's folder name, else `"default"` |
 | `origin` | object | no | see §3.1 |
 | `kind` | string | **yes** | namespaced kind, §4 |

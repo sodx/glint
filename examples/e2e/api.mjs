@@ -29,9 +29,13 @@ const server = http.createServer(async (req, res) => {
       return res.end(answer?.approve ? `refunded ${order.amount}\n` : "refund declined\n");
     }
     if (req.method === "GET" && req.url === "/report") {
-      const items = catalogue();
-      glint(items).label("catalogue");
-      const totals = items.reduce((t, p) => t + p.price.amount * p.stock.shop, 0);
+      const items = await glint.measure("load catalogue", async () => {
+        await new Promise((r) => setTimeout(r, 15)); // a slow lookup; nesting survives the await
+        const items = catalogue();
+        glint(items).label("catalogue");
+        return items;
+      });
+      const totals = glint.measure("stock value", () => items.reduce((t, p) => t + p.price.amount * p.stock.shop, 0));
       return res.end(`stock value ${totals.toFixed(2)} ${items[0].price.currency.toLowerCase().missing.x}\n`); // bug: TypeError
     }
     res.statusCode = 404;

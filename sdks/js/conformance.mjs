@@ -91,6 +91,12 @@ if (got !== 5) {
 begin("send");
 glint.send("x-conformance.custom", { a: 1 }, { label: "raw" });
 
+begin("measure-nesting");
+glint.measure("outer", () => {
+  glint("in outer");
+  glint.measure("inner", () => glint("in inner"));
+});
+
 begin("origin");
 glint("origin-check"); // glint:origin
 

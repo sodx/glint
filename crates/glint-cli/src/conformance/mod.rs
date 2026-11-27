@@ -197,6 +197,14 @@ fn evaluate(scenarios: &[Value], events: &[Value]) -> Vec<Outcome> {
                 for (i, (exp, act)) in expect.iter().zip(got).enumerate() {
                     matcher::check(exp, act, &format!("event {i}"), &mut errors);
                 }
+                for pair in s["check_parents"].as_array().into_iter().flatten() {
+                    let (c, p) = (pair[0].as_u64().unwrap_or(0) as usize, pair[1].as_u64().unwrap_or(0) as usize);
+                    let (child, parent) = (got.get(c), got.get(p));
+                    let ok = matches!((child, parent), (Some(ch), Some(pa)) if pa["id"].is_string() && ch["parent"] == pa["id"]);
+                    if !ok {
+                        errors.push(format!("event {c}.parent: expected the id of event {p}, got {}", child.map(|ch| ch["parent"].to_string()).unwrap_or_else(|| "nothing".into())));
+                    }
+                }
                 if s["check_origin_marker"] == true
                     && let Some(e) = got.first()
                 {

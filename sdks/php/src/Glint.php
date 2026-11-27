@@ -80,14 +80,16 @@ final class Glint
     public static function measure(string $name, callable $fn): mixed
     {
         $start = hrtime(true);
+        // The id is chosen up front so that what $fn sends can name the measure as its parent.
+        $id = Transport::newId();
         try {
-            return $fn();
+            return $id === null ? $fn() : Transport::within($id, $fn);
         } finally {
             try {
                 Transport::emit('core.measure', [
                     'name' => $name,
                     'duration_ms' => round((hrtime(true) - $start) / 1e6, 3),
-                ]);
+                ], [], $id);
             } catch (Throwable) {
                 // Measuring must not change what the caller sees.
             }

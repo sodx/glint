@@ -111,6 +111,12 @@ $measureOk = $measured === 5;
 begin('send');
 Glint::send('x-conformance.custom', ['a' => 1], ['label' => 'raw']);
 
+begin('measure-nesting');
+Glint::measure('outer', static function (): void {
+    glint('in outer');
+    Glint::measure('inner', static fn () => glint('in inner'));
+});
+
 begin('origin');
 glint('origin-check'); // glint:origin
 

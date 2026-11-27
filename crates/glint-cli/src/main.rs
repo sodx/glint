@@ -77,7 +77,8 @@ enum Command {
         #[command(flatten)]
         common: Common,
     },
-    /// Forward a coding-agent hook (JSON on stdin) to Glint. Prints nothing, always exits 0.
+    /// Forward a coding-agent hook (JSON on stdin) to Glint; always exits 0. On SessionStart and
+    /// UserPromptSubmit it replies with Glint's news for the agent (recent or new failures).
     ///
     /// `glint hook --print-config` prints the Claude Code settings that install it.
     Hook {

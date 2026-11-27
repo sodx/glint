@@ -188,11 +188,35 @@ function drain() {
 
 // ---------------------------------------------------------------- envelopes
 
-function emit(kind, payload, meta) {
+/* Nesting: everything sent inside glint.measure(name, fn) has that measure as its parent, so a
+   run reads as a call tree. In Node the measure follows fn across awaits (AsyncLocalStorage);
+   elsewhere only fn's synchronous part is nested. */
+let scope = null;
+try {
+  const { AsyncLocalStorage } = await import("node:async_hooks");
+  scope = new AsyncLocalStorage();
+} catch {
+  // not Node: a plain stack below
+}
+const stack = [];
+const currentParent = () => (scope ? scope.getStore() : stack[stack.length - 1]);
+function within(id, fn) {
+  if (scope) return scope.run(id, fn);
+  stack.push(id);
+  try {
+    return fn();
+  } finally {
+    stack.pop();
+  }
+}
+
+function emit(kind, payload, meta, fixedId) {
   if (!config.enabled) return null;
   try {
-    const id = ulid();
+    const id = fixedId || ulid();
     const e = { id, ts: new Date().toISOString(), run: RUN, kind, payload, origin: origin() };
+    const parent = currentParent();
+    if (parent && parent !== id) e.parent = parent;
     if (meta && Object.keys(meta).length) e.meta = meta;
     if (config.project) e.project = config.project;
     enqueue(e);
@@ -271,8 +295,10 @@ glint.exception = (err) => new Entry([emit("core.exception", exceptionPayload(er
 glint.measure = (name, fn) => {
   const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
   const start = now();
-  const done = () => emit("core.measure", { name: String(name), duration_ms: Math.round((now() - start) * 1000) / 1000 });
-  const result = fn();
+  // The id is chosen up front so that what fn sends can name the measure as its parent.
+  const id = config.enabled ? ulid() : null;
+  const done = () => emit("core.measure", { name: String(name), duration_ms: Math.round((now() - start) * 1000) / 1000 }, undefined, id);
+  const result = id ? within(id, fn) : fn();
   if (result && typeof result.then === "function") {
     return result.finally(done);
   }

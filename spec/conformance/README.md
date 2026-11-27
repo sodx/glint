@@ -26,6 +26,7 @@ returns; its methods change how the events it sent are shown, by sending `core.u
 | `glint.log(message, fields?, level?)` | `core.log {message, fields?}`, `meta.level` (default `info`) |
 | `glint.table(rows, columns?)` | `core.table {rows, columns?}` |
 | `glint(error)` | same as `glint.exception(error)`: an error passed as a value is an exception |
+| `glint.measure(name, fn)` nesting | what `fn` sends has the measure as `parent` (Node: across awaits) |
 | `glint.exception(error)` | `core.exception {class, message, frames: [{file, line, fn?, class?, vendor?}], cause?}` |
 | `glint.measure(name, fn)` | runs `fn`, sends `core.measure {name, duration_ms}`, returns `fn`'s result |
 | `glint.send(kind, payload, meta?)` | any kind, unchanged; returns an Entry |

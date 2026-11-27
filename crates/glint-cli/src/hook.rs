@@ -1,23 +1,146 @@
 //! `glint hook`: the command a coding agent runs as a hook. Forwards the hook's stdin JSON to
-//! glintd and gets out of the way: no output (Claude Code reads a hook's stdout), always exit
-//! 0, and at most ~1 s even when Glint is down.
+//! glintd, always exits 0, and takes at most ~1.5 s even when Glint is down.
+//!
+//! It also tells the agent what Glint saw, through Claude Code's `additionalContext`: at session
+//! start, that Glint is running and which recent failures this project has; on each prompt, only
+//! the failures that are new since the previous prompt. That puts runtime failures the agent
+//! cannot see in a terminal (a request in the browser, a queue worker) in front of it, without
+//! it having to think of asking. Nothing is printed when there is nothing new.
 
 use std::io::Read;
+use std::path::PathBuf;
 use std::time::Duration;
+
+use glint_protocol::Envelope;
+use serde_json::{Value, json};
 
 pub fn run(base: &str, agent: &str) -> Result<(), String> {
     let mut body = Vec::new();
     if std::io::stdin().read_to_end(&mut body).is_err() || body.is_empty() {
         return Ok(());
     }
-    let url = format!("{}/v1/hooks/{agent}", base.trim_end_matches('/'));
+    let base = base.trim_end_matches('/');
     let http = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_millis(300))
         .timeout(Duration::from_secs(1))
         .build();
     // Errors are deliberately ignored: a debugging aid must never block the agent.
-    let _ = http.post(&url).set("Content-Type", "application/json").send_bytes(&body);
+    let _ = http.post(&format!("{base}/v1/hooks/{agent}")).set("Content-Type", "application/json").send_bytes(&body);
+    if agent == "claude-code"
+        && let Ok(hook) = serde_json::from_slice::<Value>(&body)
+        && let Some(out) = context(&http, base, &hook)
+    {
+        println!("{out}");
+    }
     Ok(())
+}
+
+/// The `additionalContext` reply for SessionStart and UserPromptSubmit, if there is news.
+fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
+    let event = hook["hook_event_name"].as_str()?;
+    if event != "SessionStart" && event != "UserPromptSubmit" {
+        return None;
+    }
+    let cwd = hook["cwd"].as_str()?;
+    let session = hook["session_id"].as_str().unwrap_or("unknown");
+    let project = glint_core::project::resolve(cwd).map(|r| r.project).or_else(|| glint_core::project::folder_name(cwd))?;
+    let seen = state_file(session);
+    let last_seen = seen.as_ref().and_then(|f| std::fs::read_to_string(f).ok()).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty());
+
+    let mut url = format!("{base}/v1/events?project={}&level=error&limit=20", enc(&project));
+    if event == "UserPromptSubmit"
+        && let Some(id) = &last_seen
+    {
+        url.push_str(&format!("&after={}", enc(id)));
+    }
+    let got: Value = http.get(&url).call().ok()?.into_json().ok()?;
+    let events: Vec<Envelope> = serde_json::from_value(got["events"].clone()).ok()?;
+    // The agent's own failed tool calls are already in front of it; only programs count.
+    let mut fails: Vec<&Envelope> = events.iter().filter(|e| e.origin.lang.as_deref() != Some("agent")).collect();
+    if event == "SessionStart" {
+        let day_ago = chrono::Utc::now() - chrono::Duration::hours(24);
+        fails.retain(|e| e.ts > day_ago);
+    }
+    // Remember where we are, so the next prompt reports only what is new: the newest error seen,
+    // or, when there is none yet, the newest event of any kind.
+    if let Some(f) = &seen {
+        let mark = match events.last() {
+            Some(e) => Some(e.id.clone()),
+            None if last_seen.is_none() => http
+                .get(&format!("{base}/v1/events?limit=1"))
+                .call()
+                .ok()
+                .and_then(|r| r.into_json::<Value>().ok())
+                .and_then(|v| v["events"][0]["id"].as_str().map(str::to_owned)),
+            None => None,
+        };
+        if let (Some(mark), Some(dir)) = (mark, f.parent()) {
+            let _ = std::fs::create_dir_all(dir);
+            let _ = std::fs::write(f, mark);
+        }
+    }
+
+    let text = if event == "SessionStart" {
+        let mut t = format!(
+            "Glint (local debug desk, MCP server `glint`) is recording what programs in project `{project}` do: \
+             values sent with glint(), logs, SQL, exceptions, timings, LLM calls. glint(value) works in PHP, Python \
+             and Node without an import; prefer it over print/var_dump/console.log to inspect values, read them \
+             back with glint_wait_for or glint_events, and remove those calls when done. When something fails at \
+             runtime, start with glint_last_error."
+        );
+        if !fails.is_empty() {
+            t.push_str(&format!("\nRecent failures in {project} (last 24 h):\n{}", list(&fails)));
+        }
+        t
+    } else {
+        if fails.is_empty() || last_seen.is_none() {
+            return None;
+        }
+        format!(
+            "Glint recorded {} new failure{} in {project} since the last prompt (programs, not your tools):\n{}\nglint_event <id> gives the full stack and values.",
+            fails.len(),
+            if fails.len() == 1 { "" } else { "s" },
+            list(&fails)
+        )
+    };
+    Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string())
+}
+
+fn list(fails: &[&Envelope]) -> String {
+    fails
+        .iter()
+        .rev()
+        .take(5)
+        .map(|e| {
+            let p = &e.payload;
+            let what = match (p["class"].as_str(), p["message"].as_str()) {
+                (Some(c), Some(m)) => format!("{c}: {m}"),
+                (None, Some(m)) => m.to_owned(),
+                (Some(c), None) => c.to_owned(),
+                _ => e.kind.clone(),
+            };
+            // Where it was thrown (first app frame), else where it was reported.
+            let frame = p["frames"].as_array().and_then(|fs| fs.iter().find(|f| f["vendor"] != true && f["file"].is_string()));
+            let (file, line) = match frame {
+                Some(f) => (f["file"].as_str().map(str::to_owned), f["line"].as_u64()),
+                None => (e.origin.file.clone(), e.origin.line.map(u64::from)),
+            };
+            let at = file.map(|f| format!(" at {f}{}", line.map(|l| format!(":{l}")).unwrap_or_default())).unwrap_or_default();
+            format!("- {}{at} ({}, id {})", what.chars().take(200).collect::<String>(), e.ts.format("%H:%M:%S"), e.id)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn state_file(session: &str) -> Option<PathBuf> {
+    let safe: String = session.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(80).collect();
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".glint/hooks").join(format!("{safe}.last")))
+}
+
+fn enc(s: &str) -> String {
+    s.bytes()
+        .map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
+        .collect()
 }
 
 /// Hook settings for `.claude/settings.json` (project) or `~/.claude/settings.json` (all).

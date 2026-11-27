@@ -272,10 +272,21 @@ ol.entries:has(.onboard)::before { display: none; }
 .t-fail { color: var(--red); } .t-ok { color: var(--green); }
 .exit { color: var(--red); font-size: 12px; white-space: nowrap; }
 
-/* durations: measured, relative to the slowest in the run */
+/* durations: a small waterfall, each bar placed where its work started in the run */
 .dur { display: inline-flex; align-items: center; gap: 8px; margin-right: 14px; font-size: 12.5px; color: var(--muted); }
 .dur i { display: block; width: 56px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.dur i::before { content: ""; display: block; height: 100%; width: var(--w); border-radius: 4px; background: var(--faint); }
+.dur i { width: 72px; }
+.dur i::before { content: ""; display: block; height: 100%; width: var(--w); margin-left: min(var(--x, 0%), calc(100% - var(--w))); border-radius: 4px; background: var(--faint); }
+/* The call tree */
+.entry { position: relative; }
+.entry.child { margin-left: calc(var(--depth) * 20px); }
+.entry.child::before { content: ""; position: absolute; left: -9px; top: -2px; bottom: -2px; border-left: 1px solid var(--line); }
+.twig { position: absolute; left: -20px; top: 11px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; color: var(--faint); z-index: 2; }
+.entry:not(.child) > .twig { left: -18px; }
+.twig:hover { color: var(--text); background: var(--surface); }
+.twig .i { width: 12px; height: 12px; transition: transform .12s; }
+.twig[aria-expanded="false"] .i { transform: rotate(-90deg); }
+.kids { font-size: 12px; color: var(--faint); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; }
 .lv-warn .dur i::before { background: var(--amber); } .lv-warn .dur { color: var(--amber); }
 
 /* quick actions on hover */
@@ -501,6 +512,43 @@ const KIND_ICON = {
   "ctl.pause": "pause", "core.measure": "measure", "core.span": "measure", "core.table": "table",
 };
 const ms = e => { const p = e.payload || {}; const v = p.duration_ms ?? p.latency_ms; return typeof v === "number" && v > 0 ? v : null; };
+/* When something started, in ms. SDKs send a timed event when it ends (ts is the end);
+   OpenTelemetry spans carry their start. */
+const startOf = e => Date.parse(e.ts) - (/^otel-/.test(e.run) ? 0 : ms(e) || 0);
+
+/* The call tree: an event whose parent is in this run sits under it (glint.measure() nests what
+   its callback sends; OpenTelemetry spans nest by span id). Siblings in start order, so a
+   measure comes before what happened inside it although it was sent last. */
+S.collapsed = new Set();
+function treeOrder(list) {
+  const here = new Set(list.map(e => e.id)), kids = new Map(), roots = [];
+  for (const e of list) {
+    if (e.parent && e.parent !== e.id && here.has(e.parent)) (kids.get(e.parent) || kids.set(e.parent, []).get(e.parent)).push(e);
+    else roots.push(e);
+  }
+  // Order is the order events were sent (glintd stores them so), except that a measure, sent when
+  // it ends, takes the place of the first thing sent inside it. OpenTelemetry spans arrive in
+  // batches, so they order by start time.
+  const pos = new Map(list.map((e, i) => [e.id, i]));
+  const key = new Map();
+  const keyOf = e => {
+    if (key.has(e.id)) return key.get(e.id);
+    key.set(e.id, pos.get(e.id)); // guards against cycles
+    const k = Math.min(pos.get(e.id), ...(kids.get(e.id) || []).map(keyOf));
+    key.set(e.id, k);
+    return k;
+  };
+  const by = (a, b) => (/^otel-/.test(a.run) ? startOf(a) - startOf(b) : 0) || keyOf(a) - keyOf(b);
+  const out = [], seen = new Set();
+  const walk = (e, d) => {
+    if (seen.has(e.id)) return; seen.add(e.id);
+    const ks = (kids.get(e.id) || []).sort(by);
+    e.depth = d; e.kidCount = ks.length; out.push(e);
+    if (!S.collapsed.has(e.id)) ks.forEach(k => walk(k, d + 1));
+  };
+  roots.sort(by).forEach(r => walk(r, 0));
+  return out;
+}
 
 function foldAll(list) {
   S.entries = []; S.byId = new Map(); S.pendingUpd = new Map();
@@ -810,16 +858,21 @@ function entries() {
   let list = S.entries.filter(e => !e.removed && (!tokens.length || matches(e, tokens)));
   const hiddenCount = Math.max(0, list.length - MAX_ROWS);
   if (!S.showAll && hiddenCount) list = list.slice(-MAX_ROWS);
+  const searching = tokens.length > 0;
+  if (searching) list.forEach(e => { e.depth = 0; e.kidCount = 0; }); else list = treeOrder(list);
+  // Timeline of the run, for the duration bars: each bar sits where its work started.
+  const t0 = Math.min(...list.map(startOf)), t1 = Math.max(...list.map(e => startOf(e) + (ms(e) || 0)));
+  const span = Math.max(1, t1 - t0);
   if (!list.length) { ol.innerHTML = S.q ? `<li class="empty">Nothing in ${esc(runTitle(S.run))} matches “${esc(S.q)}”. <button class="link" data-act="clearq">Clear search</button></li>` : `<li class="empty">This run has no events yet.</li>`; return; }
-  const slowest = Math.max(0, ...list.map(e => ms(e) || 0));
   ol.innerHTML = (hiddenCount && !S.showAll ? `<li class="empty"><button class="link" data-act="showall">Show ${hiddenCount} earlier events</button></li>` : "") + list.map(e => {
     const s = summary(e), lv = rowLevel(e), open = S.open.has(e.id), d = ms(e), l = loc(e);
     if (e.kind === "core.separator") return `<li class="entry sep" data-id="${esc(e.id)}"><hr></li>`;
     // An object or array is shown in full in the pane, so the open row keeps only its label.
     const structured = s.mono && /^[\[{]/.test(String(s.body || ""));
     const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
-    return `<li class="entry lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>
-      <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}</span><span class="right">${d ? `<span class="dur" title="${d} ms"><i style="--w:${Math.max(4, d / slowest * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
+    const twig = e.kidCount ? `<button class="twig" data-act="twig" data-id="${esc(e.id)}" aria-expanded="${!S.collapsed.has(e.id)}" aria-label="${S.collapsed.has(e.id) ? "Show" : "Hide"} ${e.kidCount} inside" title="${e.kidCount} inside"><svg class="i"><use href="#i-down"/></svg></button>` : "";
+    return `<li class="entry lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
+      <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${d ? `<span class="dur" title="${d} ms, started +${Math.round(startOf(e) - t0)} ms into the run"><i style="--x:${((startOf(e) - t0) / span * 100).toFixed(1)}%;--w:${Math.max(3, d / span * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
       <div class="qa"><button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")}"><svg class="i"><use href="#i-open"/></svg></button>` : ""}</div>
       <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
   }).join("");
@@ -962,6 +1015,7 @@ document.addEventListener("click", ev => {
   if (act === "stop") return answer(b.dataset.id, "stop");
   if (act === "copyexc") return copyException(b.dataset.id);
   if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
+  if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
   if (act === "jtoggle") {
     const j = b.parentElement, shut = j.classList.toggle("shut");
     const all = ev.altKey ? [j, ...j.querySelectorAll(".j")] : [j];

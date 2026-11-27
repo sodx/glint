@@ -49,9 +49,18 @@ if (preg_match('#^/cart/(\d+)$#', $path, $m)) {
 }
 
 if (preg_match('#^/checkout/(\d+)$#', $path, $m)) {
-    $id = (int) $m[1];
-    $order = query($db, 'select * from orders where id = ? and status in (?, ?)', [$id, 'open', 'paid'])[0] ?? null;
-    $order['items'] = query($db, 'select sku, qty, price from order_items where order_id = ?', [$id]);
+    // Everything checkout() sends nests under this measure: the request reads as a call tree.
+    Glint::measure('checkout', static fn () => checkout($db, (int) $m[1]));
+    return;
+}
+
+function checkout(PDO $db, int $id): void
+{
+    $order = Glint::measure('load order', static function () use ($db, $id): array {
+        $order = query($db, 'select * from orders where id = ? and status in (?, ?)', [$id, 'open', 'paid'])[0] ?? [];
+        $order['items'] = query($db, 'select sku, qty, price from order_items where order_id = ?', [$id]);
+        return $order;
+    });
     glint($order)->label('order before pricing');
 
     $total = Glint::measure('pricing', static function () use ($order): float {
@@ -68,7 +77,6 @@ if (preg_match('#^/checkout/(\d+)$#', $path, $m)) {
     query($db, 'update orders set total = ?, status = ? where id = ?', [$total, 'paid', $id]);
     glint(['order' => $id, 'total' => $total, 'paid' => true])->green()->label('saved');
     echo "paid {$total}\n";
-    return;
 }
 
 http_response_code(404);

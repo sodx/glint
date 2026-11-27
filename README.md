@@ -57,6 +57,10 @@ SDK always wins over the global one. One gap: PHP never prepends to a `php -S` *
 (`php -S host:port router.php`, also what `artisan serve` runs); serve a document root instead
 (`php -S host:port -t public`) or require the SDK in that project.
 
+Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends (values, SQL,
+logs, inner measures) nests under it: the UI shows the run as a call tree with a small waterfall
+of where the time went. OpenTelemetry spans nest the same way.
+
 `python3 examples/e2e/run.py` drives a PHP shop, a Python worker and a Node API (with a pause)
 through the global `glint()` and checks what glintd stored.
 

@@ -78,14 +78,44 @@ final class Transport
     }
 
     /** Queues one envelope and returns its id, or null when disabled or on any internal failure. */
-    public static function emit(string $kind, mixed $payload, array $meta = []): ?string
+    /**
+     * Ids of the measures being run, innermost last: what is sent inside Glint::measure() names
+     * the innermost one as its parent, so a request reads as a call tree.
+     *
+     * @var list<string>
+     */
+    private static array $scopes = [];
+
+    /** Runs $fn with $id as the parent of everything it sends. */
+    public static function within(string $id, callable $fn): mixed
+    {
+        self::$scopes[] = $id;
+        try {
+            return $fn();
+        } finally {
+            array_pop(self::$scopes);
+        }
+    }
+
+    /** A fresh event id, or null when sending is off. */
+    public static function newId(): ?string
+    {
+        try {
+            self::boot();
+            return self::$enabled ? self::ulid() : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public static function emit(string $kind, mixed $payload, array $meta = [], ?string $fixedId = null): ?string
     {
         try {
             self::boot();
             if (!self::$enabled) {
                 return null;
             }
-            $id = self::ulid();
+            $id = $fixedId ?? self::ulid();
             $envelope = [
                 'id' => $id,
                 'ts' => self::timestamp(),
@@ -94,6 +124,10 @@ final class Transport
                 'payload' => $payload,
                 'origin' => self::origin(),
             ];
+            $parent = self::$scopes === [] ? null : self::$scopes[count(self::$scopes) - 1];
+            if ($parent !== null && $parent !== $id) {
+                $envelope['parent'] = $parent;
+            }
             if ($meta !== []) {
                 $envelope['meta'] = $meta;
             }

@@ -9,6 +9,7 @@ Contract: spec/conformance/README.md. Never raises into your program, never bloc
 
 from __future__ import annotations
 
+import contextvars
 import inspect
 import sys
 import time
@@ -29,7 +30,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _emit(kind: str, payload: Any, meta: Optional[Dict[str, Any]] = None, site: Optional[Dict[str, Any]] = None) -> Optional[str]:
+# Nesting: everything sent inside glint.measure(name, fn) has that measure as its parent, so a run
+# reads as a call tree. A ContextVar follows threads' own contexts and asyncio tasks.
+_PARENT: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("glint_parent", default=None)
+
+
+def _emit(kind: str, payload: Any, meta: Optional[Dict[str, Any]] = None, site: Optional[Dict[str, Any]] = None, event_id: Optional[str] = None) -> Optional[str]:
     """Builds and queues one envelope. Returns its id, or None when disabled or on any failure."""
     settings = _config.settings
     if not settings.enabled:
@@ -37,7 +43,7 @@ def _emit(kind: str, payload: Any, meta: Optional[Dict[str, Any]] = None, site: 
     try:
         if site is None:
             site = _origin.call_site()
-        event_id = _ids.ulid()
+        event_id = event_id or _ids.ulid()
         envelope: Dict[str, Any] = {
             "id": event_id,
             "ts": _now(),
@@ -46,6 +52,9 @@ def _emit(kind: str, payload: Any, meta: Optional[Dict[str, Any]] = None, site: 
             "payload": payload,
             "origin": _origin.origin(site),
         }
+        parent = _PARENT.get()
+        if parent and parent != event_id:
+            envelope["parent"] = parent
         if meta:
             envelope["meta"] = meta
         if settings.project:
@@ -64,16 +73,18 @@ def _value_payload(v: Any) -> Dict[str, Any]:
     return payload
 
 
-def _record_measure(name: str, start: float, site: Dict[str, Any]) -> None:
+def _record_measure(name: str, start: float, site: Dict[str, Any], event_id: Optional[str]) -> None:
     duration_ms = round((time.perf_counter() - start) * 1000, 3)
-    _emit("core.measure", {"name": str(name), "duration_ms": duration_ms}, None, site)
+    _emit("core.measure", {"name": str(name), "duration_ms": duration_ms}, None, site, event_id)
 
 
-async def _await_measure(awaitable: Any, name: str, start: float, site: Dict[str, Any]) -> Any:
+async def _await_measure(awaitable: Any, name: str, start: float, site: Dict[str, Any], event_id: Optional[str]) -> Any:
+    token = _PARENT.set(event_id)
     try:
         return await awaitable
     finally:
-        _record_measure(name, start, site)
+        _PARENT.reset(token)
+        _record_measure(name, start, site, event_id)
 
 
 class Entry:
@@ -184,14 +195,19 @@ class _Glint:
     def measure(self, name: str, fn: Any) -> Any:
         site = _origin.call_site()
         start = time.perf_counter()
+        # The id is chosen up front so that what fn sends can name the measure as its parent.
+        event_id = _ids.ulid() if _config.settings.enabled else None
+        token = _PARENT.set(event_id)
         try:
             result = fn()
         except BaseException:
-            _record_measure(name, start, site)
+            _PARENT.reset(token)
+            _record_measure(name, start, site, event_id)
             raise
+        _PARENT.reset(token)
         if inspect.iscoroutine(result):
-            return _await_measure(result, name, start, site)
-        _record_measure(name, start, site)
+            return _await_measure(result, name, start, site, event_id)
+        _record_measure(name, start, site, event_id)
         return result
 
     def send(self, kind: str, payload: Any, meta: Optional[Mapping[str, Any]] = None) -> Entry:
