@@ -47,6 +47,14 @@ PHP gets it through `auto_prepend_file` (an existing prepend file keeps working)
 `.pth` file in the user site-packages of the `python3` on PATH, Node through `NODE_OPTIONS=--import`
 in your shell profile. `--only php,node` and `--dry-run` narrow it down.
 
+The desktop app (macOS for now) puts Glint in the menu bar: the spark turns red when something
+fails and amber when a program waits for you, a notification tells you which, and ⌥⌘G opens the
+window from anywhere.
+
+```bash
+app/bundle-macos.sh --install     # builds Glint.app (with glintd inside) into ~/Applications
+```
+
 Existing Ray client libraries work unchanged: glintd also listens on Ray's port `23517`.
 
 Connect your coding agent:

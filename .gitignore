@@ -9,3 +9,4 @@ __pycache__/
 *.egg-info/
 sdks/php/vendor/
 sdks/php/composer.lock
+app/gen/

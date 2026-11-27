@@ -1,0 +1,32 @@
+# The desktop shell: tray, window, notifications, global hotkey. A separate workspace, so the
+# root `cargo test --workspace` never builds Tauri. It talks to glintd over HTTP like any client
+# and starts glintd when nothing answers.
+[package]
+name = "glint-app"
+description = "Glint for the desktop: tray icon, window, notifications"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "glint-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+serde_json = "1"
+ureq = { version = "2", default-features = false, features = ["json"] }
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 4

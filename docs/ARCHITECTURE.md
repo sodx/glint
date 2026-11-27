@@ -275,7 +275,10 @@ LLM tracing platform — next to your app's SQL and exceptions in the same timel
 - Click `file:line` → open in editor (configurable URL scheme: `vscode://`, `phpstorm://`, `zed://`,
   `cursor://`, `idea://`).
 - Desktop extras via Tauri: tray icon with error badge, always-on-top mini feed, global hotkey,
-  native notifications for exceptions and pauses.
+  native notifications for exceptions and pauses. The shell does not embed glint-server: glintd
+  keeps running (login service) when the window is closed, so events are never lost; the app is
+  one more client of it and starts it when nothing answers. Built (tray, window, ⌥⌘G,
+  notifications, glintd autostart); the mini feed is not.
 
 ---
 
@@ -305,7 +308,7 @@ glint/
 │   ├── glint-server/         # axum app wiring: HTTP, WS, static UI
 │   ├── glintd/               # daemon binary
 │   └── glint-cli/            # `glint` binary: pipe, send, tail, conformance, mcp, open
-├── app/                      # Tauri shell embedding glint-server
+├── app/                      # Tauri shell (own Cargo workspace): window + tray; a client of glintd, starts it if needed
 ├── ui/                       # web UI (TS)
 ├── sdks/                     # first-party thin clients: php, js, python, go, rust, ruby, ...
 └── integrations/             # framework packages built on sdks/

@@ -31,6 +31,12 @@ and Node (NODE_OPTIONS --import); the SDKs are embedded with `include_str!`, so 
 the next `glint` build. Test it with `HOME=<tmp>` plus `--php-ini-dir` / `--shell-profile`, never
 against the real home.
 
+Desktop app in `app/` (Tauri 2, its own Cargo workspace so `cargo test --workspace` never builds
+it): tray state, notifications for new failures and pauses, ⌥⌘G, glintd autostart; window shows
+glintd's UI. `app/bundle-macos.sh` makes `target/release/Glint.app` without tauri-cli; icons come
+from `app/icons/make.py`. The CLI lives in `Contents/Resources/bin` because `glint` and `Glint`
+collide on case-insensitive file systems.
+
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
 (`docs/mappings/otlp.md`), LLM card in the UI, MCP `glint_llm_calls`.
 
