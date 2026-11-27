@@ -166,3 +166,122 @@ async fn hook_forwards_to_glint() {
     })
     .await;
 }
+
+/// Runs `glint` with a sandbox HOME (hook state, config) and extra environment.
+fn glint_home(url: &str, home: &std::path::Path, env: &[(&str, &str)], args: &[&str], stdin: &str) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_glint"));
+    cmd.args(args).env("GLINT_URL", url).env("HOME", home).env_remove("GLINT_CONFIG").env_remove("GLINT_AGENT_CONTEXT").env_remove("GLINT_STOP_GUARD");
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
+    child.wait_with_output().unwrap()
+}
+
+fn sandbox_home(tag: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("glint-cli-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+fn post(addr: SocketAddr, body: Value) {
+    ureq::post(&format!("http://{addr}/v1/events")).send_json(body).unwrap();
+}
+
+#[test]
+fn session_start_still_explains_glint_when_it_is_down() {
+    let home = sandbox_home("down");
+    let out = glint_home("http://127.0.0.1:9", &home, &[], &["hook"], r#"{"hook_event_name":"SessionStart","session_id":"s","cwd":"/a/shop"}"#);
+    assert!(out.status.success());
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let text = v["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+    assert!(text.contains("project `shop`") && text.contains("glint_last_error"), "{text}");
+    assert!(text.contains("Glint is not running right now") && text.contains("glintd"), "{text}");
+    // Other events stay silent.
+    let out = glint_home("http://127.0.0.1:9", &home, &[], &["hook"], r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/a/shop","prompt":"x"}"#);
+    assert!(out.stdout.is_empty());
+    std::fs::remove_dir_all(&home).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_guard_starts_counting_without_a_mark_and_counts_what_it_does_not_show() {
+    let addr = start().await;
+    let url = format!("http://{addr}");
+    let home = sandbox_home("guard");
+    blocking(move || {
+        let stop = r#"{"hook_event_name":"Stop","session_id":"g1","cwd":"/a/shop"}"#;
+        post(addr, serde_json::json!({"kind": "core.log", "project": "shop", "payload": {"message": "before"}}));
+        // No mark (SessionStart never ran): nothing to block on this turn, but counting starts.
+        let out = glint_home(&url, &home, &[], &["hook"], stop);
+        assert!(out.stdout.is_empty());
+        assert!(home.join(".glint/hooks/g1.last").exists(), "the guard set its mark");
+
+        let fails: Vec<Value> = (0..7)
+            .map(|i| serde_json::json!({"kind": "core.exception", "project": "shop", "run": format!("r{i}"), "payload": {"class": "E", "message": format!("boom {i}")}}))
+            .collect();
+        post(addr, Value::Array(fails));
+        let out = glint_home(&url, &home, &[], &["hook"], stop);
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["decision"], "block");
+        let reason = v["reason"].as_str().unwrap();
+        assert!(reason.contains("recorded 7 failures"), "{reason}");
+        assert!(reason.contains("boom 6") && reason.contains("boom 2") && !reason.contains("boom 1"), "{reason}");
+        assert!(reason.contains("(2 more not shown; glint_events project=shop level=error after="), "{reason}");
+        // Reported once.
+        let out = glint_home(&url, &home, &[], &["hook"], stop);
+        assert!(out.stdout.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_guard_hides_an_edited_failure_only_after_a_passing_rerun() {
+    let addr = start().await;
+    let url = format!("http://{addr}");
+    let home = sandbox_home("edited");
+    blocking(move || {
+        let stop = r#"{"hook_event_name":"Stop","session_id":"g2","cwd":"/a/shop"}"#;
+        let file = home.join("app.py");
+        let file_s = file.display().to_string();
+        post(addr, serde_json::json!({"kind": "core.log", "project": "shop", "payload": {"message": "start"}}));
+        glint_home(&url, &home, &[], &["hook"], r#"{"hook_event_name":"SessionStart","session_id":"g2","cwd":"/a/shop"}"#);
+
+        // Failed 10 s ago, then the agent edited the file: possibly fixed, still listed.
+        let past = (chrono::Utc::now() - chrono::Duration::seconds(10)).to_rfc3339();
+        post(addr, serde_json::json!({"kind": "core.exception", "project": "shop", "run": "f1", "ts": past, "origin": {"file": file_s}, "payload": {"class": "KeyError", "message": "email"}}));
+        std::fs::write(&file, "fixed").unwrap();
+        let out = glint_home(&url, &home, &[], &["hook"], stop);
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let reason = v["reason"].as_str().unwrap();
+        assert!(reason.contains("KeyError: email") && reason.contains("possibly fixed"), "{reason}");
+
+        // Same again, but a later run of the same file passed: not worth stopping for.
+        let past = (chrono::Utc::now() - chrono::Duration::seconds(10)).to_rfc3339();
+        post(addr, serde_json::json!({"kind": "core.exception", "project": "shop", "run": "f2", "ts": past, "origin": {"file": file_s}, "payload": {"class": "KeyError", "message": "again"}}));
+        std::fs::write(&file, "fixed again").unwrap();
+        post(addr, serde_json::json!({"kind": "core.log", "project": "shop", "run": "ok1", "origin": {"file": file_s}, "payload": {"message": "sent"}}));
+        let out = glint_home(&url, &home, &[], &["hook"], stop);
+        assert!(out.stdout.is_empty(), "{}", String::from_utf8_lossy(&out.stdout));
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn prompts_mark_the_turn_even_with_agent_context_off() {
+    let addr = start().await;
+    let url = format!("http://{addr}");
+    let home = sandbox_home("ctxoff");
+    blocking(move || {
+        post(addr, serde_json::json!({"kind": "core.log", "project": "shop", "payload": {"message": "x"}}));
+        let out = glint_home(&url, &home, &[("GLINT_AGENT_CONTEXT", "0")], &["hook"], r#"{"hook_event_name":"UserPromptSubmit","session_id":"g3","cwd":"/a/shop","prompt":"hi"}"#);
+        assert!(out.stdout.is_empty());
+        assert!(home.join(".glint/hooks/g3.last").exists());
+        post(addr, serde_json::json!({"kind": "core.exception", "project": "shop", "payload": {"class": "E", "message": "in turn"}}));
+        let out = glint_home(&url, &home, &[("GLINT_AGENT_CONTEXT", "0")], &["hook"], r#"{"hook_event_name":"Stop","session_id":"g3","cwd":"/a/shop"}"#);
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert!(v["reason"].as_str().unwrap().contains("in turn"));
+    })
+    .await;
+}
