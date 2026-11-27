@@ -63,6 +63,8 @@ pub struct Args {
     pub shell_profile: Option<PathBuf>,
     /// Where glintd listens; agents get `<url>/mcp`.
     pub url: String,
+    /// Also find agents by their app and command, not only their settings folder (off in tests).
+    pub probe: bool,
 }
 
 impl Args {

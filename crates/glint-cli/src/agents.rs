@@ -85,11 +85,27 @@ fn drop_server(root: &mut Map<String, Value>, section: &str) -> bool {
     removed
 }
 
+/// An agent counts as installed when its settings folder exists, or (unless `a.probe` is off,
+/// as in tests) when its app is in /Applications or its command is on PATH: someone who
+/// installed Cursor or Claude Code but never opened it should still get Glint.
+fn installed(a: &Args, folder: &Path, apps: &[&str], commands: &[&str]) -> bool {
+    if folder.exists() {
+        return true;
+    }
+    if !a.probe {
+        return false;
+    }
+    let app = apps.iter().any(|n| [PathBuf::from("/Applications"), a.home.join("Applications")].iter().any(|d| d.join(format!("{n}.app")).exists()));
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let cmd = commands.iter().any(|c| std::env::split_paths(&path).any(|d| d.join(c).is_file()));
+    app || cmd
+}
+
 /// A JSON-configured agent: where its user config lives and how it spells a server.
 struct JsonAgent {
     name: &'static str,
-    /// The folder whose existence means the agent is installed.
-    marker: PathBuf,
+    /// Installed: its settings folder exists, or its app or command does.
+    present: bool,
     config: PathBuf,
     section: &'static str,
     server: Value,
@@ -100,16 +116,16 @@ fn json_agents(a: &Args) -> Vec<JsonAgent> {
     let url = mcp_url(a);
     let vscode = if cfg!(target_os = "macos") { h.join("Library/Application Support/Code/User") } else { h.join(".config/Code/User") };
     vec![
-        JsonAgent { name: "Cursor", marker: h.join(".cursor"), config: h.join(".cursor/mcp.json"), section: "mcpServers", server: json!({ "url": url }) },
-        JsonAgent { name: "VS Code", marker: vscode.clone(), config: vscode.join("mcp.json"), section: "servers", server: json!({ "type": "http", "url": url }) },
+        JsonAgent { name: "Cursor", present: installed(a, &h.join(".cursor"), &["Cursor"], &["cursor"]), config: h.join(".cursor/mcp.json"), section: "mcpServers", server: json!({ "url": url }) },
+        JsonAgent { name: "VS Code", present: installed(a, &vscode, &["Visual Studio Code"], &["code"]), config: vscode.join("mcp.json"), section: "servers", server: json!({ "type": "http", "url": url }) },
         JsonAgent {
             name: "Windsurf",
-            marker: h.join(".codeium/windsurf"),
+            present: installed(a, &h.join(".codeium/windsurf"), &["Windsurf"], &["windsurf"]),
             config: h.join(".codeium/windsurf/mcp_config.json"),
             section: "mcpServers",
             server: json!({ "serverUrl": url }),
         },
-        JsonAgent { name: "Gemini CLI", marker: h.join(".gemini"), config: h.join(".gemini/settings.json"), section: "mcpServers", server: json!({ "httpUrl": url }) },
+        JsonAgent { name: "Gemini CLI", present: installed(a, &h.join(".gemini"), &[], &["gemini"]), config: h.join(".gemini/settings.json"), section: "mcpServers", server: json!({ "httpUrl": url }) },
     ]
 }
 
@@ -173,8 +189,8 @@ fn remove_hooks(root: &mut Map<String, Value>) -> bool {
 
 fn install_claude(a: &Args, steps: &mut Vec<Step>) {
     let settings = a.home.join(".claude/settings.json");
-    if !a.home.join(".claude").exists() {
-        return; // Claude Code has never run here
+    if !installed(a, &a.home.join(".claude"), &[], &["claude"]) {
+        return; // no Claude Code here
     }
     let has_cli = claude(a, &["--version"]).is_some_and(|o| o.status.success());
     // MCP at user scope, through Claude Code's own CLI (it rewrites ~/.claude.json often, so
@@ -207,7 +223,7 @@ pub fn install(a: &Args) -> Vec<Step> {
     let mut steps = Vec::new();
     install_claude(a, &mut steps);
     for ag in json_agents(a) {
-        if !ag.marker.exists() {
+        if !ag.present {
             continue;
         }
         let server = ag.server.clone();
@@ -218,7 +234,7 @@ pub fn install(a: &Args) -> Vec<Step> {
         });
     }
     let codex = a.home.join(".codex/config.toml");
-    if a.home.join(".codex").exists() {
+    if installed(a, &a.home.join(".codex"), &[], &["codex"]) {
         let text = fs::read_to_string(&codex).unwrap_or_default();
         let foreign = without_block(&text).contains(&format!("[mcp_servers.{NAME}]"));
         steps.push(if foreign {
@@ -279,11 +295,11 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
 pub fn doctor(a: &Args) -> Vec<Step> {
     let mut found = Vec::new();
     let mut missing = Vec::new();
-    if let Some(o) = a.home.join(".claude").exists().then(|| claude(a, &["mcp", "get", NAME])).flatten() {
+    if let Some(o) = installed(a, &a.home.join(".claude"), &[], &["claude"]).then(|| claude(a, &["mcp", "get", NAME])).flatten() {
         if o.status.success() { found.push("Claude Code".to_owned()) } else { missing.push("Claude Code".to_owned()) }
     }
     for ag in json_agents(a) {
-        if !ag.marker.exists() {
+        if !ag.present {
             continue;
         }
         let ok = fs::read_to_string(&ag.config)
@@ -292,12 +308,12 @@ pub fn doctor(a: &Args) -> Vec<Step> {
             .is_some_and(|v| v.get(ag.section).and_then(|s| s.get(NAME)).is_some());
         if ok { found.push(ag.name.to_owned()) } else { missing.push(ag.name.to_owned()) }
     }
-    if a.home.join(".codex").exists() {
+    if installed(a, &a.home.join(".codex"), &[], &["codex"]) {
         let ok = fs::read_to_string(a.home.join(".codex/config.toml")).is_ok_and(|t| t.contains(&format!("[mcp_servers.{NAME}]")));
         if ok { found.push("Codex".into()) } else { missing.push("Codex".into()) }
     }
     vec![match (found.is_empty(), missing.is_empty()) {
-        (true, true) => skip("agents", "no coding agent found".into()),
+        (true, true) => skip("agents", "no coding agent found; Glint works with Claude Code, Cursor, VS Code, Windsurf, Gemini CLI and Codex".into()),
         (_, true) => done("agents", format!("Glint's MCP server is set up in {}", found.join(", "))),
         (_, false) => fail("agents", format!("not set up in {} — run `glint install --only agents`{}", missing.join(", "), if found.is_empty() { String::new() } else { format!(" (set up: {})", found.join(", ")) })),
     }]
@@ -315,6 +331,7 @@ mod tests {
             php_ini_dir: None,
             shell_profile: None,
             url: "http://127.0.0.1:23600".into(),
+            probe: false,
         }
     }
 

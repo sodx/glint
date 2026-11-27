@@ -1297,16 +1297,21 @@ function setupCard() {
   const rows = SETUP_ROWS.map(([k, label]) => {
     const x = by[k], state = !x ? "unknown" : x.status;
     const mark = state === "ok" ? icon("check") : state === "fail" ? `<span class="ob-dot"></span>` : `<span class="ob-dash">–</span>`;
-    const note = !x ? "" : state === "ok" ? "" : state === "skip" ? x.detail : x.detail.replace(/ — run `.*`.*$/, "").replace(/run `glint install.*`/, "");
+    const note = !x ? "" : state === "ok" ? "" : k === "agents" && state === "skip" ? "none found" : state === "skip" ? x.detail : x.detail.replace(/ — run `.*`.*$/, "").replace(/run `glint install.*`/, "");
     return `<li class="ob-row ob-${state}">${mark}<span>${esc(label)}${note ? `<span class="ob-muted"> · ${esc(note)}</span>` : ""}</span></li>`;
   }).join("");
   const missing = (st.steps || []).some(x => x.status === "fail" && x.name !== "daemon");
+  const noAgent = by.agents && by.agents.status === "skip";
   const btn = st.running ? `<button class="btn primary" disabled>Setting up…</button>`
     : missing || st.error ? `<button class="btn primary" data-act="setup">Set up this Mac</button>` : "";
-  const after = st.justRan ? `<p class="ob-muted">Open a new terminal window so your shell picks up the changes.</p>` : "";
+  // Installed a coding agent after setup? Checking again finds it; setting up again connects it.
+  const again = st.running ? "" : `<button class="link" data-act="setup-check">Check again</button>`;
+  const agentHint = noAgent ? `<p class="ob-muted">No coding agent on this Mac yet. After you install Claude Code, Cursor, VS Code, Windsurf, Gemini CLI or Codex, press Set up this Mac again and it gets Glint too.</p>` : "";
+  const after = st.justRan ? `<p class="ob-muted">Open a new terminal window so your shell picks up the changes, and start a new Claude Code (or Cursor) session: agents load Glint when a session starts.</p>` : "";
   const err = st.error ? `<p class="ob-err">${esc(st.error)}</p>` : "";
   const lead = missing ? "One click sets up the rest: glint() without imports, errors with no code, and your coding agents." : st.steps ? "Everything is set up." : "";
-  return `<div class="ob-card"><h3>This Mac</h3>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${err}<div class="ob-actions">${btn}</div>${after}</div>`;
+  const setupAgain = !missing && noAgent && !st.running ? `<button class="btn" data-act="setup">Set up this Mac</button>` : "";
+  return `<div class="ob-card"><h3>This Mac</h3>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${agentHint}${err}<div class="ob-actions">${btn}${setupAgain}${again}</div>${after}</div>`;
 }
 function tryCard() {
   const CC = `<button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button>`;
@@ -1487,6 +1492,7 @@ document.addEventListener("click", ev => {
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
   if (act === "docs") return openDocs();
   if (act === "setup") return runSetup();
+  if (act === "setup-check") { S.setup = null; render(); return loadSetup().then(drawSetMac); }
   if (act === "sample") return sendSample();
   if (act === "settings") return openSettings();
   if (act === "settings-close") return closeSettings();

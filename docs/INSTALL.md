@@ -98,4 +98,5 @@ the stored events and settings gone.
 | No notifications | System Settings > Notifications > Glint, and allow them. |
 | `glint()` is undefined | Open a new terminal window. Run `glint doctor`, which says what is missing. Code run with `php -r` never gets it; a PHP file does. |
 | `glint: command not found` | Open a new terminal window, or run `/Applications/Glint.app/Contents/Resources/bin/glint`. |
+| Claude Code says it has no Glint server | Glint was not set up yet, or the session started before setup. Click **Set up this Mac** in the Glint window, then start a new Claude Code session. An agent you install later gets Glint the next time you click it. |
 | Setup reported a problem | Read `~/.glint/setup.log`. PHP's configuration folder may need `sudo` on some setups; run the install command from step 4 in Terminal to see the details. |

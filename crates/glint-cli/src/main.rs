@@ -199,7 +199,7 @@ impl Setup {
     fn args(self, url: &str) -> Result<install::Args, String> {
         let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is not set")?;
         let targets = if self.only.is_empty() { install::Target::ALL.to_vec() } else { self.only };
-        Ok(install::Args { targets, dry_run: self.dry_run, home, php_ini_dir: self.php_ini_dir, shell_profile: self.shell_profile, url: url.to_owned() })
+        Ok(install::Args { targets, dry_run: self.dry_run, home, php_ini_dir: self.php_ini_dir, shell_profile: self.shell_profile, url: url.to_owned(), probe: true })
     }
 }
 
