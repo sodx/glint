@@ -126,6 +126,18 @@ pub fn definitions() -> Value {
             "annotations": { "readOnlyHint": false, "destructiveHint": false }
         },
         {
+            "name": "glint_llm_calls",
+            "title": "LLM calls",
+            "description": "Recent LLM calls (from OpenTelemetry GenAI spans or SDKs): model, tokens, latency, cost, last user message and answer, plus totals. Use glint_event for a full transcript.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": { "type": "string" },
+                "model": { "type": "string", "description": "Substring of the model name." },
+                "q": { "type": "string", "description": "Full-text search over prompts and answers." },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+            }},
+            "annotations": { "readOnlyHint": true }
+        },
+        {
             "name": "glint_clear",
             "title": "Start a fresh view",
             "description": "Clear the human's live view (stored events are kept) and get a cursor: pass it as `after` to glint_events to see only what happens next.",
@@ -179,6 +191,7 @@ pub async fn call(hub: &Hub, name: &str, a: Value) -> Result<String, String> {
         "glint_annotate" => annotate(hub, args(a)?).await,
         "glint_show" => show(hub, args(a)?).await,
         "glint_clear" => clear(hub, args(a)?).await,
+        "glint_llm_calls" => llm_calls(hub, args(a)?).await,
         other => Err(format!("unknown tool `{other}`")),
     }
 }
@@ -452,4 +465,56 @@ struct ClearArgs {
 async fn clear(hub: &Hub, a: ClearArgs) -> Result<String, String> {
     let id = emit(hub, agent_event("core.clear", json!({}), Meta::default(), a.project)).await?;
     Ok(format!("View cleared. Pass after={id} to glint_events to see only what happens from now on."))
+}
+
+#[derive(Deserialize)]
+struct LlmArgs {
+    project: Option<String>,
+    model: Option<String>,
+    q: Option<String>,
+    limit: Option<usize>,
+}
+
+async fn llm_calls(hub: &Hub, a: LlmArgs) -> Result<String, String> {
+    let limit = a.limit.unwrap_or(20).clamp(1, 100);
+    let q = Query {
+        project: a.project.filter(|s| !s.is_empty()),
+        kind: Some("llm.call".into()),
+        q: a.q.filter(|s| !s.is_empty()),
+        // Over-fetch so a model filter still fills the page.
+        limit: Some(if a.model.is_some() { limit * 5 } else { limit }),
+        ..Query::default()
+    };
+    let mut calls = hub.query(q).await.map_err(store_err)?;
+    if let Some(m) = a.model.as_deref().filter(|m| !m.is_empty()) {
+        calls.retain(|e| e.payload.get("model").and_then(Value::as_str).is_some_and(|x| x.contains(m)));
+    }
+    let skip = calls.len().saturating_sub(limit);
+    let calls = &calls[skip..];
+    if calls.is_empty() {
+        return Ok("No LLM calls recorded. Send OpenTelemetry GenAI spans to http://127.0.0.1:4318 or use an SDK.".into());
+    }
+    let (mut tin, mut tout, mut cost, mut lat, mut errors) = (0.0, 0.0, 0.0, 0.0, 0);
+    let mut out = String::new();
+    for e in calls {
+        let p = &e.payload;
+        let num = |v: Option<&Value>| v.and_then(Value::as_f64).unwrap_or(0.0);
+        tin += num(p.pointer("/usage/input"));
+        tout += num(p.pointer("/usage/output"));
+        cost += num(p.get("cost_usd"));
+        lat += num(p.get("latency_ms"));
+        if p.get("error").is_some() {
+            errors += 1;
+        }
+        out.push_str(&line(e));
+        out.push('\n');
+    }
+    let n = calls.len() as f64;
+    out.push_str(&format!(
+        "Totals over {} calls: {tin:.0} input + {tout:.0} output tokens, avg latency {:.0} ms, {errors} errors{}\n",
+        calls.len(),
+        lat / n,
+        if cost > 0.0 { format!(", cost ${cost:.4}") } else { String::new() }
+    ));
+    Ok(out)
 }

@@ -5,6 +5,8 @@
 //! - `GLINT_DB`   — database file, default `~/.glint/glint.db`.
 //! - `GLINT_RAY_ADDR` — Ray-compatible listener, default `127.0.0.1:23517`; `off` disables it.
 //!   If the port is taken (the Ray app is running), Glint starts without it.
+//! - `GLINT_OTLP_ADDR` — OTLP/HTTP receiver, default `127.0.0.1:4318`; `off` disables it. Also
+//!   skipped when the port is taken (a real OpenTelemetry collector may own it).
 //! - `RUST_LOG`   — log filter, default `info`.
 
 use std::net::SocketAddr;
@@ -19,6 +21,7 @@ use tracing_subscriber::EnvFilter;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:23600";
 const DEFAULT_RAY_ADDR: &str = "127.0.0.1:23517";
+const DEFAULT_OTLP_ADDR: &str = "127.0.0.1:4318";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -44,30 +47,20 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("binding {addr}; is another glintd running?"))?;
 
-    let ray_listener = match std::env::var("GLINT_RAY_ADDR").as_deref() {
-        Ok("off") => None,
-        other => {
-            let ray_addr: SocketAddr = other
-                .unwrap_or(DEFAULT_RAY_ADDR)
-                .parse()
-                .context("GLINT_RAY_ADDR must be host:port or `off`")?;
-            match TcpListener::bind(ray_addr).await {
-                Ok(l) => Some(l),
-                Err(err) => {
-                    tracing::warn!(%ray_addr, %err, "Ray-compatible ingest disabled: port unavailable (is the Ray app running?)");
-                    None
-                }
-            }
-        }
-    };
+    let ray_listener = optional_listener("GLINT_RAY_ADDR", DEFAULT_RAY_ADDR, "Ray-compatible ingest", "is the Ray app running?").await?;
+    let otlp_listener = optional_listener("GLINT_OTLP_ADDR", DEFAULT_OTLP_ADDR, "OTLP receiver", "is an OpenTelemetry collector running?").await?;
 
     let mut adapters = vec!["native".to_owned()];
     if ray_listener.is_some() {
         adapters.push("ray".to_owned());
     }
+    if otlp_listener.is_some() {
+        adapters.push("otlp".to_owned());
+    }
     tracing::info!(
         url = %format!("http://{}", listener.local_addr()?),
         ray = %ray_listener.as_ref().and_then(|l| l.local_addr().ok()).map_or("off".to_owned(), |a| a.to_string()),
+        otlp = %otlp_listener.as_ref().and_then(|l| l.local_addr().ok()).map_or("off".to_owned(), |a| a.to_string()),
         db = %db.display(),
         "glint is ready"
     );
@@ -85,9 +78,13 @@ async fn main() -> Result<()> {
     });
 
     let ray = ray_listener.map(|l| tokio::spawn(glint_server::serve_ray(l, hub.clone(), stopped())));
+    let otlp = otlp_listener.map(|l| tokio::spawn(glint_server::serve_otlp(l, hub.clone(), stopped())));
     glint_server::serve(listener, hub, glint_server::Options { adapters }, stopped()).await?;
     if let Some(ray) = ray {
         ray.await.context("ray listener")??;
+    }
+    if let Some(otlp) = otlp {
+        otlp.await.context("otlp listener")??;
     }
 
     // Every accepted event is already stored (submit waits for the write), and the server
@@ -98,6 +95,23 @@ async fn main() -> Result<()> {
     }
     tracing::info!("stopped");
     Ok(())
+}
+
+/// Binds an optional listener from `var` (`off` disables). A taken port is not fatal: the
+/// daemon starts without that adapter and says why.
+async fn optional_listener(var: &str, default: &str, what: &str, hint: &str) -> Result<Option<TcpListener>> {
+    let value = std::env::var(var).unwrap_or_else(|_| default.to_owned());
+    if value == "off" {
+        return Ok(None);
+    }
+    let addr: SocketAddr = value.parse().with_context(|| format!("{var} must be host:port or `off`"))?;
+    match TcpListener::bind(addr).await {
+        Ok(l) => Ok(Some(l)),
+        Err(err) => {
+            tracing::warn!(%addr, %err, "{what} disabled: port unavailable ({hint})");
+            Ok(None)
+        }
+    }
 }
 
 fn db_path() -> Result<PathBuf> {

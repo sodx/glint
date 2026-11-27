@@ -5,6 +5,7 @@
 //! refused (stops random web pages from writing or reading).
 
 mod guard;
+mod otlp;
 mod ray;
 mod routes;
 
@@ -65,6 +66,17 @@ pub async fn serve(
             let _ = stop_tx.send(true);
         })
         .await
+}
+
+/// Serves the OTLP/HTTP receiver (`docs/mappings/otlp.md`) until `shutdown` resolves.
+pub async fn serve_otlp(
+    listener: TcpListener,
+    hub: Hub,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    let addr = listener.local_addr()?;
+    let app = otlp::router(hub).layer(axum::middleware::from_fn_with_state(Allowlist::for_addr(addr), guard::check));
+    axum::serve(listener, app).with_graceful_shutdown(shutdown).await
 }
 
 /// Serves the Ray-compatible endpoints (`docs/mappings/ray.md`) until `shutdown` resolves.

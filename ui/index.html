@@ -69,6 +69,13 @@
   .pause .state { color: var(--muted); }
   .note { border-left: 3px solid var(--c-purple); padding: 2px 8px; margin-top: 6px; color: var(--text); font-style: normal; }
   .note::before { content: "note · "; color: var(--c-purple); }
+  .llm-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .llm-stats b { color: var(--text); font-weight: 600; }
+  .msg { display: grid; grid-template-columns: 74px 1fr; gap: 8px; padding: 4px 0; border-top: 1px dashed var(--line); }
+  .msg .role { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+  .msg.assistant .role { color: var(--c-green); } .msg.user .role { color: var(--c-blue); } .msg.system .role { color: var(--c-purple); }
+  .msg.out { background: color-mix(in srgb, var(--c-green) 7%, transparent); }
+  @media (max-width: 600px) { .msg { grid-template-columns: 1fr; gap: 2px; } }
   hr.sep { border: 0; border-top: 2px dashed var(--line); margin: 14px 0; }
   .note { color: var(--muted); font-style: italic; margin: 6px 0; }
   .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -312,6 +319,50 @@ const renderers = {
     if (key) box.appendChild(el("pre", "block", key));
     return box;
   },
+  "llm.call"(p) {
+    p = p || {};
+    const box = el("div");
+    const stats = el("div", "llm-stats");
+    const stat = (k, v) => { if (v === undefined || v === null || v === "") return; const s = el("span"); s.appendChild(el("b", "", String(v))); s.appendChild(document.createTextNode(" " + k)); stats.appendChild(s); };
+    stat("", [p.provider, p.model].filter(Boolean).join(" · "));
+    const u = p.usage || {};
+    if (u.input !== undefined || u.output !== undefined) stat("tokens", `${u.input ?? "?"} → ${u.output ?? "?"}`);
+    if (u.cache_read) stat("cached", u.cache_read);
+    if (p.latency_ms !== undefined && p.latency_ms !== null) stat("ms", p.latency_ms);
+    if (p.cost_usd !== undefined) stat("USD", p.cost_usd);
+    if (p.stop_reason) stat("stop", Array.isArray(p.stop_reason) ? p.stop_reason.join(",") : p.stop_reason);
+    box.appendChild(stats);
+    if (p.error) box.appendChild(el("div", "exc-title", String(p.error)));
+    const add = (m, out) => {
+      if (!m || typeof m !== "object") return;
+      const row = el("div", `msg ${m.role || ""}${out ? " out" : ""}`);
+      row.appendChild(el("div", "role", m.role || (out ? "output" : "?")));
+      const body = el("div");
+      const text = messageText(m);
+      if (text) body.appendChild(el("pre", "", text));
+      const calls = (m.parts || []).filter(x => x && x.type && x.type !== "text").concat(m.tool_calls || []);
+      if (calls.length) body.appendChild(jsonTree(calls));
+      row.appendChild(body);
+      box.appendChild(row);
+    };
+    if (typeof p.system === "string") add({ role: "system", content: p.system });
+    else if (p.system) add({ role: "system", parts: p.system });
+    (Array.isArray(p.messages) ? p.messages : []).forEach(m => add(m, false));
+    (Array.isArray(p.output) ? p.output : []).forEach(m => add(m, true));
+    for (const [k, v] of [["tools", p.tools], ["params", p.params]]) {
+      if (!v) continue;
+      const d = el("details"); d.appendChild(el("summary", "meta-line", k)); d.appendChild(jsonTree(v)); box.appendChild(d);
+    }
+    return box;
+  },
+  "core.span"(p) {
+    p = p || {};
+    const box = el("div");
+    box.appendChild(el("div", p.status === "error" ? "exc-title" : "meta-line",
+      `${p.name || "span"} · ${p.kind || ""} · ${p.duration_ms ?? "?"} ms${p.status === "error" ? " · error" : ""}${p.status_message ? " — " + p.status_message : ""}`));
+    if (p.attributes) { const d = el("details"); d.appendChild(el("summary", "meta-line", "attributes")); d.appendChild(jsonTree(p.attributes)); box.appendChild(d); }
+    return box;
+  },
   "sql.query"(p) {
     const box = el("div");
     box.appendChild(el("pre", "block", (p && p.sql) || ""));
@@ -324,6 +375,13 @@ const renderers = {
     return box;
   },
 };
+
+function messageText(m) {
+  const of = c => typeof c === "string" ? c
+    : Array.isArray(c) ? c.map(x => typeof x === "string" ? x : (x && (x.content ?? x.text) !== undefined ? of(x.content ?? x.text) : "")).filter(Boolean).join("\n")
+    : c == null ? "" : JSON.stringify(c);
+  return of(m.parts ?? m.content);
+}
 
 function toolKey(a) {
   if (!a || typeof a !== "object") return "";
@@ -370,6 +428,8 @@ function renderEvent(e) {
   n.appendChild(body);
   if (e.kind === "ctl.pause") n.classList.add("pause");
   applyMeta(n, e.meta || {});
+  // Severity shows even when the sender chose no colour.
+  if (!n.dataset.color) { const lv = levelOf(e); if (lv >= 4) n.dataset.color = "red"; else if (lv === 3) n.dataset.color = "orange"; }
   if (e.resolved) markResolved(n, e.resolved);
   return n;
 }

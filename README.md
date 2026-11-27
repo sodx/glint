@@ -44,6 +44,14 @@ claude mcp add --transport http glint http://127.0.0.1:23600/mcp   # or: claude 
 It can then read the last error with its context, wait for the next run after an edit, resume
 paused programs and leave notes next to events.
 
+Trace LLM calls with zero Glint code: point any OpenTelemetry exporter at Glint and GenAI spans
+(OpenLLMetry, vendor instrumentors, the GenAI semantic conventions) become LLM cards with the
+transcript, tokens and latency:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 python app.py
+```
+
 See what the agent does, next to what your program does:
 
 ```bash

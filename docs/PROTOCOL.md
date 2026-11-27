@@ -94,6 +94,7 @@ Unknown kinds MUST be accepted and stored. Each kind's payload schema lives in
 | `sql.query` | `{ "sql": string, "bindings"?: any[], "duration_ms"?: number, "conn"?: string, "rows"?: int }` |
 | `http.request` | `{ "method", "url", "status"?, "headers"?, "body"?, "duration_ms"? }` |
 | `llm.call` | `{ "provider", "model", "messages", "tools"?, "output", "usage": {input, output, cache_read?, cache_write?}, "cost_usd"?, "latency_ms"?, "stop_reason"? }` |
+| `core.span` | `{ "name", "kind", "duration_ms", "status": "ok\|error\|unset", "status_message"?, "attributes"?, "events"? }` — a generic trace span (OTLP) |
 | `agent.step` | `{ "agent"?, "session", "input"?, "output"?, "status" }` |
 | `agent.tool_call` | `{ "tool": string, "args": any, "result"?: any, "error"?: string, "duration_ms"? }` |
 

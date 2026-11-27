@@ -28,9 +28,10 @@ Each milestone ends with something a person can use. Order is a guide, not a con
 - ✅ Agent-hooks adapter (Claude Code) → `agent.*` kinds (`docs/mappings/claude-code.md`).
 - Tree view of agent steps → tool calls in the UI (events carry `parent` already).
 
-## M3 — LLM observability
-- OTLP adapter with `gen_ai.*` mapping → `llm.call`.
-- LLM view: transcript, tools, tokens, cost, latency, prompt diff.
+## M3 — LLM observability (in progress)
+- ✅ OTLP/HTTP receiver (protobuf + JSON) with `gen_ai.*` → `llm.call` (`docs/mappings/otlp.md`).
+- ✅ LLM card in the UI (transcript, tokens, latency, cost when reported); MCP `glint_llm_calls`.
+- Prompt diff between two calls; user price table for cost; gzip bodies.
 - SDK helpers for wrapping Anthropic/OpenAI clients directly.
 
 ## M4 — Desktop

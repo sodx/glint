@@ -23,7 +23,10 @@ M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume fr
 Ray `pause()` works), `glint.pause()` in the JS SDK and the Claude Code hooks adapter
 (`glint hook`, `docs/mappings/claude-code.md`) are done.
 
-Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray),
+M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
+(`docs/mappings/otlp.md`), LLM card in the UI, MCP `glint_llm_calls`.
+
+Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray, otlp, agent hooks),
 `glint-server`, `glintd`, `glint-cli` (binary `glint`), `glint-mcp`; SDKs in `sdks/{js,python,php}`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack

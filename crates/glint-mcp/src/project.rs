@@ -63,6 +63,13 @@ pub fn summary(e: &Envelope) -> String {
         }
         "core.update" => format!("update → {} {}", s("target"), compact_without(p, "target")),
         "ctl.pause" => format!("PAUSED {}", s("reason")),
+        "llm.call" => llm_summary(p),
+        "core.span" => format!(
+            "{} {} ms {}",
+            s("name"),
+            p.get("duration_ms").map(compact).unwrap_or_default(),
+            if s("status") == "error" { "ERROR" } else { "" }
+        ),
         "agent.tool_call" => format!("{} {}", s("tool"), tool_args(p.get("args"))),
         "agent.tool_result" => {
             let what = if p.get("ok") == Some(&Value::Bool(false)) { "FAILED" } else { "ok" };
@@ -78,6 +85,58 @@ pub fn summary(e: &Envelope) -> String {
         _ => compact(p),
     };
     clip(&text.replace(['\n', '\r'], " ⏎ "), SUMMARY_MAX)
+}
+
+/// `claude-sonnet-5-5 812→64 tok 1250 ms $0.004 — What is 2+2? ⇒ 4`
+fn llm_summary(p: &Value) -> String {
+    let u = p.get("usage");
+    let n = |k: &str| u.and_then(|u| u.get(k)).map(compact);
+    let mut s = p.get("model").and_then(Value::as_str).unwrap_or("llm").to_owned();
+    if let (Some(i), Some(o)) = (n("input"), n("output")) {
+        s.push_str(&format!(" {i}→{o} tok"));
+    }
+    if let Some(l) = p.get("latency_ms").filter(|v| v.is_number()) {
+        s.push_str(&format!(" {} ms", compact(l)));
+    }
+    if let Some(c) = p.get("cost_usd").filter(|v| v.is_number()) {
+        s.push_str(&format!(" ${}", compact(c)));
+    }
+    if let Some(e) = p.get("error").and_then(Value::as_str) {
+        return format!("{s} ERROR {e}");
+    }
+    let last_user = p
+        .get("messages")
+        .and_then(Value::as_array)
+        .and_then(|m| m.iter().rev().find(|x| x.get("role").and_then(Value::as_str) == Some("user")))
+        .map(message_text)
+        .unwrap_or_default();
+    let answer = p.get("output").and_then(Value::as_array).and_then(|m| m.first()).map(message_text).unwrap_or_default();
+    format!("{s} — {last_user} ⇒ {answer}")
+}
+
+/// The text of a chat message in any of the shapes instrumentations use.
+pub fn message_text(m: &Value) -> String {
+    fn of(c: &Value) -> String {
+        match c {
+            Value::String(s) => s.clone(),
+            Value::Array(parts) => parts
+                .iter()
+                .map(|p| match p {
+                    Value::String(s) => s.clone(),
+                    other => other
+                        .get("content")
+                        .or_else(|| other.get("text"))
+                        .map(of)
+                        .unwrap_or_else(|| other.get("type").and_then(Value::as_str).map(|t| format!("[{t}]")).unwrap_or_default()),
+                })
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" "),
+            Value::Null => String::new(),
+            other => other.to_string(),
+        }
+    }
+    m.get("parts").or_else(|| m.get("content")).map(of).unwrap_or_default()
 }
 
 /// The argument that says most about a tool call: a command, a path, a pattern.

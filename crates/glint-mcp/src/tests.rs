@@ -43,7 +43,7 @@ async fn handshake_and_listing() {
     assert!(s.handle(json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await.is_none());
     let tools = s.handle(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})).await.unwrap();
     let names: Vec<_> = tools["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names.len(), 10);
+    assert_eq!(names.len(), 11);
     assert!(names.contains(&"glint_last_error") && names.contains(&"glint_resume"));
     for t in tools["result"]["tools"].as_array().unwrap() {
         assert_eq!(t["inputSchema"]["type"], "object", "{}", t["name"]);
@@ -152,4 +152,22 @@ async fn annotate_show_clear() {
     assert_eq!(upd.payload, json!({"target": "E1", "meta": {"note": "root cause: null total", "color": "red"}}));
     assert_eq!(upd.origin.lang.as_deref(), Some("agent"));
     assert!(all.iter().any(|e| e.kind == "core.mermaid" && e.meta.label.as_deref() == Some("flow")));
+}
+
+#[tokio::test]
+async fn llm_calls_list_and_totals() {
+    let (s, hub) = server().await;
+    put(&hub, r#"[
+        {"kind":"llm.call","payload":{"model":"claude-sonnet-5-5","usage":{"input":800,"output":60},"latency_ms":1200,"cost_usd":0.003,
+          "messages":[{"role":"user","parts":[{"type":"text","content":"What is 2+2?"}]}],"output":[{"role":"assistant","parts":[{"type":"text","content":"4"}]}]}},
+        {"kind":"llm.call","payload":{"model":"gpt-5","usage":{"input":20,"output":5},"latency_ms":400,"error":"rate limited","messages":[{"role":"user","content":"hi"}]},"meta":{"level":"error"}}
+    ]"#)
+    .await;
+    let (text, err) = call(&s, "glint_llm_calls", json!({})).await;
+    assert!(!err);
+    assert!(text.contains("claude-sonnet-5-5 800→60 tok 1200 ms $0.003 — What is 2+2? ⇒ 4"), "{text}");
+    assert!(text.contains("gpt-5 20→5 tok 400 ms ERROR rate limited"));
+    assert!(text.contains("Totals over 2 calls: 820 input + 65 output tokens, avg latency 800 ms, 1 errors, cost $0.0030"));
+    let (text, _) = call(&s, "glint_llm_calls", json!({"model": "sonnet"})).await;
+    assert!(text.contains("Totals over 1 calls"));
 }

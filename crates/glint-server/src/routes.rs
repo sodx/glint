@@ -38,6 +38,8 @@ const KNOWN_KINDS: &[&str] = &[
     "agent.tool_call",
     "agent.tool_result",
     "agent.permission",
+    "llm.call",
+    "core.span",
     "ctl.resume",
     "sql.query",
 ];
