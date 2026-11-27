@@ -70,6 +70,7 @@ Only `kind` and `payload` are required. The server fills in everything else when
 | `tags` | string[] | free-form |
 | `size` | `sm\|md\|lg` | display hint |
 | `hidden` | bool | stored, collapsed by default |
+| `redacted` | int | set by the server: how many secret values it replaced in this event before storing it. Clients do not send it. |
 
 Unknown `meta` keys MUST be preserved and ignored.
 

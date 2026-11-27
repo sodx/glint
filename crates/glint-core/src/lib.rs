@@ -9,11 +9,13 @@ pub mod config;
 pub mod expect;
 pub mod project;
 mod query;
+pub mod redact;
 
 pub use control::{PauseInfo, PauseState, Resolution};
 pub use hub::{Hub, HubConfig, ResumeError, SubmitError};
 pub use normalise::Normaliser;
 pub use query::Query;
+pub use redact::{RedactConfig, Redactor};
 
 use glint_protocol::Envelope;
 
