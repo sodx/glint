@@ -3,6 +3,9 @@
 Adapter: `crates/glint-ingest/src/ray/` (translation), `crates/glint-server/src/ray.rs` (HTTP).
 Background on the Ray protocol: `docs/research/ray.md`.
 
+Pause verified end to end on 2026-11-27: `ray()->pause()` held a PHP script until an agent
+called `glint_resume` through `glint mcp`.
+
 Verified end to end with `spatie/ray` 1.48.1 (PHP 8.1) on 2026-11-27: every call in
 `newScreen, ray(string|object|array|int|bool|null), label, orange, table, text, html, toJson,
 measure, separator, caller, exception, remove, hide, count, pause` arrived with the right kind,
@@ -14,7 +17,7 @@ file and line.
 |--------------------|---------------|
 | `POST /` | translate, store, `200` once stored |
 | `GET /_availability_check` | `404` — the PHP client reads an HTTP error status as "app is up" |
-| `GET /locks/{name}` | `{"active": false, "stop_execution": false}` — no control plane until M2, so `pause()` returns after one poll |
+| `GET /locks/{name}` | `{"active": true}` while the pause waits; Continue → `{"active": false}`, Stop → `{"stop_execution": true}` (PHP throws `StopExecutionRequested`); unknown lock → continue |
 | `GET /windows`, `GET /theme` | `[]`, `{}` |
 
 Port `127.0.0.1:23517` (`GLINT_RAY_ADDR`, `off` disables). If the port is busy — usually because
@@ -64,7 +67,7 @@ containers.
 | `new_screen` (named) / (empty name) | `core.screen` / `core.clear` | |
 | `clear_all` | `core.clear` | |
 | `notify` | `core.log` | level `info`, label `notify` |
-| `create_lock` (`pause()`) | `core.log` | level `warn`: pause not supported yet |
+| `create_lock` (`pause()`) | `ctl.pause` | id `ray-lock-<name>`; answered from the UI or MCP `glint_resume` |
 | `ai_custom_markdown` / `ai_custom_mermaid` / `ai_custom_html` | `core.markdown` / `core.mermaid` / `core.html` | `iterationOf → iteration_of` |
 | `color` `label` `size` `hide` `remove` | `core.update` | `yellow→orange`, `grey→gray` |
 | `expand` `show_app` `hide_app` `confetti` `screen_color` | — | ignored: they drive Ray's window |

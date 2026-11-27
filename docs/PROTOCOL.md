@@ -101,17 +101,33 @@ Unknown kinds MUST be accepted and stored. Each kind's payload schema lives in
 
 ## 5. Control plane
 
+Control events (`ctl.pause`, `ctl.resume`) are stored like any event, so history shows who
+paused what and who answered. Pause state itself lives in the daemon's memory: after a restart
+a waiting client gets `404` and continues.
+
 ### 5.1 Pause
 
 1. Client sends an envelope `{"id": "<ulid>", "kind": "ctl.pause", "payload": {"reason"?: string, "timeout_s"?: int}}`.
 2. Client long-polls `GET /v1/ctl/<id>` (server holds up to 30 s, returns `204` on hold expiry; client re-polls).
-3. When resumed, server returns `200 {"action": "continue", "value"?: any}`.
-4. Clients MUST give up after `timeout_s` (default 300) and continue. Clients SHOULD skip pauses when
+3. When resumed, server returns `200 {"action": "continue", "value"?: any}` or
+   `200 {"action": "stop"}`. `404` means the pause is unknown (daemon restarted): continue.
+4. Anyone may answer: the UI, an agent (MCP `glint_resume`), or
+   `POST /v1/ctl/<id>/resume {"value"?: any, "stop"?: bool}` (`409` if already answered).
+   The answer is recorded as `ctl.resume {target, action, value?, by}`.
+   `GET /v1/ctl` lists pauses still waiting.
+5. Clients MUST give up after `timeout_s` (default 300) and continue. Clients SHOULD skip pauses when
    `CI=true` unless `GLINT_FORCE_PAUSE=1`.
 
 ### 5.2 Wait for (server-side, used by MCP and CLI)
 
 `GET /v1/wait?filter=<expr>&timeout_s=60` → first matching envelope or `204`.
+
+## 5.3 MCP
+
+`POST /mcp` speaks the Model Context Protocol (Streamable HTTP, JSON responses). Tools:
+`glint_runs`, `glint_events`, `glint_event`, `glint_last_error`, `glint_wait_for`,
+`glint_pauses`, `glint_resume`, `glint_annotate`, `glint_show`, `glint_clear`. `glint mcp` serves
+the same over stdio. Agent annotations are `core.update` events with `meta.note`.
 
 ## 6. Blobs
 

@@ -19,13 +19,17 @@ M1 in progress: Ray-compatible ingest on `:23517` (`docs/mappings/ray.md`) and t
 (`send`, `pipe`) are done, as are SDKs for JS/TS, Python and PHP with the conformance suite
 (`spec/conformance/`, runner `glint conformance`).
 
+M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume from UI, MCP, API;
+Ray `pause()` works) and `glint.pause()` in the JS SDK are done. Next: agent-hooks adapter.
+
 Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray),
-`glint-server`, `glintd`, `glint-cli` (binary `glint`); SDKs in `sdks/{js,python,php}`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
+`glint-server`, `glintd`, `glint-cli` (binary `glint`), `glint-mcp`; SDKs in `sdks/{js,python,php}`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack
 
 - Rust (stable, edition 2024) workspace in `crates/`. Async: `tokio`. HTTP/WS: `axum`. Store:
-  `rusqlite` (bundled, FTS5) behind the `Store` trait. MCP: `rmcp`. Errors: `thiserror` in libraries,
+  `rusqlite` (bundled, FTS5) behind the `Store` trait. MCP: hand-written in `glint-mcp`
+  (ADR 0004). Errors: `thiserror` in libraries,
   `anyhow` only in binaries. Logging: `tracing`.
 - Desktop shell: Tauri 2 in `app/`, embedding `glint-server`.
 - UI: TypeScript + Vite in `ui/`, served by the daemon and embedded in Tauri. Same build for both.
@@ -83,6 +87,8 @@ npm run dev 2>&1 | cargo run -q -p glint-cli -- pipe --label web
 glintd is down lines are dropped with one warning. `glint send` fails loudly instead.
 
 `ui/index.html` is compiled into the binary (`include_str!`): rebuild `glintd` after editing it.
+
+Low disk? `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0` keeps `target/` under 1 GB.
 
 ## Conventions
 

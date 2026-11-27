@@ -35,6 +35,15 @@ cargo run -q -p glint-cli -- send 42 hello
 
 Existing Ray client libraries work unchanged: glintd also listens on Ray's port `23517`.
 
+Connect your coding agent:
+
+```bash
+claude mcp add --transport http glint http://127.0.0.1:23600/mcp   # or: claude mcp add glint -- glint mcp
+```
+
+It can then read the last error with its context, wait for the next run after an edit, resume
+paused programs and leave notes next to events.
+
 ## Status
 
 M0 and part of M1 are done (daemon, live UI, Ray-compatible ingest, `glint send` / `glint pipe`). Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and

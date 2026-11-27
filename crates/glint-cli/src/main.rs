@@ -11,6 +11,7 @@
 mod client;
 mod conformance;
 mod lines;
+mod mcp;
 mod pipe;
 mod send;
 
@@ -72,6 +73,11 @@ enum Command {
         #[command(flatten)]
         common: Common,
     },
+    /// Serve MCP on stdio for coding agents, backed by the running glintd.
+    ///
+    /// Claude Code: `claude mcp add glint -- glint mcp`, or connect over HTTP directly:
+    /// `claude mcp add --transport http glint http://127.0.0.1:23600/mcp`.
+    Mcp,
     /// Check a language SDK against the conformance suite (spec/conformance/).
     ///
     /// Runs the SDK's conformance program three times against an in-memory server: normally,
@@ -138,6 +144,7 @@ fn main() -> ExitCode {
             send::run(&args, &base(common, "send"), &client)
         }
         Command::Pipe { quiet, common } => pipe::run(&pipe::PipeArgs { quiet }, &base(common, "pipe"), &client),
+        Command::Mcp => mcp::run(&cli.url),
         Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };
     match result {

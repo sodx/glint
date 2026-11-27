@@ -14,6 +14,8 @@ pub struct Query {
     pub q: Option<String>,
     /// Only events stored after the event with this id.
     pub after: Option<String>,
+    /// Only events stored before the event with this id.
+    pub before: Option<String>,
     pub limit: Option<usize>,
 }
 
@@ -25,7 +27,7 @@ impl Query {
         self.limit.unwrap_or(Self::DEFAULT_LIMIT).clamp(1, Self::MAX_LIMIT)
     }
 
-    /// In-memory version of the filter, used by the live stream. `after` is ignored, and
+    /// In-memory version of the filter, used by the live stream. `after`/`before` are ignored, and
     /// `q` is a case-insensitive substring match rather than full-text search.
     pub fn matches(&self, e: &Envelope) -> bool {
         if self.project.as_ref().is_some_and(|p| *p != e.project) {

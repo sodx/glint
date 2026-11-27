@@ -82,10 +82,14 @@ impl RayAdapter {
             let origin = client.origin(p.get("origin"));
             match map_payload(ty, content) {
                 Mapped::Event { kind, payload, meta } => {
-                    let n = seen.bump(&uuid);
+                    // A pause is addressed by its lock name, which the client polls.
+                    let id = match payload.get("lock").and_then(Value::as_str) {
+                        Some(name) if kind == "ctl.pause" => lock_id(name),
+                        _ => entry_id(&uuid, seen.bump(&uuid)),
+                    };
                     out.push(IncomingEnvelope {
                         v: None,
-                        id: Some(entry_id(&uuid, n)),
+                        id: Some(id),
                         ts: None,
                         run: None,
                         parent: None,
@@ -143,6 +147,11 @@ impl Seen {
         self.data_count.insert(uuid.to_owned(), 1);
         1
     }
+}
+
+/// Event (and pause) id for a Ray lock name.
+pub fn lock_id(name: &str) -> String {
+    format!("ray-lock-{name}")
 }
 
 fn entry_id(uuid: &str, n: u32) -> String {

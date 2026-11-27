@@ -2,12 +2,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
-use glint_protocol::{Envelope, IncomingEnvelope};
+use glint_protocol::{Envelope, IncomingEnvelope, Meta, Origin};
+use serde_json::{Value, json};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, timeout_at};
 
-use crate::{Normaliser, Query, Store, StoreError};
+use crate::control::{Control, PauseInfo, Resolution, ResolveError};
+use crate::{Normaliser, Query, RunSummary, Store, StoreError};
 
 #[derive(Debug, Clone)]
 pub struct HubConfig {
@@ -44,12 +46,21 @@ struct Inner {
     tx: mpsc::Sender<Job>,
     bus: broadcast::Sender<Arc<Envelope>>,
     normaliser: Mutex<Normaliser>,
+    control: Control,
 }
 
 /// One `submit` call: its events and who to tell once they are stored.
 struct Job {
     events: Vec<Envelope>,
     done: oneshot::Sender<Result<(), String>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ResumeError {
+    #[error(transparent)]
+    Resolve(#[from] ResolveError),
+    #[error(transparent)]
+    Submit(#[from] SubmitError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -73,6 +84,7 @@ impl Hub {
                 tx,
                 bus,
                 normaliser: Mutex::new(Normaliser::new()),
+                control: Control::new(),
             }),
         };
         (hub, writer)
@@ -91,6 +103,11 @@ impl Hub {
         if events.is_empty() {
             return Ok(());
         }
+        let pauses: Vec<PauseInfo> = events
+            .iter()
+            .filter(|e| e.kind == "ctl.pause")
+            .map(PauseInfo::from_event)
+            .collect();
         let (done, stored) = oneshot::channel();
         self.inner
             .tx
@@ -100,7 +117,48 @@ impl Hub {
         stored
             .await
             .map_err(|_| SubmitError::Closed)?
-            .map_err(SubmitError::NotStored)
+            .map_err(SubmitError::NotStored)?;
+        // Registered only once stored, so a pause is never waitable without its event.
+        for p in pauses {
+            self.inner.control.register(p);
+        }
+        Ok(())
+    }
+
+    /// The control plane: paused programs.
+    pub fn control(&self) -> &Control {
+        &self.inner.control
+    }
+
+    /// Answers a pause and records the answer as a `ctl.resume` event aimed at it. `by` says
+    /// who answered (`ui`, `mcp`, `api`).
+    pub async fn resume(&self, id: &str, r: Resolution, by: &str) -> Result<PauseInfo, ResumeError> {
+        let info = self.inner.control.resolve(id, r.clone())?;
+        let mut payload = serde_json::to_value(&r).unwrap_or(Value::Null);
+        payload["target"] = json!(id);
+        payload["by"] = json!(by);
+        let event = IncomingEnvelope {
+            v: None,
+            id: None,
+            ts: None,
+            run: Some(info.run.clone()),
+            parent: None,
+            project: Some(info.project.clone()),
+            origin: Origin { lang: Some("glint".into()), sdk: Some(format!("glintd/{}", env!("CARGO_PKG_VERSION"))), ..Origin::default() },
+            kind: "ctl.resume".into(),
+            payload,
+            meta: Meta::default(),
+        };
+        let events = self.normalise(vec![event]);
+        self.submit(events).await?;
+        Ok(info)
+    }
+
+    pub async fn runs(&self, project: Option<String>, limit: usize) -> Result<Vec<RunSummary>, StoreError> {
+        let store = self.inner.store.clone();
+        tokio::task::spawn_blocking(move || store.runs(project.as_deref(), limit))
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?
     }
 
     /// Live events, after they are stored.
@@ -188,6 +246,28 @@ mod tests {
         fn get(&self, id: &str) -> Result<Option<Envelope>, StoreError> {
             Ok(self.0.lock().unwrap().iter().find(|e| e.id == id).cloned())
         }
+        fn runs(&self, _: Option<&str>, _: usize) -> Result<Vec<RunSummary>, StoreError> {
+            Ok(vec![])
+        }
+    }
+
+    #[tokio::test]
+    async fn pauses_register_on_store_and_resume_records_an_event() {
+        let (hub, _w) = Hub::start(Arc::new(MemStore::default()), HubConfig::default());
+        let inc = parse_body(br#"{"id":"p1","kind":"ctl.pause","payload":{"reason":"check"},"run":"r1"}"#, BodyFormat::Json)
+            .unwrap()
+            .into_iter()
+            .map(Result::unwrap)
+            .collect();
+        let events = hub.normalise(inc);
+        hub.submit(events).await.unwrap();
+        assert_eq!(hub.control().pending()[0].reason.as_deref(), Some("check"));
+        hub.resume("p1", Resolution::Continue { value: Some(json!(3)) }, "test").await.unwrap();
+        assert!(hub.control().pending().is_empty());
+        let all = hub.query(Query::default()).await.unwrap();
+        let resume = all.iter().find(|e| e.kind == "ctl.resume").unwrap();
+        assert_eq!(resume.payload, json!({"action": "continue", "value": 3, "target": "p1", "by": "test"}));
+        assert_eq!(resume.run, "r1");
     }
 
     #[tokio::test]

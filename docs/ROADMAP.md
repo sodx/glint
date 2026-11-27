@@ -20,9 +20,11 @@ Each milestone ends with something a person can use. Order is a guide, not a con
 - Retention (count/age) and `glint clear`.
 - ✅ Ray-compatible ingest adapter (`docs/mappings/ray.md`), verified with spatie/ray 1.48.1.
 
-## M2 — Agents
-- `glint-mcp`: runs, events, event, last_error, wait_for, annotate, clear.
-- Control plane: pause/resume (UI + MCP).
+## M2 — Agents (in progress)
+- ✅ `glint-mcp`: runs, events, event, last_error, wait_for, pauses, resume, annotate, show,
+  clear — over HTTP `/mcp` and stdio `glint mcp` (ADR 0004).
+- ✅ Control plane: pause/resume from UI, MCP and API; Ray `pause()`; JS `glint.pause()`.
+- `glint.pause()` in the Python and PHP SDKs (Ray's pause already covers PHP).
 - Agent-hooks adapter (Claude Code first) → `agent.*` kinds and tree view.
 
 ## M3 — LLM observability

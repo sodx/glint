@@ -159,5 +159,83 @@ async fn ray_clients_land_in_the_same_store() {
     assert_eq!(upd["events"][0]["payload"], json!({"target": "ray-e2e-uuid", "meta": {"color": "red"}}));
 
     let lock: Value = http.get(format!("http://{ray_addr}/locks/abc?hostname=box&project_name=")).send().await.unwrap().json().await.unwrap();
-    assert_eq!(lock, json!({"active": false, "stop_execution": false}));
+    assert_eq!(lock, json!({"active": false, "stop_execution": false}), "unknown lock: continue");
+
+    // ray()->pause(): the lock stays active until someone answers through the native API.
+    let pause = json!({"uuid": "p-uuid", "payloads": [{"type": "create_lock", "content": {"name": "L1"}, "origin": {"file": "/app/a.php", "line_number": 9, "hostname": "box"}}], "meta": {}});
+    http.post(format!("http://{ray_addr}/")).json(&pause).send().await.unwrap();
+    let lock: Value = http.get(format!("http://{ray_addr}/locks/L1")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(lock["active"], true);
+    let listed: Value = http.get(format!("http://{main_addr}/v1/ctl")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(listed["pauses"][0]["id"], "ray-lock-L1");
+    let res = http.post(format!("http://{main_addr}/v1/ctl/ray-lock-L1/resume")).json(&json!({"stop": true})).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let lock: Value = http.get(format!("http://{ray_addr}/locks/L1")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(lock, json!({"active": false, "stop_execution": true}));
+}
+
+#[tokio::test]
+async fn native_pause_long_poll_and_resume() {
+    let addr = start().await;
+    let http = reqwest::Client::new();
+    http.post(format!("http://{addr}/v1/events"))
+        .json(&json!({"id": "pz", "kind": "ctl.pause", "payload": {"reason": "inspect"}}))
+        .send()
+        .await
+        .unwrap();
+    let still = http.get(format!("http://{addr}/v1/ctl/pz?timeout_s=1")).send().await.unwrap();
+    assert_eq!(still.status(), 204);
+
+    let waiter = {
+        let http = http.clone();
+        tokio::spawn(async move { http.get(format!("http://{addr}/v1/ctl/pz?timeout_s=10")).send().await.unwrap() })
+    };
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let res = http.post(format!("http://{addr}/v1/ctl/pz/resume")).json(&json!({"value": {"ok": true}, "by": "ui"})).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    let answer: Value = waiter.await.unwrap().json().await.unwrap();
+    assert_eq!(answer, json!({"action": "continue", "value": {"ok": true}}));
+
+    let again = http.post(format!("http://{addr}/v1/ctl/pz/resume")).send().await.unwrap();
+    assert_eq!(again.status(), 409);
+    let unknown = http.get(format!("http://{addr}/v1/ctl/nope?timeout_s=1")).send().await.unwrap();
+    assert_eq!(unknown.status(), 404);
+}
+
+#[tokio::test]
+async fn mcp_over_http() {
+    let addr = start().await;
+    let http = reqwest::Client::new();
+    let url = format!("http://{addr}/mcp");
+    let init = http
+        .post(&url)
+        .header("accept", "application/json, text/event-stream")
+        .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "e2e", "version": "0"}}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(init.status(), 200);
+    assert!(init.headers().contains_key("mcp-session-id"));
+    let body: Value = init.json().await.unwrap();
+    assert_eq!(body["result"]["serverInfo"]["name"], "glint");
+
+    let note = http.post(&url).json(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).send().await.unwrap();
+    assert_eq!(note.status(), 202);
+
+    http.post(format!("http://{addr}/v1/events")).json(&json!({"kind": "core.log", "payload": {"message": "seen by agent"}})).send().await.unwrap();
+    let res: Value = http
+        .post(&url)
+        .json(&json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "glint_events", "arguments": {}}}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(res["result"]["content"][0]["text"].as_str().unwrap().contains("seen by agent"));
+
+    let bad = http.post(&url).body("{nope").send().await.unwrap();
+    assert_eq!(bad.status(), 400);
+    let foreign = http.post(&url).header("origin", "https://evil.example").json(&json!({"jsonrpc": "2.0", "id": 3, "method": "ping"})).send().await.unwrap();
+    assert_eq!(foreign.status(), 403);
 }

@@ -474,6 +474,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glint-mcp"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "glint-core",
+ "glint-protocol",
+ "glint-store-sqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "glint-protocol"
 version = "0.1.0"
 dependencies = [
@@ -491,6 +504,7 @@ dependencies = [
  "futures-util",
  "glint-core",
  "glint-ingest",
+ "glint-mcp",
  "glint-protocol",
  "glint-store-sqlite",
  "reqwest",

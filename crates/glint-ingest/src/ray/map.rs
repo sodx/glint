@@ -136,10 +136,10 @@ pub(super) fn map_payload(ty: &str, c: Value) -> Mapped {
             Some(Level::Info),
         ),
         "create_lock" => event_with(
-            "core.log",
-            json!({ "message": "ray()->pause() is not supported yet; execution continued" }),
-            Some("pause"),
-            Some(Level::Warn),
+            "ctl.pause",
+            json!({ "reason": "ray()->pause()", "lock": str_of(&c, "name").unwrap_or("") }),
+            None,
+            None,
         ),
         "ai_custom_markdown" => event_with(
             "core.markdown",

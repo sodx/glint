@@ -41,6 +41,7 @@ impl Default for Options {
 /// turns true.
 pub fn router(hub: Hub, addr: SocketAddr, stop: watch::Receiver<bool>, opts: Options) -> Router {
     let state = routes::AppState {
+        mcp: glint_mcp::McpServer::new(hub.clone()),
         hub,
         stop,
         adapters: Arc::new(opts.adapters),

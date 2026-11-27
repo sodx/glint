@@ -7,7 +7,8 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Json;
 use futures_util::{SinkExt, StreamExt};
-use glint_core::{Hub, Query, SubmitError};
+use glint_core::control::ResolveError;
+use glint_core::{Hub, PauseState, Query, Resolution, ResumeError, SubmitError};
 use glint_ingest::native;
 use glint_protocol::{MAX_BODY_BYTES, PROTOCOL_VERSION};
 use serde_json::json;
@@ -31,12 +32,15 @@ const KNOWN_KINDS: &[&str] = &[
     "core.screen",
     "core.clear",
     "core.update",
+    "ctl.pause",
+    "ctl.resume",
     "sql.query",
 ];
 
 #[derive(Clone)]
 pub struct AppState {
     pub hub: Hub,
+    pub mcp: glint_mcp::McpServer,
     pub stop: watch::Receiver<bool>,
     /// Adapters this daemon runs, for `/v1/info`.
     pub adapters: std::sync::Arc<Vec<String>>,
@@ -55,6 +59,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/events", post(ingest).get(list))
         .route("/v1/events/{id}", get(one))
         .route("/v1/stream", get(stream))
+        .route("/v1/ctl", get(pauses))
+        .route("/v1/ctl/{id}", get(wait_pause))
+        .route("/v1/ctl/{id}/resume", post(resume))
+        .route("/mcp", post(mcp).get(|| async { StatusCode::METHOD_NOT_ALLOWED }).delete(|| async { StatusCode::NO_CONTENT }))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }
@@ -144,6 +152,75 @@ async fn pump(socket: WebSocket, hub: Hub, mut stop: watch::Receiver<bool>, filt
                 Some(Ok(_)) => {}
             },
         }
+    }
+}
+
+async fn pauses(State(hub): State<Hub>) -> Json<serde_json::Value> {
+    Json(json!({ "pauses": hub.control().pending() }))
+}
+
+#[derive(serde::Deserialize)]
+struct WaitParams {
+    timeout_s: Option<u64>,
+}
+
+/// Long-poll for a pause's answer (`docs/PROTOCOL.md` §5.1): 200 with the answer, 204 while
+/// still paused, 404 when the pause is unknown (the client should continue).
+async fn wait_pause(State(hub): State<Hub>, Path(id): Path<String>, QueryParams(p): QueryParams<WaitParams>) -> Response {
+    let timeout = std::time::Duration::from_secs(p.timeout_s.unwrap_or(30).clamp(1, 60));
+    match hub.control().wait(&id, timeout).await {
+        PauseState::Resolved(r) => Json(r).into_response(),
+        PauseState::Pending => StatusCode::NO_CONTENT.into_response(),
+        PauseState::Unknown => error(StatusCode::NOT_FOUND, format!("no pause with id `{id}`")),
+    }
+}
+
+#[derive(serde::Deserialize, Default)]
+struct ResumeBody {
+    value: Option<serde_json::Value>,
+    #[serde(default)]
+    stop: bool,
+    by: Option<String>,
+}
+
+async fn resume(State(hub): State<Hub>, Path(id): Path<String>, body: Bytes) -> Response {
+    let b: ResumeBody = if body.is_empty() {
+        ResumeBody::default()
+    } else {
+        match serde_json::from_slice(&body) {
+            Ok(b) => b,
+            Err(e) => return error(StatusCode::BAD_REQUEST, e.to_string()),
+        }
+    };
+    let r = if b.stop { Resolution::Stop } else { Resolution::Continue { value: b.value } };
+    let by = match b.by.as_deref() {
+        Some("ui") => "ui",
+        _ => "api",
+    };
+    match hub.resume(&id, r, by).await {
+        Ok(info) => Json(json!({ "resumed": info.id })).into_response(),
+        Err(ResumeError::Resolve(e @ ResolveError::Unknown(_))) => error(StatusCode::NOT_FOUND, e.to_string()),
+        Err(ResumeError::Resolve(e @ ResolveError::AlreadyResolved(_))) => error(StatusCode::CONFLICT, e.to_string()),
+        Err(e) => error(StatusCode::SERVICE_UNAVAILABLE, e.to_string()),
+    }
+}
+
+/// MCP over Streamable HTTP: JSON in, JSON out (no SSE stream needed for these tools).
+async fn mcp(State(s): State<AppState>, body: Bytes) -> Response {
+    let msg: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(glint_mcp::error(serde_json::Value::Null, -32700, &format!("parse error: {e}")))).into_response(),
+    };
+    let is_init = msg.get("method").and_then(serde_json::Value::as_str) == Some("initialize");
+    match s.mcp.handle(msg).await {
+        Some(reply) => {
+            let mut res = Json(reply).into_response();
+            if is_init && let Ok(v) = axum::http::HeaderValue::from_str(&format!("glint-{}", std::process::id())) {
+                res.headers_mut().insert("mcp-session-id", v);
+            }
+            res
+        }
+        None => StatusCode::ACCEPTED.into_response(),
     }
 }
 

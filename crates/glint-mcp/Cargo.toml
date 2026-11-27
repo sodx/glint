@@ -1,0 +1,21 @@
+[package]
+name = "glint-mcp"
+description = "Model Context Protocol server: lets coding agents read and drive Glint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+glint-protocol.workspace = true
+glint-core.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+glint-store-sqlite.workspace = true
+
+[lints]
+workspace = true

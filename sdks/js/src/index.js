@@ -282,6 +282,45 @@ glint.measure = (name, fn) => {
 
 glint.send = (kind, payload, meta) => new Entry([emit(String(kind), encode(payload), meta ? encode(meta) : undefined)]);
 
+/** Thrown by `glint.pause()` when someone answers the pause with "stop". */
+export class GlintStop extends Error {
+  constructor() {
+    super("glint: stop requested");
+    this.name = "GlintStop";
+  }
+}
+
+/**
+ * Waits until someone continues the program from the Glint UI or an agent (MCP
+ * `glint_resume`). Resolves with the value they passed, if any. Skipped (resolves at once)
+ * when disabled, when Glint is unreachable, and on CI unless GLINT_FORCE_PAUSE=1.
+ */
+glint.pause = async (reason, { timeoutMs = 300_000 } = {}) => {
+  if (!config.enabled) return undefined;
+  if (env("CI") && !env("GLINT_FORCE_PAUSE")) return undefined;
+  const id = emit("ctl.pause", reason === undefined ? {} : { reason: String(reason) });
+  if (!id) return undefined;
+  await glint.flush(); // the pause must be stored before we ask about it
+  const base = config.url.replace(/\/$/, "");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let res;
+    try {
+      res = await fetch(`${base}/v1/ctl/${encodeURIComponent(id)}?timeout_s=25`, {
+        signal: AbortSignal.timeout ? AbortSignal.timeout(30_000) : undefined,
+      });
+    } catch {
+      return undefined; // Glint went away: carry on
+    }
+    if (res.status === 204) continue;
+    if (res.status !== 200) return undefined;
+    const answer = await res.json();
+    if (answer.action === "stop") throw new GlintStop();
+    return answer.value;
+  }
+  return undefined;
+};
+
 /** Resolves once everything queued so far has been sent, or after `timeoutMs`. */
 glint.flush = (timeoutMs = TIMEOUT_MS) => {
   drain();

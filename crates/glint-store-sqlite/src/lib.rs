@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use chrono::SecondsFormat;
-use glint_core::{Query, Store, StoreError};
+use glint_core::{Query, RunSummary, Store, StoreError};
 use glint_protocol::Envelope;
 use rusqlite::{Connection, OpenFlags, params_from_iter, types::Value as Sql};
 use serde_json::Value;
@@ -151,6 +151,10 @@ impl Store for SqliteStore {
             sql.push_str(" AND seq > COALESCE((SELECT seq FROM events WHERE id = ?), 0)");
             args.push(Sql::Text(after.clone()));
         }
+        if let Some(before) = &q.before {
+            sql.push_str(" AND seq < COALESCE((SELECT seq FROM events WHERE id = ?), 0)");
+            args.push(Sql::Text(before.clone()));
+        }
         sql.push_str(" ORDER BY seq DESC LIMIT ?");
         args.push(Sql::Integer(i64::try_from(q.limit()).unwrap_or(i64::MAX)));
 
@@ -165,6 +169,37 @@ impl Store for SqliteStore {
             }
             out.reverse();
             Ok(out)
+        })
+    }
+
+    fn runs(&self, project: Option<&str>, limit: usize) -> Result<Vec<RunSummary>, StoreError> {
+        // Bookkeeping events (updates, resumes) don't make a run "active".
+        let sql = "SELECT g.run, g.project, g.first, g.last, g.n, g.errors, e.id
+                   FROM (SELECT run, MAX(project) AS project, MIN(ts) AS first, MAX(ts) AS last,
+                                COUNT(*) AS n, SUM(level >= 4) AS errors, MAX(seq) AS last_seq
+                         FROM events
+                         WHERE kind NOT IN ('core.update', 'ctl.resume') AND (?1 IS NULL OR project = ?1)
+                         GROUP BY run
+                         ORDER BY last_seq DESC
+                         LIMIT ?2) g
+                   JOIN events e ON e.seq = g.last_seq
+                   ORDER BY g.last_seq DESC";
+        self.read(|conn| {
+            let mut stmt = conn.prepare_cached(sql).map_err(backend)?;
+            let rows = stmt
+                .query_map(rusqlite::params![project, i64::try_from(limit).unwrap_or(i64::MAX)], |r| {
+                    Ok(RunSummary {
+                        run: r.get(0)?,
+                        project: r.get(1)?,
+                        first: r.get(2)?,
+                        last: r.get(3)?,
+                        events: r.get::<_, i64>(4)?.try_into().unwrap_or(0),
+                        errors: r.get::<_, Option<i64>>(5)?.unwrap_or(0).try_into().unwrap_or(0),
+                        last_id: r.get(6)?,
+                    })
+                })
+                .map_err(backend)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(backend)
         })
     }
 
@@ -318,6 +353,26 @@ mod tests {
         assert_eq!(kinds(&s.query(&q(r#"{"limit":2}"#)).unwrap()), ["sql.query", "core.exception"]);
         let after = Query { after: Some(all[0].id.clone()), ..Default::default() };
         assert_eq!(kinds(&s.query(&after).unwrap()), ["sql.query", "core.exception"]);
+    }
+
+    #[test]
+    fn runs_summarise_newest_first() {
+        let s = sample();
+        let runs = s.runs(None, 10).unwrap();
+        assert_eq!(runs.iter().map(|r| r.run.as_str()).collect::<Vec<_>>(), ["r2", "r1"]);
+        assert_eq!((runs[0].events, runs[0].errors), (1, 1));
+        assert_eq!((runs[1].events, runs[1].errors, runs[1].project.as_str()), (2, 0, "shop"));
+        assert_eq!(s.runs(Some("shop"), 10).unwrap().len(), 1);
+        let all = s.query(&Query::default()).unwrap();
+        assert_eq!(runs[0].last_id, all[2].id);
+    }
+
+    #[test]
+    fn before_pages_backward() {
+        let s = sample();
+        let all = s.query(&Query::default()).unwrap();
+        let q = Query { before: Some(all[2].id.clone()), ..Default::default() };
+        assert_eq!(kinds(&s.query(&q).unwrap()), ["core.log", "sql.query"]);
     }
 
     #[test]

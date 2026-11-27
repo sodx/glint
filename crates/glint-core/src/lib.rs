@@ -2,11 +2,13 @@
 //! [`Store`] and fans them out on a bus. Knows no transport, no storage engine and no
 //! language.
 
+pub mod control;
 mod hub;
 mod normalise;
 mod query;
 
-pub use hub::{Hub, HubConfig, SubmitError};
+pub use control::{PauseInfo, PauseState, Resolution};
+pub use hub::{Hub, HubConfig, ResumeError, SubmitError};
 pub use normalise::Normaliser;
 pub use query::Query;
 
@@ -21,6 +23,21 @@ pub trait Store: Send + Sync + 'static {
     fn query(&self, q: &Query) -> Result<Vec<Envelope>, StoreError>;
     /// One event by id.
     fn get(&self, id: &str) -> Result<Option<Envelope>, StoreError>;
+    /// The most recently active runs, newest first.
+    fn runs(&self, project: Option<&str>, limit: usize) -> Result<Vec<RunSummary>, StoreError>;
+}
+
+/// One run (a process, request, test or agent session) at a glance.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct RunSummary {
+    pub run: String,
+    pub project: String,
+    pub first: String,
+    pub last: String,
+    pub events: u64,
+    pub errors: u64,
+    /// Id of the newest event in the run, a cursor for queries.
+    pub last_id: String,
 }
 
 #[derive(Debug, thiserror::Error)]

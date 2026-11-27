@@ -30,10 +30,17 @@ export interface Glint {
   measure<T>(name: string, fn: () => T): T;
   /** Sends any kind as-is, e.g. `glint.send("x-acme.order", {...})`. */
   send(kind: string, payload: unknown, meta?: Record<string, unknown>): Entry;
+  /**
+   * Waits until someone continues the program from the Glint UI or an agent; resolves with the
+   * value they passed. Throws GlintStop if they chose "stop". No-op on CI unless GLINT_FORCE_PAUSE=1.
+   */
+  pause<T = unknown>(reason?: string, options?: { timeoutMs?: number }): Promise<T | undefined>;
   /** Resolves once queued events are sent, or after `timeoutMs`. */
   flush(timeoutMs?: number): Promise<void>;
   configure(options: { url?: string; enabled?: boolean; project?: string }): void;
 }
+
+export declare class GlintStop extends Error {}
 
 export declare const glint: Glint;
 export default glint;

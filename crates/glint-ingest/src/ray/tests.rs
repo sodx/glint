@@ -1,7 +1,6 @@
 //! Bodies below are shaped exactly like `spatie/ray` sends them (see `docs/research/ray.md`).
 
 use super::*;
-use glint_protocol::Level;
 use serde_json::json;
 
 const META: &str = r#"{"php_version":"8.3.4","php_version_id":80304,"project_name":"shop","ray_package_version":"1.41.0"}"#;
@@ -169,10 +168,11 @@ fn screens_measure_pause_and_ignored() {
         ))
         .unwrap();
     let kinds: Vec<_> = out.iter().map(|e| e.kind.as_str()).collect();
-    assert_eq!(kinds, ["core.clear", "core.screen", "core.measure", "core.log", "core.separator"]);
+    assert_eq!(kinds, ["core.clear", "core.screen", "core.measure", "ctl.pause", "core.separator"]);
     assert_eq!(out[2].payload["duration_ms"], 12.5);
     assert_eq!(out[2].payload["memory_bytes"], 2_097_152);
-    assert_eq!(out[3].meta.level, Some(Level::Warn));
+    assert_eq!(out[3].id.as_deref(), Some("ray-lock-abc"));
+    assert_eq!(out[3].payload, json!({"reason": "ray()->pause()", "lock": "abc"}));
 }
 
 #[test]

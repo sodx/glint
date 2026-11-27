@@ -61,6 +61,14 @@
   .screen { display: flex; align-items: center; gap: 10px; color: var(--accent); font-size: 12px; margin: 16px 0 10px; }
   .screen::after { content: ""; flex: 1; border-top: 1px solid var(--accent); opacity: .4; }
   button.mini { float: right; font-size: 11px; padding: 1px 6px; margin: 0 0 4px 8px; }
+  .pause { border-color: var(--accent); }
+  .pause .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .pause .actions input { flex: 1 1 160px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .pause button.go { border-color: var(--c-green); color: var(--c-green); }
+  .pause button.stop { border-color: var(--c-red); color: var(--c-red); }
+  .pause .state { color: var(--muted); }
+  .note { border-left: 3px solid var(--c-purple); padding: 2px 8px; margin-top: 6px; color: var(--text); font-style: normal; }
+  .note::before { content: "note · "; color: var(--c-purple); }
   hr.sep { border: 0; border-top: 2px dashed var(--line); margin: 14px 0; }
   .note { color: var(--muted); font-style: italic; margin: 6px 0; }
   .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -242,6 +250,34 @@ const renderers = {
   "core.measure": p => el("pre", "", `${(p && p.name) || "measure"}: ${p && p.duration_ms != null ? p.duration_ms + " ms" : "?"}` +
     (p && p.since_last_ms != null && !p.new_timer ? ` (+${p.since_last_ms} ms since last)` : "") +
     (p && p.memory_bytes ? `, ${(p.memory_bytes / 1048576).toFixed(1)} MiB` : "")),
+  "ctl.pause"(p, e) {
+    const box = el("div");
+    box.appendChild(el("div", "exc-title", "⏸ Paused" + (p && p.reason ? " — " + p.reason : "")));
+    const actions = el("div", "actions");
+    const value = el("input");
+    value.placeholder = "optional JSON value to hand back";
+    const go = el("button", "go", "Continue");
+    const stop = el("button", "stop", "Stop");
+    const state = el("span", "state");
+    const answer = async (body) => {
+      go.disabled = stop.disabled = true;
+      try {
+        const res = await fetch(`/v1/ctl/${encodeURIComponent(e.id)}/resume`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, by: "ui" }),
+        });
+        if (!res.ok) { state.textContent = (await res.json()).error || res.statusText; go.disabled = stop.disabled = false; }
+      } catch (err) { state.textContent = String(err); go.disabled = stop.disabled = false; }
+    };
+    go.addEventListener("click", () => {
+      const raw = value.value.trim();
+      if (!raw) return answer({});
+      try { answer({ value: JSON.parse(raw) }); } catch { answer({ value: raw }); }
+    });
+    stop.addEventListener("click", () => answer({ stop: true }));
+    [value, go, stop, state].forEach(x => actions.appendChild(x));
+    box.appendChild(actions);
+    return box;
+  },
   "sql.query"(p) {
     const box = el("div");
     box.appendChild(el("pre", "block", (p && p.sql) || ""));
@@ -287,14 +323,21 @@ function renderEvent(e) {
   n.appendChild(head);
   const body = el("div", "body");
   const r = renderers[e.kind];
-  try { body.appendChild(r ? r(e.payload) : jsonTree(e.payload)); }
+  try { body.appendChild(r ? r(e.payload, e) : jsonTree(e.payload)); }
   catch (err) { body.appendChild(jsonTree(e.payload)); }
   n.appendChild(body);
+  if (e.kind === "ctl.pause") n.classList.add("pause");
   applyMeta(n, e.meta || {});
+  if (e.resolved) markResolved(n, e.resolved);
   return n;
 }
 function applyMeta(n, m) {
   if (m.color) n.dataset.color = m.color;
+  let note = n.querySelector(":scope > .note");
+  if (m.note) {
+    if (!note) { note = el("div", "note"); n.appendChild(note); }
+    note.textContent = m.note;
+  }
   if (m.label != null) n.querySelector(".label").textContent = m.label;
   n.classList.remove("sm", "lg");
   if (m.size === "sm" || m.size === "lg") n.classList.add(m.size);
@@ -314,6 +357,16 @@ function accept(e) {
     return;
   }
   if (e.kind === "core.clear") { clearView(); return; }
+  if (e.kind === "ctl.resume") {
+    const p = e.payload || {};
+    const target = byId.get(p.target);
+    if (target) {
+      target.resolved = p;
+      const n = feed.querySelector(`[data-id="${CSS.escape(target.id)}"]`);
+      if (n) markResolved(n, p);
+    }
+    return;
+  }
   byId.set(e.id, e);
   for (const u of pendingUpdates.get(e.id) || []) mergeUpdate(e, u, false);
   pendingUpdates.delete(e.id);
@@ -325,6 +378,14 @@ function accept(e) {
   if (matchesFilter(e)) append(renderEvent(e));
   updateCount();
 }
+function markResolved(n, p) {
+  const actions = n.querySelector(".actions");
+  if (!actions) return;
+  const what = p.action === "stop" ? "stopped" : "continued" + (p.value !== undefined ? " with " + JSON.stringify(p.value) : "");
+  actions.replaceChildren(el("span", "state", `${what} by ${p.by || "?"}`));
+  n.classList.remove("pause");
+}
+
 function mergeUpdate(e, u, redraw = true) {
   e.meta = Object.assign({}, e.meta, u.meta || {});
   if (u.hidden != null) e.meta.hidden = u.hidden;
