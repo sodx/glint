@@ -114,6 +114,9 @@ Glint::send('x-conformance.custom', ['a' => 1], ['label' => 'raw']);
 begin('origin');
 glint('origin-check'); // glint:origin
 
+begin('origin-method');
+Glint::log('origin-log'); // glint:origin
+
 // No flush here on purpose: the SDK delivers queued events from its shutdown hook.
 begin('end');
 glint('end');

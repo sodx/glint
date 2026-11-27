@@ -113,5 +113,8 @@ glint.send("x-conformance.custom", {"a": 1}, {"label": "raw"})
 begin("origin")
 glint("origin-check")  # glint:origin
 
+begin("origin-method")
+glint.log("origin-log")  # glint:origin
+
 begin("end")
 glint("end")

@@ -127,6 +127,14 @@
       "check_origin_marker": true
     },
     {
+      "name": "origin-method",
+      "do": "glint.log(\"origin-log\") on a line that also carries a comment containing glint:origin; the origin is that line, not the SDK's",
+      "expect": [
+        { "kind": "core.log", "payload": { "message": "origin-log" }, "origin": { "file": "$string", "line": "$int" } }
+      ],
+      "check_origin_marker": true
+    },
+    {
       "name": "end",
       "do": "glint(\"end\"), then exit normally without calling flush — the SDK must deliver it on exit",
       "expect": [

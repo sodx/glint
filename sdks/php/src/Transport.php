@@ -255,7 +255,7 @@ final class Transport
         $bt = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10);
         // The call of the global glint() helper is the user's line, wherever the helper lives
         // (this package, or the copy `glint install` prepends to every script).
-        $start = 0;
+        $start = null;
         foreach ($bt as $i => $frame) {
             if (($frame['function'] ?? '') === 'glint' && !isset($frame['class'])) {
                 $start = $i;
@@ -264,7 +264,10 @@ final class Transport
         }
         foreach ($bt as $i => $frame) {
             $file = $frame['file'] ?? null;
-            if ($i < $start || !is_string($file) || ($i > $start && str_starts_with($file, self::SRC_DIR))) {
+            if (!is_string($file) || ($start !== null && $i < $start)) {
+                continue;
+            }
+            if ($i !== $start && str_starts_with($file, self::SRC_DIR)) {
                 continue;
             }
             $o['file'] = $file;

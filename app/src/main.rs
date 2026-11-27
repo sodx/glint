@@ -46,19 +46,45 @@ fn daemon_up() -> bool {
     get("/v1/info").is_some()
 }
 
-/// Start glintd when nothing answers: the copy bundled next to this binary, else the one
-/// `glint install` put in ~/.glint/bin. Its output goes to ~/.glint/glintd.log.
+const SERVICE_LABEL: &str = "local.glint.glintd";
+
+fn wait_up(tenths: u32) -> bool {
+    for _ in 0..tenths {
+        if daemon_up() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
+
+/// Start glintd when nothing answers. When `glint install` set it up as a login service, ask the
+/// service manager to start it: starting a copy ourselves would take its port, and the service
+/// (kept current by `glint install`) would then fail to start. Otherwise run the newest of
+/// ~/.glint/bin/glintd and the copy bundled next to this binary, logging to ~/.glint/glintd.log.
 fn ensure_daemon() {
     if daemon_up() {
         return;
     }
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-    let mut candidates = Vec::new();
+    if cfg!(target_os = "macos") && home.join(format!("Library/LaunchAgents/{SERVICE_LABEL}.plist")).exists() {
+        let uid = Command::new("id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned()).unwrap_or_default();
+        let _ = Command::new("launchctl").args(["kickstart", &format!("gui/{uid}/{SERVICE_LABEL}")]).status();
+        wait_up(50);
+        return;
+    }
+    if cfg!(target_os = "linux") && home.join(".config/systemd/user/glintd.service").exists() {
+        let _ = Command::new("systemctl").args(["--user", "start", "glintd.service"]).status();
+        wait_up(50);
+        return;
+    }
+    let mut candidates = vec![home.join(".glint/bin/glintd")];
     if let Ok(exe) = std::env::current_exe() {
         candidates.push(exe.with_file_name("glintd"));
     }
-    candidates.push(home.join(".glint/bin/glintd"));
-    let Some(bin) = candidates.into_iter().find(|p| p.exists()) else { return };
+    candidates.retain(|p| p.exists());
+    candidates.sort_by_key(|p| std::cmp::Reverse(std::fs::metadata(p).and_then(|m| m.modified()).ok()));
+    let Some(bin) = candidates.into_iter().next() else { return };
     let log = std::fs::create_dir_all(home.join(".glint"))
         .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(home.join(".glint/glintd.log")));
     let mut cmd = Command::new(bin);
@@ -69,12 +95,7 @@ fn ensure_daemon() {
         }
     }
     if cmd.spawn().is_ok() {
-        for _ in 0..30 {
-            if daemon_up() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
+        wait_up(30);
     }
 }
 
@@ -152,6 +173,7 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
     let mut first = true;
     let mut failing = false;
     let mut shown: Option<State> = None;
+    let mut misses = 0u32;
     loop {
         let errors = get("/v1/events?level=error&limit=1");
         let pauses = get("/v1/ctl");
@@ -197,10 +219,16 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
                     (State::Ok, "✓ All quiet".to_owned())
                 };
                 first = false;
+                misses = 0;
             }
             _ => {
                 (state, line) = (State::Offline, "glintd is not running".to_owned());
-                ensure_daemon();
+                // A restart (e.g. `glint install` replacing the binary) takes under a second.
+                misses += 1;
+                if misses >= 3 {
+                    ensure_daemon();
+                    misses = 0;
+                }
             }
         }
         if shown != Some(state) {

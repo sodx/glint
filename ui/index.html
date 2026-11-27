@@ -124,6 +124,7 @@ ol.entries { list-style: none; margin: 0 0 96px; padding: 0; }
 .row:hover .loc, .open .loc { opacity: 1; }
 .open > .row { background: var(--hover); align-items: start; }
 .open .sum { white-space: normal; overflow: visible; }
+.open .sum .in-pane { display: none; }
 .open .node { margin-top: 0; }
 .new > .row { animation: arrive 2.4s cubic-bezier(.16,1,.3,1); }
 @keyframes arrive { from { background: var(--accent-soft); } to { background: transparent; } }
@@ -154,10 +155,19 @@ th, td { text-align: left; padding: 6px 18px 6px 0; border-bottom: 1px solid var
 th { color: var(--muted); font-weight: 500; }
 .tree { font: 13px/1.65 var(--mono); }
 .tree .k { color: var(--muted); } .tree .s { color: var(--str); } .tree .n { color: var(--num); } .tree .z { color: var(--faint); }
-.tree details > summary { cursor: pointer; list-style: none; }
-.tree details > summary:hover .z { color: var(--text); }
-.tree details > summary::-webkit-details-marker { display: none; }
-.tree .in { padding-left: 18px; }
+.tree .jl { padding-left: 18px; position: relative; }
+.tree .j .in { display: block; }
+.tree .jt { all: unset; cursor: pointer; color: var(--muted); border-radius: 3px; }
+.tree .jt::before { content: ""; position: absolute; left: 5px; top: .68em; border: 4px solid transparent; border-top-color: var(--faint); border-bottom: 0; transition: transform .12s; }
+.tree .j.shut > .jt::before { transform: rotate(-90deg); }
+.tree .jt:hover, .tree .jt:hover::before { color: var(--text); border-top-color: var(--text); }
+.tree .jt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tree .fold { display: none; color: var(--faint); cursor: pointer; }
+.tree .fold:hover { color: var(--muted); }
+.tree .j.shut > .fold { display: inline; }
+.tree .j.shut > .in, .tree .j.shut > .close { display: none; }
+.tree .close { color: var(--muted); }
+.tree > .j > .jt::before { display: none; }
 .field { display: flex; gap: 6px; }
 .field input { flex: 1; height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; background: var(--surface); color: var(--text); font: 13px var(--mono); }
 .empty { color: var(--muted); padding: 24px 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -322,8 +332,12 @@ ol.entries:has(.onboard)::before { display: none; }
 .entry.sep hr { border: 0; border-top: 1px dashed var(--line-strong); margin: 10px 0 10px 32px; }
 iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .has-note { font-size: 11px; color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent); border-radius: 999px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; }
-.origin-line { padding-top: 2px; }
-.origin-line .link { padding: 0 4px; font-size: 13px; }
+.origin-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.origin-line > * + *::before { content: "·"; margin-right: 10px; color: var(--faint); opacity: .7; }
+.origin-line .where { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border-radius: 3px; }
+.origin-line a.where:hover { color: var(--text); }
+.origin-line .where .i { width: 11px; height: 11px; opacity: 0; transition: opacity .12s; }
+.entry:hover .origin-line .where .i, .origin-line .where:focus-visible .i { opacity: .8; }
 .qa a.qa-a { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
 .qa a.qa-a:hover { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); }
 .entry[data-color="red"] .node { color: var(--red); border-color: color-mix(in oklch, var(--red) 45%, transparent); }
@@ -537,25 +551,43 @@ function rowLevel(e) {
 /* ---------------- value tree ---------------- */
 const prim = v => v === null ? `<span class="z">null</span>` : typeof v === "string" ? `<span class="s">"${esc(v)}"</span>` : `<span class="n">${esc(v)}</span>`;
 const isPrim = v => v === null || typeof v !== "object";
-function inline(v) {
+/* JSON as JSON: one key per line, braces kept, every object and array foldable (⌥-click unfolds
+   or folds a whole branch). Small values open fully; a big one opens only its top level, and each
+   folded node previews its first scalars. Short lists of scalars stay on one line. */
+const FOLD_KIDS = 25, BIG_JSON = 4000;
+function jsonLen(v) { try { return JSON.stringify(v).length; } catch { return 0; } }
+function jflat(v) {
   if (isPrim(v)) return prim(v);
   if (v.$ref !== undefined) return `<span class="z">↺ ${esc(v.$ref)}</span>`;
   if (v.$truncated) return `<span class="z">… truncated</span>`;
   if (v.$bin !== undefined) return `<span class="z">bytes (${Math.round(String(v.$bin).length * 0.75)} B)</span>`;
-  if (Array.isArray(v)) return v.length <= 6 && v.every(isPrim) ? `[${v.map(prim).join(", ")}]` : null;
   const ks = Object.keys(v);
-  return ks.length <= 3 && ks.every(k => isPrim(v[k])) ? `{${ks.map(k => `<span class="k">${esc(k)}:</span> ${prim(v[k])}`).join(", ")}}` : null;
+  if (!ks.length) return Array.isArray(v) ? "[]" : "{}";
+  if (Array.isArray(v) && v.length <= 8 && v.every(isPrim) && jsonLen(v) <= 60) return `[${v.map(prim).join(", ")}]`;
+  return null;
 }
-function node(label, v, d) {
-  const flat = inline(v);
-  if (flat !== null) return `<div>${label}${flat}</div>`;
-  const arr = Array.isArray(v), ks = Object.keys(v).slice(0, 500);
-  const kids = ks.map(k => node(arr ? "" : `<span class="k">${esc(k)}:</span> `, v[k], d + 1)).join("");
-  return `<details ${d < 2 ? "open" : ""}><summary>${label}<span class="z">${arr ? `[${v.length}]` : `{${Object.keys(v).length}}`}</span></summary><div class="in">${kids}</div></details>`;
+function jpreview(v, ks, arr) {
+  let out = [], len = 0;
+  for (const k of ks) {
+    const x = v[k]; if (!isPrim(x)) continue;
+    const t = (arr ? "" : k + ": ") + (typeof x === "string" ? JSON.stringify(x.length > 24 ? x.slice(0, 24) + "…" : x) : String(x));
+    if (len + t.length > 64 || out.length === 3) { out.push("…"); break; }
+    out.push(t); len += t.length;
+  }
+  if (out.length && out.length < ks.length && out[out.length - 1] !== "…") out.push("…");
+  return out.length ? ` ${esc(out.join(", "))} ` : "";
+}
+function jnode(v, d, big) {
+  const flat = jflat(v); if (flat !== null) return flat;
+  const arr = Array.isArray(v), ks = Object.keys(v), shown = ks.slice(0, 500), [o, c] = arr ? ["[", "]"] : ["{", "}"];
+  const kids = shown.map((k, i) => `<div class="jl">${arr ? "" : `<span class="k">"${esc(k)}"</span>: `}${jnode(v[k], d + 1, big)}${i < ks.length - 1 ? "," : ""}</div>`).join("")
+    + (ks.length > shown.length ? `<div class="jl z">… ${ks.length - shown.length} more</div>` : "");
+  const open = d === 0 || (!big && ks.length <= FOLD_KIDS && d < 5);
+  const n = `${ks.length} ${arr ? "item" : "key"}${ks.length === 1 ? "" : "s"}`;
+  return `<span class="j${open ? "" : " shut"}"><button class="jt" data-act="jtoggle" aria-expanded="${open}" aria-label="${open ? "Fold" : "Unfold"} ${n}">${o}</button><span class="fold">${jpreview(v, ks, arr) || n}${c}</span><span class="in">${kids}</span><span class="close">${c}</span></span>`;
 }
 function tree(v) {
-  if (isPrim(v) || inline(v) !== null) return `<div class="tree"><div>${inline(v) ?? prim(v)}</div></div>`;
-  return `<div class="tree">${Object.keys(v).map(k => node(Array.isArray(v) ? "" : `<span class="k">${esc(k)}:</span> `, v[k], 1)).join("")}</div>`;
+  return `<div class="tree">${jnode(v, 0, jsonLen(v) > BIG_JSON)}</div>`;
 }
 
 /* ---------------- expanded panes ---------------- */
@@ -575,11 +607,15 @@ function snippet(f) {
     const n = (sn.start || 1) + i; return `<li class="${n === f.line ? "hit" : ""}"><span>${n}</span><span>${esc(l)}</span></li>`; }).join("")}</ol></div>`;
 }
 function note(e) { return e.meta?.note ? `<div class="note"><svg class="i"><use href="#i-spark"/></svg><div>${esc(e.meta.note)} <span class="who">Agent note</span></div></div>` : ""; }
+/* Where it came from, kept quiet: file:line (opens the editor), function, time. Language, SDK,
+   host and worktree are in the tooltip. */
 function originLine(e) {
   const o = e.origin || {};
-  const bits = [o.file ? shortPath(o.file) + (o.line ? ":" + o.line : "") : "", o.fn, o.lang, o.sdk, o.via ? "via " + o.via : "", clock(e.ts)].filter(Boolean);
+  const where = o.file ? shortPath(o.file) + (o.line ? ":" + o.line : "") : "";
   const href = editorHref(o.file, o.line);
-  return `<div class="kv origin-line">${bits.map(b => `<span>${esc(b)}</span>`).join("")}${href ? `<a class="link" href="${esc(href)}">Open in editor</a>` : ""}</div>`;
+  const tip = [o.file && o.file + (o.line ? ":" + o.line : ""), o.lang, o.sdk, o.host, o.pid && "pid " + o.pid, o.branch && "branch " + o.branch, o.via && "via " + o.via].filter(Boolean).join(" · ");
+  const file = where ? (href ? `<a class="where" href="${esc(href)}" title="Open in editor">${esc(where)}<svg class="i" aria-hidden="true"><use href="#i-open"/></svg></a>` : `<span class="where">${esc(where)}</span>`) : "";
+  return `<div class="origin-line" title="${esc(tip)}">${file}${o.fn ? `<span>${esc(o.fn)}</span>` : ""}<span>${esc(clock(e.ts))}</span></div>`;
 }
 function pane(e) {
   const p = e.payload || {}; let h = note(e);
@@ -720,7 +756,9 @@ function entries() {
   ol.innerHTML = (hiddenCount && !S.showAll ? `<li class="empty"><button class="link" data-act="showall">Show ${hiddenCount} earlier events</button></li>` : "") + list.map(e => {
     const s = summary(e), lv = rowLevel(e), open = S.open.has(e.id), d = ms(e), l = loc(e);
     if (e.kind === "core.separator") return `<li class="entry sep" data-id="${esc(e.id)}"><hr></li>`;
-    const body = s.mono ? `<span class="mono">${esc(s.body)}</span>` : esc(s.body);
+    // An object or array is shown in full in the pane, so the open row keeps only its label.
+    const structured = s.mono && /^[\[{]/.test(String(s.body || ""));
+    const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
     return `<li class="entry lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>
       <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}</span><span class="right">${d ? `<span class="dur" title="${d} ms"><i style="--w:${Math.max(4, d / slowest * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
       <div class="qa"><button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${editorHref(e.origin?.file, e.origin?.line) ? `<a class="qa-a" href="${esc(editorHref(e.origin.file, e.origin.line))}" aria-label="Open ${esc(l)} in editor" title="Open in editor"><svg class="i"><use href="#i-open"/></svg></a>` : ""}</div>
@@ -854,12 +892,20 @@ function openSearch() { document.body.classList.add("searching"); $("q").focus()
 function closeSearch() { document.body.classList.remove("searching"); S.q = ""; $("q").value = ""; render(); }
 
 document.addEventListener("click", ev => {
+  const fold = ev.target.closest(".tree .fold"); // a folded node's preview unfolds it, like its brace
+  if (fold) { fold.previousElementSibling.click(); return; }
   const b = ev.target.closest("button"); if (!b) return;
   const act = b.dataset.act;
   if (act === "show") return showFailure(b.dataset.again ? S.seen : null);
   if (act === "continue") return answer(b.dataset.id, "continue");
   if (act === "stop") return answer(b.dataset.id, "stop");
   if (act === "copyexc") return copyException(b.dataset.id);
+  if (act === "jtoggle") {
+    const j = b.parentElement, shut = j.classList.toggle("shut");
+    const all = ev.altKey ? [j, ...j.querySelectorAll(".j")] : [j];
+    all.forEach(x => { x.classList.toggle("shut", shut); x.querySelector(":scope > .jt").setAttribute("aria-expanded", String(!shut)); });
+    return;
+  }
   if (act === "clearq") return closeSearch();
   if (act === "showall") { S.showAll = true; return render(); }
   if (b.hasAttribute("data-cc")) { const c = b.parentElement.cloneNode(true); c.querySelector(".cc").remove(); copy(c.textContent.trim()); return toast("Command copied"); }

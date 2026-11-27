@@ -45,7 +45,13 @@ glint uninstall     # removes everything install wrote; keeps ~/.glint
 
 PHP gets it through `auto_prepend_file` (an existing prepend file keeps working), Python through a
 `.pth` file in the user site-packages of the `python3` on PATH, Node through `NODE_OPTIONS=--import`
-in your shell profile. `--only php,node` and `--dry-run` narrow it down.
+in your shell profile. `--only php,node` and `--dry-run` narrow it down. A project's own copy of the
+SDK always wins over the global one. One gap: PHP never prepends to a `php -S` *router* script
+(`php -S host:port router.php`, also what `artisan serve` runs); serve a document root instead
+(`php -S host:port -t public`) or require the SDK in that project.
+
+`python3 examples/e2e/run.py` drives a PHP shop, a Python worker and a Node API (with a pause)
+through the global `glint()` and checks what glintd stored.
 
 The desktop app (macOS for now) puts Glint in the menu bar: the spark turns red when something
 fails and amber when a program waits for you, a notification tells you which, and ⌥⌘G opens the
