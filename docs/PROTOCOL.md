@@ -144,6 +144,7 @@ renderers fetch `GET /v1/blobs/sha256:<hex>`.
 | `GET /v1/runs?project=&limit=` | recent runs, newest first: `{run, project, first, last, events, errors, last_id, file?, head?}` (`file`: the first event's calling file; `head`: its first log line) |
 | `GET /v1/source?event=&frame=` | the lines around an event's call site, or around `payload.frames[frame]`: `{file, line, start, lines}`; only files an event names |
 | `POST /v1/open?event=&frame=&editor=` | opens that place in the editor (vscode, cursor, windsurf, zed, phpstorm, idea, webstorm, pycharm, sublime; default `GLINT_EDITOR`, else the first installed) |
+| `POST /v1/expect` | `{expect: [..], ordered?, no_errors?, project?, run?, after?, lookback_s?, timeout_s?}` → `{pass, steps: [{expect, met, matched, needed, events}], failure?, events_seen, report}`; waits until decided or timeout (syntax: `crates/glint-core/src/expect.rs`) |
 | `GET /v1/editors` | editors found on this machine, the default first |
 | `GET /v1/events?run=&kind=&level=&q=&since=&limit=` | query |
 | `GET /v1/events/<id>` | one envelope |

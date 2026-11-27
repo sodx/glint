@@ -69,6 +69,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/stream", get(stream))
         .route("/v1/hooks/{agent}", post(hook))
         .route("/v1/browser.js", get(browser_js))
+        .route("/v1/expect", post(expect))
         .route("/v1/source", get(crate::source::source))
         .route("/v1/open", post(crate::source::open))
         .route("/v1/editors", get(crate::source::editors))
@@ -78,6 +79,24 @@ pub fn router(state: AppState) -> Router {
         .route("/mcp", post(mcp).get(|| async { StatusCode::METHOD_NOT_ALLOWED }).delete(|| async { StatusCode::NO_CONTENT }))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
+}
+
+/// `POST /v1/expect`: wait for expectations over events (see glint_core::expect) and report.
+/// `{expect: [...], ordered?, no_errors?, project?, run?, after?, lookback_s?, timeout_s?}` →
+/// `{pass, steps, failure?, events_seen, report}`.
+async fn expect(State(hub): State<Hub>, Json(r): Json<glint_core::expect::Request>) -> Response {
+    let x = match r.expectation() {
+        Ok(x) => x,
+        Err(e) => return error(StatusCode::BAD_REQUEST, e),
+    };
+    match glint_core::expect::run(&hub, x, r.scope).await {
+        Ok(v) => {
+            let mut body = serde_json::to_value(&v).unwrap_or_default();
+            body["report"] = json!(v.report());
+            Json(body).into_response()
+        }
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }
 
 /// The browser SDK (`sdks/browser/glint.js`), for a `<script>` tag in a page under development.

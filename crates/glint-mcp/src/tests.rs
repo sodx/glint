@@ -43,7 +43,7 @@ async fn handshake_and_listing() {
     assert!(s.handle(json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await.is_none());
     let tools = s.handle(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})).await.unwrap();
     let names: Vec<_> = tools["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names.len(), 11);
+    assert_eq!(names.len(), 12);
     assert!(names.contains(&"glint_last_error") && names.contains(&"glint_resume"));
     for t in tools["result"]["tools"].as_array().unwrap() {
         assert_eq!(t["inputSchema"]["type"], "object", "{}", t["name"]);
@@ -112,6 +112,32 @@ async fn wait_for_sees_only_new_matching_events() {
 
     let (text, _) = call(&s, "glint_wait_for", json!({"kind": "core.value", "timeout_s": 1})).await;
     assert_eq!(text, "No matching event within 1 s.");
+}
+
+#[tokio::test]
+async fn expect_passes_on_markers_old_and_new_and_fails_on_a_crash() {
+    let (s, hub) = server().await;
+    // Sent just before asking (lookback), then the rest while it waits.
+    put(&hub, r#"{"id":"A","kind":"core.value","payload":{"value":{"total":129.5}},"project":"shop","meta":{"label":"cart"}}"#).await;
+    let h = hub.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        put(&h, r#"{"id":"B","kind":"core.value","payload":{"value":{"paid":true}},"project":"shop","meta":{"label":"order saved"}}"#).await;
+    });
+    let (text, err) = call(&s, "glint_expect", json!({"project": "shop", "timeout_s": 5, "expect": ["label:cart payload.value.total>0", "label:\"order saved\" payload.value.paid=true"]})).await;
+    assert!(!err, "{text}");
+    assert!(text.starts_with("PASS") && text.contains("— A") && text.contains("— B"), "{text}");
+
+    let h = hub.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        put(&h, r#"{"kind":"core.exception","payload":{"class":"TypeError","message":"coupon is null","frames":[]},"project":"shop"}"#).await;
+    });
+    let (text, _) = call(&s, "glint_expect", json!({"project": "shop", "lookback_s": 0, "timeout_s": 5, "expect": ["label:\"never sent\""]})).await;
+    assert!(text.starts_with("FAIL") && text.contains("TypeError: coupon is null"), "{text}");
+
+    let (text, err) = call(&s, "glint_expect", json!({"expect": ["nonsense"]})).await;
+    assert!(err && text.contains("expected"), "{text}");
 }
 
 #[tokio::test]

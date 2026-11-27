@@ -12,6 +12,7 @@
 mod agents;
 mod client;
 mod conformance;
+mod expect;
 mod hook;
 mod install;
 mod lines;
@@ -109,6 +110,38 @@ enum Command {
     },
     /// Check that glintd is reachable and glint() is available in each language.
     Doctor,
+    /// A test from what programs did: wait for events matching each expectation, fail on errors.
+    ///
+    /// `glint expect 'label:cart payload.value.total>0' 'label:"order saved"' -- ./checkout.sh`.
+    /// Terms (all must hold for one event): label:X, kind:X or kind:sql.*, text:X, has:PATH,
+    /// PATH=VALUE (also != > >= < <=, e.g. payload.value.paid=true), count>=N.
+    /// Exit 0 PASS, 1 FAIL, 2 could not check.
+    Expect {
+        /// The expectations, in the order they must be met (see --unordered).
+        #[arg(required = true)]
+        expect: Vec<String>,
+        /// Project to look at; default: this directory's (the git repository's name).
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Look at every project.
+        #[arg(long, conflicts_with = "project")]
+        all_projects: bool,
+        /// The expectations may be met in any order.
+        #[arg(long)]
+        unordered: bool,
+        /// Don't fail when a program error arrives.
+        #[arg(long)]
+        allow_errors: bool,
+        /// Seconds to wait for events still to come.
+        #[arg(long, default_value_t = 30)]
+        timeout: u64,
+        /// Without a command: events of the last N seconds count too.
+        #[arg(long, default_value_t = 30)]
+        lookback: u64,
+        /// A command to run first; only what happens from then on counts.
+        #[arg(last = true)]
+        command: Vec<String>,
+    },
     /// Check a language SDK against the conformance suite (spec/conformance/).
     ///
     /// Runs the SDK's conformance program three times against an in-memory server: normally,
@@ -233,6 +266,17 @@ fn main() -> ExitCode {
         Command::Doctor => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None }
             .args(&cli.url)
             .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "")),
+        Command::Expect { expect, project, all_projects, unordered, allow_errors, timeout, lookback, command } => {
+            let a = expect::Args { expect, project, all_projects, unordered, allow_errors, timeout, lookback, command };
+            return match expect::run(&cli.url, &a) {
+                Ok(true) => ExitCode::SUCCESS,
+                Ok(false) => ExitCode::from(1),
+                Err(e) => {
+                    eprintln!("glint: {e}");
+                    ExitCode::from(2)
+                }
+            };
+        }
         Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };
     match result {

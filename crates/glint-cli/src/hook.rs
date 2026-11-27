@@ -131,7 +131,13 @@ fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     if let Some(newest) = events.last() {
         let _ = std::fs::write(&seen, &newest.id); // reported once
     }
-    let fails: Vec<&Envelope> = events.iter().filter(|e| e.origin.lang.as_deref() != Some("agent")).collect();
+    // A failure whose code was edited after it happened is most likely the agent reproducing the
+    // bug before fixing it (seen in a live session): not a reason to hold it back.
+    let fails: Vec<&Envelope> = events
+        .iter()
+        .filter(|e| e.origin.lang.as_deref() != Some("agent"))
+        .filter(|e| !edited_since(e))
+        .collect();
     if fails.is_empty() {
         return None;
     }
@@ -144,6 +150,23 @@ fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         list(&fails)
     );
     Some(json!({ "decision": "block", "reason": reason }).to_string())
+}
+
+/// Where a failure was thrown (first app frame), else where it was reported.
+fn throw_site(e: &Envelope) -> (Option<String>, Option<u64>) {
+    let frame = e.payload["frames"].as_array().and_then(|fs| fs.iter().find(|f| f["vendor"] != true && f["file"].is_string()));
+    match frame {
+        Some(f) => (f["file"].as_str().map(str::to_owned), f["line"].as_u64()),
+        None => (e.origin.file.clone(), e.origin.line.map(u64::from)),
+    }
+}
+
+/// The file the failure came from was changed after the failure.
+fn edited_since(e: &Envelope) -> bool {
+    let Some(file) = throw_site(e).0 else { return false };
+    std::fs::metadata(&file)
+        .and_then(|m| m.modified())
+        .is_ok_and(|t| chrono::DateTime::<chrono::Utc>::from(t) > e.ts)
 }
 
 fn list(fails: &[&Envelope]) -> String {
@@ -159,12 +182,7 @@ fn list(fails: &[&Envelope]) -> String {
                 (Some(c), None) => c.to_owned(),
                 _ => e.kind.clone(),
             };
-            // Where it was thrown (first app frame), else where it was reported.
-            let frame = p["frames"].as_array().and_then(|fs| fs.iter().find(|f| f["vendor"] != true && f["file"].is_string()));
-            let (file, line) = match frame {
-                Some(f) => (f["file"].as_str().map(str::to_owned), f["line"].as_u64()),
-                None => (e.origin.file.clone(), e.origin.line.map(u64::from)),
-            };
+            let (file, line) = throw_site(e);
             let at = file.map(|f| format!(" at {f}{}", line.map(|l| format!(":{l}")).unwrap_or_default())).unwrap_or_default();
             format!("- {}{at} ({}, id {})", what.chars().take(200).collect::<String>(), e.ts.format("%H:%M:%S"), e.id)
         })

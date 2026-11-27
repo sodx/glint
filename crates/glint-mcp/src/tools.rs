@@ -85,6 +85,22 @@ pub fn definitions() -> Value {
             "annotations": { "readOnlyHint": true }
         },
         {
+            "name": "glint_expect",
+            "title": "Check what a program did",
+            "description": "Turn glint() markers into a test: wait until events matching each expectation have arrived (in order unless ordered=false) and no program failed meanwhile, then report PASS or FAIL with the matching event ids. Run the program first and call this (events of the last lookback_s seconds count), or call it and have the user click through. One expectation is space-separated terms that must all hold for one event: label:\"order saved\", kind:sql.query or kind:sql.*, text:refund (payload contains), a comparison on a dot path like payload.value.total>0 or payload.value.paid=true (= != > >= < <=; values are JSON), has:payload.value.email, count>=2.",
+            "inputSchema": { "type": "object", "required": ["expect"], "properties": {
+                "expect": { "type": "array", "items": { "type": "string" }, "description": "Expectations, e.g. [\"label:cart payload.value.total>0\", \"kind:sql.query text:insert\", \"label:\\\"order saved\\\"\"]." },
+                "project": { "type": "string", "description": "Only this project (recommended)." },
+                "run": { "type": "string" },
+                "ordered": { "type": "boolean", "default": true },
+                "no_errors": { "type": "boolean", "default": true, "description": "Fail as soon as a program error arrives." },
+                "after": { "type": "string", "description": "Only events after this event id." },
+                "lookback_s": { "type": "integer", "default": 30, "description": "Without after: events of the last N seconds count too." },
+                "timeout_s": { "type": "integer", "default": 30, "maximum": 120 }
+            }},
+            "annotations": { "readOnlyHint": true }
+        },
+        {
             "name": "glint_pauses",
             "title": "Paused programs",
             "description": "Programs currently paused at a glint/ray pause() call, waiting for someone to resume them.",
@@ -186,6 +202,7 @@ pub async fn call(hub: &Hub, name: &str, a: Value) -> Result<String, String> {
         "glint_event" => event(hub, args(a)?).await,
         "glint_last_error" => last_error(hub, args(a)?).await,
         "glint_wait_for" => wait_for(hub, a).await,
+        "glint_expect" => expect(hub, args(a)?).await,
         "glint_pauses" => Ok(pauses(hub)),
         "glint_resume" => resume(hub, args(a)?).await,
         "glint_annotate" => annotate(hub, args(a)?).await,
@@ -349,6 +366,13 @@ async fn wait_for(hub: &Hub, a: Value) -> Result<String, String> {
             }
         }
     }
+}
+
+async fn expect(hub: &Hub, mut r: glint_core::expect::Request) -> Result<String, String> {
+    let x = r.expectation()?;
+    r.scope.timeout_s = Some(r.scope.timeout_s.unwrap_or(30).clamp(1, WAIT_MAX_S));
+    let v = glint_core::expect::run(hub, x, r.scope).await.map_err(store_err)?;
+    Ok(v.report())
 }
 
 fn pauses(hub: &Hub) -> String {

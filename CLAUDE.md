@@ -37,6 +37,8 @@ glintd's UI. `app/bundle-macos.sh` makes `target/release/Glint.app` without taur
 from `app/icons/make.py`. The CLI lives in `Contents/Resources/bin` because `glint` and `Glint`
 collide on case-insensitive file systems.
 
+`glint expect` / MCP `glint_expect` / `POST /v1/expect` share `glint-core::expect` (term syntax, evaluator, async runner).
+
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
 (`docs/mappings/otlp.md`), LLM card in the UI, MCP `glint_llm_calls`.
 

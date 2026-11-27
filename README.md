@@ -68,6 +68,18 @@ For vibe coding, where an agent writes the code and you click through the app:
   wants to finish a turn during which your programs failed, it is sent back once to fix them or
   say why they are expected (`GLINT_STOP_GUARD=0` turns that off).
 
+Markers become tests. `glint expect` (and the MCP tool `glint_expect`, for agents) waits until
+events match each expectation, in order, and fails as soon as a program errors:
+
+```bash
+glint expect 'label:cart payload.value.total>0' 'kind:sql.query text:"insert into orders"' \
+             'label:"order saved" payload.value.paid=true' -- ./scripts/checkout.sh 7
+```
+
+Terms (all must hold for one event): `label:X`, `kind:X` / `kind:sql.*`, `text:X`, `has:PATH`,
+`PATH=VALUE` (also `!= > >= < <=`), `count>=N`. Exit 0 pass, 1 fail, 2 could not check. Without a
+command it also looks at the last 30 s and waits while you click through.
+
 Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends (values, SQL,
 logs, inner measures) nests under it: the UI shows the run as a call tree with a small waterfall
 of where the time went. OpenTelemetry spans nest the same way.
