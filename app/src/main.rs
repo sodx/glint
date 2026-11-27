@@ -4,6 +4,8 @@
 //! - a menu-bar spark that turns red when something fails and amber when a program waits for
 //!   you, with a status line, Open, Open in browser and Quit;
 //! - a notification for each new failure and each new pause;
+//! - the Dock icon carries the same state as a badge (✗ or ⏸), because on a MacBook with a notch
+//!   the menu-bar spark can be hidden behind it;
 //! - ⌥⌘G shows and hides the window from anywhere;
 //! - glintd is started if nothing answers (the copy inside the app bundle, else ~/.glint/bin).
 //!
@@ -20,7 +22,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -216,6 +218,14 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
                 }
                 let _ = tray.set_tooltip(Some(format!("Glint — {line}")));
             }
+            if let Some(w) = app.get_webview_window("main") {
+                let badge = match state {
+                    State::Fail => Some("✗".to_owned()),
+                    State::Wait => Some("⏸".to_owned()),
+                    State::Ok | State::Offline => None,
+                };
+                let _ = w.set_badge_label(badge);
+            }
         }
         std::thread::sleep(Duration::from_secs(2));
     }
@@ -230,6 +240,48 @@ fn main() {
     let hotkey = Shortcut::new(Some(Modifiers::ALT | Modifiers::SUPER), Code::KeyG);
 
     let app = tauri::Builder::default()
+        // A short app menu (Glint, Edit, Window): the default one is wide, and on a MacBook with
+        // a notch every extra title pushes menu-bar icons, the spark included, behind it.
+        .menu(|app| {
+            Menu::with_items(
+                app,
+                &[
+                    &Submenu::with_items(
+                        app,
+                        "Glint",
+                        true,
+                        &[
+                            &PredefinedMenuItem::about(app, Some("About Glint"), None)?,
+                            &PredefinedMenuItem::separator(app)?,
+                            &PredefinedMenuItem::hide(app, None)?,
+                            &PredefinedMenuItem::hide_others(app, None)?,
+                            &PredefinedMenuItem::separator(app)?,
+                            &PredefinedMenuItem::quit(app, Some("Quit Glint"))?,
+                        ],
+                    )?,
+                    &Submenu::with_items(
+                        app,
+                        "Edit",
+                        true,
+                        &[
+                            &PredefinedMenuItem::undo(app, None)?,
+                            &PredefinedMenuItem::redo(app, None)?,
+                            &PredefinedMenuItem::separator(app)?,
+                            &PredefinedMenuItem::cut(app, None)?,
+                            &PredefinedMenuItem::copy(app, None)?,
+                            &PredefinedMenuItem::paste(app, None)?,
+                            &PredefinedMenuItem::select_all(app, None)?,
+                        ],
+                    )?,
+                    &Submenu::with_items(
+                        app,
+                        "Window",
+                        true,
+                        &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::close_window(app, Some("Close"))?],
+                    )?,
+                ],
+            )
+        })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show(app)))
         .plugin(tauri_plugin_notification::init())
         .plugin(

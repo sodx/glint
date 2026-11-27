@@ -95,6 +95,16 @@
       ]
     },
     {
+      "name": "value-exception",
+      "do": "create the language's standard runtime error with message \"bang\" inside a function, then pass it to the plain glint(err) call",
+      "expect": [
+        {
+          "kind": "core.exception",
+          "payload": { "class": "$string", "message": "bang", "frames": "$nonempty-array" }
+        }
+      ]
+    },
+    {
       "name": "measure",
       "do": "glint.measure(\"work\", fn) where fn sleeps for 20 ms and returns 5; the program checks it got 5 back",
       "expect": [

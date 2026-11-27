@@ -90,6 +90,17 @@ try {
     Glint::exception($err);
 }
 
+begin('value-exception');
+function bang(): void
+{
+    throw new RuntimeException('bang');
+}
+try {
+    bang();
+} catch (RuntimeException $err) {
+    glint($err);
+}
+
 begin('measure');
 $measured = Glint::measure('work', static function (): int {
     usleep(20000);

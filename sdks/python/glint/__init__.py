@@ -152,8 +152,15 @@ class _Glint:
     """The `glint` object: call it with values, or use its helper methods."""
 
     def __call__(self, *values: Any) -> Entry:
+        """Sends each value as its own event; an exception becomes core.exception."""
         site = _origin.call_site()
-        return Entry(_emit("core.value", _value_payload(v), None, site) for v in values)
+        stack = sys._getframe(1)
+        return Entry(
+            _emit("core.exception", _exception_payload(v, stack), None, site)
+            if isinstance(v, BaseException)
+            else _emit("core.value", _value_payload(v), None, site)
+            for v in values
+        )
 
     def log(self, message: Any, fields: Optional[Mapping[str, Any]] = None, level: str = "info") -> Entry:
         site = _origin.call_site()

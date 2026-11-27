@@ -68,6 +68,16 @@ try {
   glint.exception(err);
 }
 
+begin("value-exception");
+function bang() {
+  throw new TypeError("bang");
+}
+try {
+  bang();
+} catch (err) {
+  glint(err);
+}
+
 begin("measure");
 const got = glint.measure("work", () => {
   sleepSync(20);

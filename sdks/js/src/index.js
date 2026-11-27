@@ -249,9 +249,9 @@ function exceptionPayload(err, depth = 0) {
   return p;
 }
 
-/** Sends each value as its own event. */
+/** Sends each value as its own event; an Error becomes an exception (as glint.exception). */
 export function glint(...values) {
-  return new Entry(values.map((v) => emit("core.value", valuePayload(v))));
+  return new Entry(values.map((v) => (v instanceof Error ? emit("core.exception", exceptionPayload(v)) : emit("core.value", valuePayload(v)))));
 }
 
 glint.log = (message, fields, level = "info") => {

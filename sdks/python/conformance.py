@@ -85,6 +85,17 @@ except ValueError as err:
     glint.exception(err)
 
 
+def bang():
+    raise ValueError("bang")
+
+
+begin("value-exception")
+try:
+    bang()
+except ValueError as err:
+    glint(err)
+
+
 def work():
     time.sleep(0.02)
     return 5

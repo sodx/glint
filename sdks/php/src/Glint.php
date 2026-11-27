@@ -13,12 +13,16 @@ use Throwable;
  */
 final class Glint
 {
-    /** Sends each value as its own core.value event. Used by the glint() helper. */
+    /** Sends each value as its own event; a Throwable becomes core.exception. Used by glint(). */
     public static function values(mixed ...$values): Entry
     {
         $ids = [];
         foreach ($values as $value) {
             try {
+                if ($value instanceof Throwable) {
+                    $ids[] = Transport::emit('core.exception', self::exceptionPayload($value));
+                    continue;
+                }
                 $payload = ['value' => Encoder::encode($value)];
                 $type = Encoder::typeName($value);
                 if ($type !== null) {
