@@ -1,0 +1,48 @@
+# Mapping: Claude Code hooks → Glint
+
+Adapter: `crates/glint-ingest/src/agent/claude_code.rs`. Endpoint: `POST /v1/hooks/claude-code`
+(raw hook JSON). Sender: `glint hook`, which prints nothing (Claude Code reads hook stdout),
+always exits 0 and gives up after ~1 s, so it never slows or steers the agent.
+
+## Install
+
+```bash
+glint hook --print-config        # paste into .claude/settings.json (project) or ~/.claude/settings.json
+```
+
+## Verified
+
+2026-11-27 with Claude Code 2.1.317: `SessionStart`, `UserPromptSubmit` and `SessionEnd` from a
+real session arrived and decoded. Shapes of `PermissionRequest`, `SubagentStop`, `SessionEnd`,
+`UserPromptSubmit` and `UserPromptExpansion` also match payloads recorded from 2.1.281. Tool
+hooks (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`) follow the documented shape and are
+covered by tests, but have **not yet been seen from a live session**.
+
+## Envelope fields
+
+| Hook | Glint |
+|------|-------|
+| `session_id` | `run = "claude-code:<session_id>"`, `payload.session` |
+| `cwd` | `project` = last path segment, `origin.cwd` |
+| — | `origin.lang = "agent"`, `origin.framework = "claude-code"`, `origin.sdk = "glint-hooks/<v>"` |
+| `agent_id`, `agent_type` (subagents) | copied into the payload |
+| `transcript_path`, `scratchpad_dir` | dropped |
+
+## Events
+
+| Hook | Kind | Notes |
+|------|------|-------|
+| `SessionStart` / `SessionEnd` | `agent.session` | `status` started / ended, `source`, `reason`, `model` |
+| `UserPromptSubmit` | `agent.step` | `input` = prompt (≤ 4 KB), blue |
+| `Stop` / `SubagentStop` | `agent.step` | `status: stopped`, `output` = last assistant message |
+| `SubagentStart` | `agent.step` | labelled "<agent_type> started" |
+| `PreToolUse` | `agent.tool_call` | id `cc-<session>-<tool_use_id>`, `tool`, `args` (strings ≤ 4 KB) |
+| `PostToolUse` / `PostToolUseFailure` | `agent.tool_result` + `core.update` | `parent` = the call; `ok`, `result`, `error`; the call turns green / red |
+| `PermissionRequest` | `agent.permission` | level warn, orange: the agent is waiting for the human |
+| `Notification` | `core.log` | |
+| `PreCompact` / `PostCompact` | `core.log` | labelled "compact" |
+| anything else | `x-claude-code.<snake_case>` | payload kept minus paths |
+
+Prompts and tool inputs/outputs are stored locally like any other event; nothing leaves the
+machine. Agents reading Glint over MCP see these events in the same timeline as the program's
+own output.

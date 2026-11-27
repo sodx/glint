@@ -144,3 +144,25 @@ fn send_fails_loudly_when_glint_is_down() {
     assert!(!out.status.success());
     assert!(String::from_utf8(out.stderr).unwrap().contains("Is glintd running?"));
 }
+
+#[test]
+fn hook_is_silent_and_succeeds_when_glint_is_down() {
+    let started = std::time::Instant::now();
+    let out = glint("http://127.0.0.1:9", &["hook"], r#"{"hook_event_name":"PreToolUse","session_id":"s"}"#);
+    assert!(out.status.success());
+    assert!(out.stdout.is_empty() && out.stderr.is_empty());
+    assert!(started.elapsed() < std::time::Duration::from_secs(3));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn hook_forwards_to_glint() {
+    let addr = start().await;
+    let url = format!("http://{addr}");
+    blocking(move || {
+        let out = glint(&url, &["hook"], r#"{"hook_event_name":"UserPromptSubmit","session_id":"s1","cwd":"/a/shop","prompt":"hi"}"#);
+        assert!(out.status.success() && out.stdout.is_empty());
+        let got = events(addr, "kind=agent.step");
+        assert_eq!(got[0]["payload"]["input"], "hi");
+    })
+    .await;
+}

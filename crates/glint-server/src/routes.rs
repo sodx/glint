@@ -33,6 +33,11 @@ const KNOWN_KINDS: &[&str] = &[
     "core.clear",
     "core.update",
     "ctl.pause",
+    "agent.session",
+    "agent.step",
+    "agent.tool_call",
+    "agent.tool_result",
+    "agent.permission",
     "ctl.resume",
     "sql.query",
 ];
@@ -59,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/events", post(ingest).get(list))
         .route("/v1/events/{id}", get(one))
         .route("/v1/stream", get(stream))
+        .route("/v1/hooks/{agent}", post(hook))
         .route("/v1/ctl", get(pauses))
         .route("/v1/ctl/{id}", get(wait_pause))
         .route("/v1/ctl/{id}/resume", post(resume))
@@ -152,6 +158,24 @@ async fn pump(socket: WebSocket, hub: Hub, mut stop: watch::Receiver<bool>, filt
                 Some(Ok(_)) => {}
             },
         }
+    }
+}
+
+/// Coding-agent hooks, forwarded raw by `glint hook`. Answers fast: the agent is waiting.
+async fn hook(State(hub): State<Hub>, Path(agent): Path<String>, body: Bytes) -> Response {
+    let decoded = match agent.as_str() {
+        "claude-code" => glint_ingest::agent::claude_code::decode(&body).map_err(|e| e.to_string()),
+        other => return error(StatusCode::NOT_FOUND, format!("no hook adapter for `{other}` (known: claude-code)")),
+    };
+    let incoming = match decoded {
+        Ok(v) => v,
+        Err(e) => return error(StatusCode::BAD_REQUEST, e),
+    };
+    let events = hub.normalise(incoming);
+    let n = events.len();
+    match hub.submit(events).await {
+        Ok(()) => Json(json!({ "accepted": n })).into_response(),
+        Err(e) => error(StatusCode::SERVICE_UNAVAILABLE, e.to_string()),
     }
 }
 

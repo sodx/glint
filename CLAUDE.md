@@ -20,7 +20,8 @@ M1 in progress: Ray-compatible ingest on `:23517` (`docs/mappings/ray.md`) and t
 (`spec/conformance/`, runner `glint conformance`).
 
 M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume from UI, MCP, API;
-Ray `pause()` works) and `glint.pause()` in the JS SDK are done. Next: agent-hooks adapter.
+Ray `pause()` works), `glint.pause()` in the JS SDK and the Claude Code hooks adapter
+(`glint hook`, `docs/mappings/claude-code.md`) are done.
 
 Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray),
 `glint-server`, `glintd`, `glint-cli` (binary `glint`), `glint-mcp`; SDKs in `sdks/{js,python,php}`. The rest of the layout in ARCHITECTURE §10 is planned, not present.

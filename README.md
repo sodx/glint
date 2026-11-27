@@ -44,6 +44,12 @@ claude mcp add --transport http glint http://127.0.0.1:23600/mcp   # or: claude 
 It can then read the last error with its context, wait for the next run after an edit, resume
 paused programs and leave notes next to events.
 
+See what the agent does, next to what your program does:
+
+```bash
+glint hook --print-config   # Claude Code hooks → paste into .claude/settings.json
+```
+
 ## Status
 
 M0 and part of M1 are done (daemon, live UI, Ray-compatible ingest, `glint send` / `glint pipe`). Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and

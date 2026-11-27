@@ -25,7 +25,8 @@ Each milestone ends with something a person can use. Order is a guide, not a con
   clear — over HTTP `/mcp` and stdio `glint mcp` (ADR 0004).
 - ✅ Control plane: pause/resume from UI, MCP and API; Ray `pause()`; JS `glint.pause()`.
 - `glint.pause()` in the Python and PHP SDKs (Ray's pause already covers PHP).
-- Agent-hooks adapter (Claude Code first) → `agent.*` kinds and tree view.
+- ✅ Agent-hooks adapter (Claude Code) → `agent.*` kinds (`docs/mappings/claude-code.md`).
+- Tree view of agent steps → tool calls in the UI (events carry `parent` already).
 
 ## M3 — LLM observability
 - OTLP adapter with `gen_ai.*` mapping → `llm.call`.

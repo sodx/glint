@@ -32,7 +32,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            adapters: vec!["native".to_owned()],
+            adapters: vec!["native".to_owned(), "hooks:claude-code".to_owned()],
         }
     }
 }

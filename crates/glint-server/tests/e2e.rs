@@ -239,3 +239,34 @@ async fn mcp_over_http() {
     let foreign = http.post(&url).header("origin", "https://evil.example").json(&json!({"jsonrpc": "2.0", "id": 3, "method": "ping"})).send().await.unwrap();
     assert_eq!(foreign.status(), 403);
 }
+
+#[tokio::test]
+async fn claude_code_hooks_become_agent_events() {
+    let addr = start().await;
+    let http = reqwest::Client::new();
+    let url = format!("http://{addr}/v1/hooks/claude-code");
+    let common = json!({"session_id": "S9", "transcript_path": "/t.jsonl", "cwd": "/Users/me/src/shop"});
+    let with = |extra: Value| {
+        let mut v = common.clone();
+        for (k, x) in extra.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        v
+    };
+    for body in [
+        with(json!({"hook_event_name": "UserPromptSubmit", "prompt": "run the tests"})),
+        with(json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cargo test"}, "tool_use_id": "tu1"})),
+        with(json!({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "cargo test"}, "tool_use_id": "tu1", "tool_response": {"stdout": "ok", "stderr": "", "interrupted": false}})),
+    ] {
+        let res = http.post(&url).json(&body).send().await.unwrap();
+        assert_eq!(res.status(), 200);
+    }
+    let got: Value = http.get(format!("http://{addr}/v1/events?run=claude-code:S9")).send().await.unwrap().json().await.unwrap();
+    let kinds: Vec<_> = got["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap().to_owned()).collect();
+    assert_eq!(kinds, ["agent.step", "agent.tool_call", "agent.tool_result", "core.update"]);
+    assert_eq!(got["events"][2]["parent"], "cc-S9-tu1");
+    assert_eq!(got["events"][0]["project"], "shop");
+
+    assert_eq!(http.post(format!("http://{addr}/v1/hooks/cursor")).json(&common).send().await.unwrap().status(), 404);
+    assert_eq!(http.post(&url).body("nope").send().await.unwrap().status(), 400);
+}

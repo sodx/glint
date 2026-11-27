@@ -63,12 +63,32 @@ pub fn summary(e: &Envelope) -> String {
         }
         "core.update" => format!("update → {} {}", s("target"), compact_without(p, "target")),
         "ctl.pause" => format!("PAUSED {}", s("reason")),
+        "agent.tool_call" => format!("{} {}", s("tool"), tool_args(p.get("args"))),
+        "agent.tool_result" => {
+            let what = if p.get("ok") == Some(&Value::Bool(false)) { "FAILED" } else { "ok" };
+            let detail = p.get("error").or_else(|| p.get("result")).map(compact).unwrap_or_default();
+            format!("{} {what} {detail}", s("tool"))
+        }
+        "agent.permission" => format!("{} waiting for approval {}", s("tool"), tool_args(p.get("args"))),
+        "agent.step" => format!("{} {}", s("status"), [s("input"), s("output")].concat()),
+        "agent.session" => format!("{} {}", s("status"), [s("source"), s("reason")].concat()),
         "ctl.resume" => format!("{} → {}", s("action"), s("target")),
         "core.separator" | "core.clear" => String::new(),
         "core.screen" => format!("screen {}", s("name")),
         _ => compact(p),
     };
     clip(&text.replace(['\n', '\r'], " ⏎ "), SUMMARY_MAX)
+}
+
+/// The argument that says most about a tool call: a command, a path, a pattern.
+fn tool_args(args: Option<&Value>) -> String {
+    let Some(a) = args else { return String::new() };
+    for k in ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"] {
+        if let Some(v) = a.get(k).and_then(Value::as_str) {
+            return v.to_owned();
+        }
+    }
+    compact(a)
 }
 
 /// `fn (file:line)` of the innermost frame not marked as vendor code.

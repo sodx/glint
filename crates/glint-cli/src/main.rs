@@ -10,6 +10,7 @@
 
 mod client;
 mod conformance;
+mod hook;
 mod lines;
 mod mcp;
 mod pipe;
@@ -72,6 +73,17 @@ enum Command {
         quiet: bool,
         #[command(flatten)]
         common: Common,
+    },
+    /// Forward a coding-agent hook (JSON on stdin) to Glint. Prints nothing, always exits 0.
+    ///
+    /// `glint hook --print-config` prints the Claude Code settings that install it.
+    Hook {
+        /// Which agent sent the hook.
+        #[arg(long, default_value = "claude-code", value_parser = ["claude-code"])]
+        agent: String,
+        /// Print the hook settings to paste into .claude/settings.json, then exit.
+        #[arg(long)]
+        print_config: bool,
     },
     /// Serve MCP on stdio for coding agents, backed by the running glintd.
     ///
@@ -145,6 +157,14 @@ fn main() -> ExitCode {
         }
         Command::Pipe { quiet, common } => pipe::run(&pipe::PipeArgs { quiet }, &base(common, "pipe"), &client),
         Command::Mcp => mcp::run(&cli.url),
+        Command::Hook { agent, print_config } => {
+            if print_config {
+                println!("{}", hook::claude_code_config("glint"));
+                Ok(())
+            } else {
+                hook::run(&cli.url, &agent)
+            }
+        }
         Command::Conformance { scenarios, command } => conformance::run(&conformance::Args { command, scenarios }),
     };
     match result {

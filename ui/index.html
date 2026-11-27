@@ -278,6 +278,40 @@ const renderers = {
     box.appendChild(actions);
     return box;
   },
+  "agent.tool_call"(p) {
+    const box = el("div");
+    const key = toolKey(p && p.args);
+    if (key) box.appendChild(el("pre", "block", key));
+    if (p && p.args && typeof p.args === "object") {
+      const d = el("details"); d.appendChild(el("summary", "meta-line", "arguments")); d.appendChild(jsonTree(p.args)); box.appendChild(d);
+    }
+    return box;
+  },
+  "agent.tool_result"(p) {
+    const box = el("div");
+    const ok = !(p && p.ok === false);
+    box.appendChild(el("div", ok ? "meta-line" : "exc-title", ok ? "ok" : "failed"));
+    if (p && p.error) box.appendChild(el("pre", "block", typeof p.error === "string" ? p.error : JSON.stringify(p.error, null, 2)));
+    const r = p && p.result;
+    if (r && typeof r === "object" && typeof r.stdout === "string") {
+      if (r.stdout) box.appendChild(el("pre", "block", r.stdout));
+      if (r.stderr) box.appendChild(el("pre", "block", r.stderr));
+    } else if (typeof r === "string") {
+      box.appendChild(el("pre", "block", r));
+    } else if (r !== undefined) {
+      const d = el("details"); d.appendChild(el("summary", "meta-line", "result")); d.appendChild(jsonTree(r)); box.appendChild(d);
+    }
+    return box;
+  },
+  "agent.step": p => el("pre", "", [p && p.input, p && p.output].filter(Boolean).join("\n") || (p && p.status) || ""),
+  "agent.session": p => el("div", "meta-line", [p && p.status, p && p.source, p && p.reason, p && p.model].filter(Boolean).join(" · ")),
+  "agent.permission"(p) {
+    const box = el("div");
+    box.appendChild(el("div", "exc-title", `${(p && p.tool) || "tool"} is waiting for approval`));
+    const key = toolKey(p && p.args);
+    if (key) box.appendChild(el("pre", "block", key));
+    return box;
+  },
   "sql.query"(p) {
     const box = el("div");
     box.appendChild(el("pre", "block", (p && p.sql) || ""));
@@ -290,6 +324,14 @@ const renderers = {
     return box;
   },
 };
+
+function toolKey(a) {
+  if (!a || typeof a !== "object") return "";
+  for (const k of ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"]) {
+    if (typeof a[k] === "string") return a[k];
+  }
+  return "";
+}
 
 function frameList(frames) {
   const ul = el("ul", "frames");
