@@ -15,10 +15,103 @@ const EVENTS_MAX: usize = 200;
 const EVENT_CHARS_DEFAULT: usize = 6000;
 const WAIT_DEFAULT_S: u64 = 30;
 const WAIT_MAX_S: u64 = 120;
+const WAIT_LOOKBACK_DEFAULT_S: u64 = 10;
+const WAIT_LOOKBACK_MAX_S: u64 = 3600;
+const PROJECT_HELP: &str = "Project to read. Default: the project this agent works in (every reply names it); \"*\" for all projects.";
+
+/// What the connection knows about the calling agent.
+#[derive(Debug, Clone, Default)]
+pub struct Ctx {
+    /// The project the agent works in, when known.
+    pub project: Option<String>,
+    /// How that is known, for the reply's first line.
+    pub source: Option<String>,
+}
+
+/// Which events a call reads.
+enum Scope {
+    One { project: String, why: String },
+    All { why: String },
+    /// Several projects have events and nothing says which one the agent means: the text says
+    /// so and lists them, instead of mixing their events.
+    Unknown(String),
+}
+
+impl Scope {
+    fn project(&self) -> Option<String> {
+        match self {
+            Scope::One { project, .. } => Some(project.clone()),
+            _ => None,
+        }
+    }
+
+    /// The first line of a reply: which project it covers and why.
+    fn head(&self) -> String {
+        match self {
+            Scope::One { project, why } => format!("Project: {project} ({why})\n"),
+            Scope::All { why } => format!("Project: all ({why})\n"),
+            Scope::Unknown(_) => String::new(),
+        }
+    }
+}
+
+/// The project a call reads: its `project` argument, else the agent's own, else the only project
+/// with events. With several and no way to tell, [`Scope::Unknown`].
+async fn scope(hub: &Hub, arg: Option<String>, ctx: &Ctx) -> Result<Scope, String> {
+    match arg.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+        Some("*" | "all") => return Ok(Scope::All { why: "as asked".into() }),
+        Some(p) => return Ok(Scope::One { project: p.to_owned(), why: "as asked".into() }),
+        None => {}
+    }
+    if let Some(p) = &ctx.project {
+        return Ok(Scope::One { project: p.clone(), why: ctx.source.clone().unwrap_or_else(|| "this agent's project".into()) });
+    }
+    let projects = recent_projects(hub).await?;
+    Ok(match projects.as_slice() {
+        [] => Scope::All { why: "no events recorded yet".into() },
+        [only] => Scope::One { project: only.name.clone(), why: "the only project with events; the agent did not name one".into() },
+        many => {
+            let mut t = String::from(
+                "Glint does not know which project this agent works in (the connection did not say), and it has events \
+                 from several. Call again with project=<name> (the session's Glint note names it), or project=\"*\" \
+                 for all of them.\nRecent projects (last activity · runs · errors):\n",
+            );
+            for p in many {
+                t.push_str(&format!("- {} · {} · {} · {}\n", p.name, p.last.get(..19).unwrap_or(&p.last), p.runs, p.errors));
+            }
+            Scope::Unknown(t)
+        }
+    })
+}
+
+struct ProjectSeen {
+    name: String,
+    last: String,
+    runs: usize,
+    errors: u64,
+}
+
+/// Projects of the most recent runs, newest first, at most ten.
+async fn recent_projects(hub: &Hub) -> Result<Vec<ProjectSeen>, String> {
+    let runs = hub.runs(None, 200).await.map_err(store_err)?;
+    let mut out: Vec<ProjectSeen> = Vec::new();
+    for r in runs {
+        if r.run == "mcp" {
+            continue; // what agents showed, not a program
+        }
+        if let Some(p) = out.iter_mut().find(|p| p.name == r.project) {
+            p.runs += 1;
+            p.errors += r.errors;
+        } else if out.len() < 10 {
+            out.push(ProjectSeen { name: r.project, last: r.last, runs: 1, errors: r.errors });
+        }
+    }
+    Ok(out)
+}
 
 pub fn definitions() -> Value {
     let filter = json!({
-        "project": { "type": "string", "description": "Only this project (usually the repo directory name)." },
+        "project": { "type": "string", "description": PROJECT_HELP },
         "run": { "type": "string", "description": "Only this run (one process / request / test)." },
         "kind": { "type": "string", "description": "Exact kind, or a prefix ending in * (e.g. sql.*, core.exception)." },
         "level": { "type": "string", "enum": ["trace", "debug", "info", "warn", "error", "fatal"], "description": "Minimum level." },
@@ -39,7 +132,7 @@ pub fn definitions() -> Value {
             "title": "Recent runs",
             "description": "List recently active runs (processes, requests, tests, agent sessions), newest first, with event and error counts.",
             "inputSchema": { "type": "object", "properties": {
-                "project": { "type": "string" },
+                "project": { "type": "string", "description": PROJECT_HELP },
                 "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 15 }
             }},
             "annotations": { "readOnlyHint": true }
@@ -70,7 +163,7 @@ pub fn definitions() -> Value {
             "title": "Last error",
             "description": "The most recent error-level event (exception, error log, failed job…) with its stack and the events that led up to it in the same run.",
             "inputSchema": { "type": "object", "properties": {
-                "project": { "type": "string" },
+                "project": { "type": "string", "description": PROJECT_HELP },
                 "context": { "type": "integer", "minimum": 0, "maximum": 100, "default": 20, "description": "How many earlier events of the same run to include." }
             }},
             "annotations": { "readOnlyHint": true }
@@ -78,8 +171,10 @@ pub fn definitions() -> Value {
         {
             "name": "glint_wait_for",
             "title": "Wait for an event",
-            "description": "Block until a NEW event matching the filters arrives (e.g. after you changed code and the user or a watcher reruns it), or until the timeout. Returns that event.",
+            "description": "Return the newest event matching the filters from the last lookback_s seconds (so a program you just ran counts), else block until one arrives (e.g. after you changed code and the user or a watcher reruns it) or the timeout passes. Says which window it searched. lookback_s=0 waits only for new events; after=<id> searches everything after that event instead.",
             "inputSchema": { "type": "object", "properties": with(json!({
+                "after": { "type": "string", "description": "Search stored events after this event id instead of the lookback window." },
+                "lookback_s": { "type": "integer", "minimum": 0, "maximum": WAIT_LOOKBACK_MAX_S, "default": WAIT_LOOKBACK_DEFAULT_S, "description": "Also count events of the last N seconds before the call." },
                 "timeout_s": { "type": "integer", "minimum": 1, "maximum": WAIT_MAX_S, "default": WAIT_DEFAULT_S }
             }))},
             "annotations": { "readOnlyHint": true }
@@ -90,7 +185,7 @@ pub fn definitions() -> Value {
             "description": "Turn glint() markers into a test: wait until events matching each expectation have arrived (in order unless ordered=false) and no program failed meanwhile, then report PASS or FAIL with the matching event ids. Run the program first and call this (events of the last lookback_s seconds count), or call it and have the user click through. One expectation is space-separated terms that must all hold for one event: label:\"order saved\", kind:sql.query or kind:sql.*, text:refund (payload contains), a comparison on a dot path like payload.value.total>0 or payload.value.paid=true (= != > >= < <=; values are JSON), has:payload.value.email, count>=2.",
             "inputSchema": { "type": "object", "required": ["expect"], "properties": {
                 "expect": { "type": "array", "items": { "type": "string" }, "description": "Expectations, e.g. [\"label:cart payload.value.total>0\", \"kind:sql.query text:insert\", \"label:\\\"order saved\\\"\"]." },
-                "project": { "type": "string", "description": "Only this project (recommended)." },
+                "project": { "type": "string", "description": PROJECT_HELP },
                 "run": { "type": "string" },
                 "ordered": { "type": "boolean", "default": true },
                 "no_errors": { "type": "boolean", "default": true, "description": "Fail as soon as a program error arrives." },
@@ -137,7 +232,7 @@ pub fn definitions() -> Value {
                 "format": { "type": "string", "enum": ["markdown", "mermaid", "text", "json"] },
                 "content": { "type": "string" },
                 "label": { "type": "string" },
-                "project": { "type": "string" }
+                "project": { "type": "string", "description": "Project to show it in. Default: the agent's own." }
             }},
             "annotations": { "readOnlyHint": false, "destructiveHint": false }
         },
@@ -146,7 +241,7 @@ pub fn definitions() -> Value {
             "title": "LLM calls",
             "description": "Recent LLM calls (from OpenTelemetry GenAI spans or SDKs): model, tokens, latency, cost, last user message and answer, plus totals. Use glint_event for a full transcript.",
             "inputSchema": { "type": "object", "properties": {
-                "project": { "type": "string" },
+                "project": { "type": "string", "description": PROJECT_HELP },
                 "model": { "type": "string", "description": "Substring of the model name." },
                 "q": { "type": "string", "description": "Full-text search over prompts and answers." },
                 "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
@@ -157,7 +252,7 @@ pub fn definitions() -> Value {
             "name": "glint_clear",
             "title": "Start a fresh view",
             "description": "Clear the human's live view (stored events are kept) and get a cursor: pass it as `after` to glint_events to see only what happens next.",
-            "inputSchema": { "type": "object", "properties": { "project": { "type": "string" } } },
+            "inputSchema": { "type": "object", "properties": { "project": { "type": "string", "description": "Project whose view to clear. Default: the agent's own." } } },
             "annotations": { "readOnlyHint": false, "destructiveHint": false }
         }
     ])
@@ -195,20 +290,20 @@ fn args<T: for<'de> Deserialize<'de>>(v: Value) -> Result<T, String> {
     serde_json::from_value(v).map_err(|e| format!("invalid arguments: {e}"))
 }
 
-pub async fn call(hub: &Hub, name: &str, a: Value) -> Result<String, String> {
+pub async fn call(hub: &Hub, name: &str, a: Value, ctx: &Ctx) -> Result<String, String> {
     match name {
-        "glint_runs" => runs(hub, args(a)?).await,
-        "glint_events" => events(hub, args(a)?).await,
+        "glint_runs" => runs(hub, args(a)?, ctx).await,
+        "glint_events" => events(hub, args(a)?, ctx).await,
         "glint_event" => event(hub, args(a)?).await,
-        "glint_last_error" => last_error(hub, args(a)?).await,
-        "glint_wait_for" => wait_for(hub, a).await,
-        "glint_expect" => expect(hub, args(a)?).await,
+        "glint_last_error" => last_error(hub, args(a)?, ctx).await,
+        "glint_wait_for" => wait_for(hub, a, ctx).await,
+        "glint_expect" => expect(hub, args(a)?, ctx).await,
         "glint_pauses" => Ok(pauses(hub)),
         "glint_resume" => resume(hub, args(a)?).await,
         "glint_annotate" => annotate(hub, args(a)?).await,
-        "glint_show" => show(hub, args(a)?).await,
-        "glint_clear" => clear(hub, args(a)?).await,
-        "glint_llm_calls" => llm_calls(hub, args(a)?).await,
+        "glint_show" => show(hub, args(a)?, ctx).await,
+        "glint_clear" => clear(hub, args(a)?, ctx).await,
+        "glint_llm_calls" => llm_calls(hub, args(a)?, ctx).await,
         other => Err(format!("unknown tool `{other}`")),
     }
 }
@@ -223,12 +318,17 @@ struct RunsArgs {
     limit: Option<usize>,
 }
 
-async fn runs(hub: &Hub, a: RunsArgs) -> Result<String, String> {
-    let runs = hub.runs(a.project, a.limit.unwrap_or(15).clamp(1, 100)).await.map_err(store_err)?;
+async fn runs(hub: &Hub, a: RunsArgs, ctx: &Ctx) -> Result<String, String> {
+    // Every row names its project, so an unknown one lists them all, saying so.
+    let (project, head) = match scope(hub, a.project, ctx).await? {
+        Scope::Unknown(_) => (None, "Project: all (this agent's project is unknown; pass project=<name> to narrow)\n".to_owned()),
+        s => (s.project(), s.head()),
+    };
+    let runs = hub.runs(project, a.limit.unwrap_or(15).clamp(1, 100)).await.map_err(store_err)?;
     if runs.is_empty() {
-        return Ok("No runs recorded yet.".into());
+        return Ok(format!("{head}No runs recorded yet."));
     }
-    let mut out = String::from("run · project · last activity · events · errors · last event id\n");
+    let mut out = format!("{head}run · project · last activity · events · errors · last event id\n");
     for r in runs {
         out.push_str(&format!(
             "{} · {} · {} · {} · {} · {}\n",
@@ -243,14 +343,20 @@ async fn runs(hub: &Hub, a: RunsArgs) -> Result<String, String> {
     Ok(out)
 }
 
-async fn events(hub: &Hub, f: Filter) -> Result<String, String> {
+async fn events(hub: &Hub, mut f: Filter, ctx: &Ctx) -> Result<String, String> {
+    let s = scope(hub, f.project.take(), ctx).await?;
+    if let Scope::Unknown(t) = s {
+        return Ok(t);
+    }
+    f.project = s.project();
+    let head = s.head();
     let q = f.query(EVENTS_DEFAULT, EVENTS_MAX);
     let limit = q.limit();
     let got = hub.query(q).await.map_err(store_err)?;
     if got.is_empty() {
-        return Ok("No matching events.".into());
+        return Ok(format!("{head}No matching events."));
     }
-    let mut out = String::new();
+    let mut out = head;
     for e in &got {
         out.push_str(&line(e));
         out.push('\n');
@@ -290,18 +396,23 @@ struct LastErrorArgs {
     context: Option<usize>,
 }
 
-async fn last_error(hub: &Hub, a: LastErrorArgs) -> Result<String, String> {
-    let q = Query { project: a.project.clone(), level: Some(Level::Error), limit: Some(1), ..Query::default() };
+async fn last_error(hub: &Hub, a: LastErrorArgs, ctx: &Ctx) -> Result<String, String> {
+    let s = scope(hub, a.project, ctx).await?;
+    if let Scope::Unknown(t) = s {
+        return Ok(t);
+    }
+    let q = Query { project: s.project(), level: Some(Level::Error), limit: Some(1), ..Query::default() };
     let Some(e) = hub.query(q).await.map_err(store_err)?.pop() else {
-        return Ok("No errors recorded.".into());
+        return Ok(format!("{}No errors recorded.", s.head()));
     };
-    let mut out = format!(
+    let mut out = s.head();
+    out.push_str(&format!(
         "Last error {} at {} — run {} (project {})\n",
         e.id,
         e.ts.format("%Y-%m-%d %H:%M:%S%.3f"),
         e.run,
         e.project
-    );
+    ));
     if let Some(f) = &e.origin.file {
         out.push_str(&format!("reported at {f}{}\n", e.origin.line.map(|l| format!(":{l}")).unwrap_or_default()));
     }
@@ -333,7 +444,8 @@ async fn last_error(hub: &Hub, a: LastErrorArgs) -> Result<String, String> {
     }
     let n = a.context.unwrap_or(20).min(100);
     if n > 0 {
-        let q = Query { run: Some(e.run.clone()), before: Some(e.id.clone()), limit: Some(n), ..Query::default() };
+        // Same run and project: two programs may both use the default run name.
+        let q = Query { project: Some(e.project.clone()), run: Some(e.run.clone()), before: Some(e.id.clone()), limit: Some(n), ..Query::default() };
         let before = hub.query(q).await.map_err(store_err)?;
         if !before.is_empty() {
             out.push_str(&format!("\nWhat happened before it in this run ({} events):\n", before.len()));
@@ -347,32 +459,67 @@ async fn last_error(hub: &Hub, a: LastErrorArgs) -> Result<String, String> {
     Ok(out)
 }
 
-async fn wait_for(hub: &Hub, a: Value) -> Result<String, String> {
+async fn wait_for(hub: &Hub, a: Value, ctx: &Ctx) -> Result<String, String> {
     let timeout = a.get("timeout_s").and_then(Value::as_u64).unwrap_or(WAIT_DEFAULT_S).clamp(1, WAIT_MAX_S);
-    let q = args::<Filter>(a)?.query(1, 1);
-    let mut rx = hub.subscribe();
+    let lookback = a.get("lookback_s").and_then(Value::as_u64).unwrap_or(WAIT_LOOKBACK_DEFAULT_S).min(WAIT_LOOKBACK_MAX_S);
+    let mut f = args::<Filter>(a)?;
+    let s = scope(hub, f.project.take(), ctx).await?;
+    if let Scope::Unknown(t) = s {
+        return Ok(t);
+    }
+    f.project = s.project();
+    let head = s.head();
+    let after = f.after.clone().filter(|x| !x.is_empty());
+    let q = f.query(1, 1);
+    let bookkeeping = |e: &glint_protocol::Envelope| matches!(e.kind.as_str(), "core.update" | "ctl.resume");
+    let mut rx = hub.subscribe(); // first, so nothing falls between the stored check and the stream
+    let started = chrono::Utc::now();
+    let window = match &after {
+        Some(id) => format!("stored events after {id}"),
+        None if lookback > 0 => format!("the {lookback} s before the call"),
+        None => "only new events (lookback_s=0)".to_owned(),
+    };
+    if after.is_some() || lookback > 0 {
+        let stored = Query { limit: Some(EVENTS_MAX), before: None, ..q.clone() };
+        let cutoff = started - chrono::Duration::seconds(i64::try_from(lookback).unwrap_or(0));
+        let got = hub.query(stored).await.map_err(store_err)?;
+        if let Some(e) = got.iter().rev().find(|e| !bookkeeping(e) && (after.is_some() || e.ts >= cutoff)) {
+            let ago = (started - e.ts).num_milliseconds().max(0) as f64 / 1000.0;
+            let body = serde_json::to_string(&e.payload).unwrap_or_default();
+            return Ok(format!(
+                "{head}Found in {window} (it happened {ago:.1} s before the call; newest match):\n{}\npayload: {}",
+                line(e),
+                clip(&body, 2000)
+            ));
+        }
+    }
     let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout);
     loop {
         match tokio::time::timeout_at(deadline, rx.recv()).await {
-            Err(_) => return Ok(format!("No matching event within {timeout} s.")),
+            Err(_) => return Ok(format!("{head}No matching event: searched {window}, then waited {timeout} s.")),
             Ok(Err(RecvError::Closed)) => return Err("Glint is shutting down.".into()),
             Ok(Err(RecvError::Lagged(_))) => continue,
             Ok(Ok(e)) => {
-                if matches!(e.kind.as_str(), "core.update" | "ctl.resume") || !q.matches(&e) {
+                if bookkeeping(&e) || !q.matches(&e) {
                     continue;
                 }
                 let body = serde_json::to_string(&e.payload).unwrap_or_default();
-                return Ok(format!("{}\npayload: {}", line(&e), clip(&body, 2000)));
+                return Ok(format!("{head}Arrived after the call (searched {window} first):\n{}\npayload: {}", line(&e), clip(&body, 2000)));
             }
         }
     }
 }
 
-async fn expect(hub: &Hub, mut r: glint_core::expect::Request) -> Result<String, String> {
+async fn expect(hub: &Hub, mut r: glint_core::expect::Request, ctx: &Ctx) -> Result<String, String> {
     let x = r.expectation()?;
+    let s = scope(hub, r.scope.project.take(), ctx).await?;
+    if let Scope::Unknown(t) = s {
+        return Ok(t);
+    }
+    r.scope.project = s.project();
     r.scope.timeout_s = Some(r.scope.timeout_s.unwrap_or(30).clamp(1, WAIT_MAX_S));
     let v = glint_core::expect::run(hub, x, r.scope).await.map_err(store_err)?;
-    Ok(v.report())
+    Ok(format!("{}{}", s.head(), v.report()))
 }
 
 fn pauses(hub: &Hub) -> String {
@@ -466,7 +613,7 @@ struct ShowArgs {
     project: Option<String>,
 }
 
-async fn show(hub: &Hub, a: ShowArgs) -> Result<String, String> {
+async fn show(hub: &Hub, a: ShowArgs, ctx: &Ctx) -> Result<String, String> {
     let (kind, payload) = match a.format.as_str() {
         "markdown" | "mermaid" | "text" => (format!("core.{}", a.format), json!({ "content": a.content })),
         "json" => {
@@ -477,8 +624,12 @@ async fn show(hub: &Hub, a: ShowArgs) -> Result<String, String> {
     };
     debug_assert!(is_valid_kind(&kind));
     let meta = Meta { label: a.label.or(Some("agent".into())), color: Some("purple".into()), ..Meta::default() };
-    let id = emit(hub, agent_event(&kind, payload, meta, a.project)).await?;
-    Ok(format!("Shown as {id}."))
+    let project = a.project.filter(|p| !p.is_empty()).or_else(|| ctx.project.clone());
+    let id = emit(hub, agent_event(&kind, payload, meta, project.clone())).await?;
+    Ok(match project {
+        Some(p) => format!("Shown as {id} in project {p}."),
+        None => format!("Shown as {id}."),
+    })
 }
 
 #[derive(Deserialize)]
@@ -486,8 +637,9 @@ struct ClearArgs {
     project: Option<String>,
 }
 
-async fn clear(hub: &Hub, a: ClearArgs) -> Result<String, String> {
-    let id = emit(hub, agent_event("core.clear", json!({}), Meta::default(), a.project)).await?;
+async fn clear(hub: &Hub, a: ClearArgs, ctx: &Ctx) -> Result<String, String> {
+    let project = a.project.filter(|p| !p.is_empty()).or_else(|| ctx.project.clone());
+    let id = emit(hub, agent_event("core.clear", json!({}), Meta::default(), project)).await?;
     Ok(format!("View cleared. Pass after={id} to glint_events to see only what happens from now on."))
 }
 
@@ -499,10 +651,15 @@ struct LlmArgs {
     limit: Option<usize>,
 }
 
-async fn llm_calls(hub: &Hub, a: LlmArgs) -> Result<String, String> {
+async fn llm_calls(hub: &Hub, a: LlmArgs, ctx: &Ctx) -> Result<String, String> {
+    let s = scope(hub, a.project, ctx).await?;
+    if let Scope::Unknown(t) = s {
+        return Ok(t);
+    }
+    let head = s.head();
     let limit = a.limit.unwrap_or(20).clamp(1, 100);
     let q = Query {
-        project: a.project.filter(|s| !s.is_empty()),
+        project: s.project(),
         kind: Some("llm.call".into()),
         q: a.q.filter(|s| !s.is_empty()),
         // Over-fetch so a model filter still fills the page.
@@ -516,10 +673,10 @@ async fn llm_calls(hub: &Hub, a: LlmArgs) -> Result<String, String> {
     let skip = calls.len().saturating_sub(limit);
     let calls = &calls[skip..];
     if calls.is_empty() {
-        return Ok("No LLM calls recorded. Send OpenTelemetry GenAI spans to http://127.0.0.1:4318 or use an SDK.".into());
+        return Ok(format!("{head}No LLM calls recorded. Send OpenTelemetry GenAI spans to http://127.0.0.1:4318 or use an SDK."));
     }
     let (mut tin, mut tout, mut cost, mut lat, mut errors) = (0.0, 0.0, 0.0, 0.0, 0);
-    let mut out = String::new();
+    let mut out = head;
     for e in calls {
         let p = &e.payload;
         let num = |v: Option<&Value>| v.and_then(Value::as_f64).unwrap_or(0.0);

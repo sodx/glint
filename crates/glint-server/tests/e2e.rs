@@ -191,6 +191,63 @@ async fn mcp_over_http() {
     assert_eq!(foreign.status(), 403);
 }
 
+/// An HTTP client that names no project: the first tool call asks for its workspace roots over
+/// SSE, and the answer scopes that call and later ones. `/mcp?project=` scopes without asking.
+#[tokio::test]
+async fn mcp_scopes_http_clients_by_workspace_root() {
+    let addr = start().await;
+    let http = reqwest::Client::new();
+    let url = format!("http://{addr}/mcp");
+    for (project, class) in [("alpha", "AlphaError"), ("beta", "BetaError")] {
+        http.post(format!("http://{addr}/v1/events"))
+            .json(&json!({"kind": "core.exception", "project": project, "payload": {"class": class, "message": "x"}}))
+            .send()
+            .await
+            .unwrap();
+    }
+    let call = json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "glint_last_error", "arguments": {}}});
+    let dir = std::env::temp_dir().join(format!("glint-e2e-roots-{}", std::process::id())).join("beta");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let sid = "glint-e2e-claude-code";
+    let mut res = http
+        .post(&url)
+        .header("accept", "application/json, text/event-stream")
+        .header("mcp-session-id", sid)
+        .json(&call)
+        .send()
+        .await
+        .unwrap();
+    assert!(res.headers()["content-type"].to_str().unwrap().starts_with("text/event-stream"));
+    let mut text = String::new();
+    let mut answered = false;
+    while let Some(chunk) = tokio::time::timeout(Duration::from_secs(5), res.chunk()).await.unwrap().unwrap() {
+        text.push_str(&String::from_utf8_lossy(&chunk));
+        if !answered && let Some(line) = text.lines().find(|l| l.starts_with("data:") && l.contains("roots/list")) {
+            let ask: Value = serde_json::from_str(line.trim_start_matches("data:").trim()).unwrap();
+            let answer = json!({"jsonrpc": "2.0", "id": ask["id"], "result": {"roots": [{"uri": format!("file://{}", dir.display())}]}});
+            let r = http.post(&url).header("mcp-session-id", sid).json(&answer).send().await.unwrap();
+            assert_eq!(r.status(), 202);
+            answered = true;
+        }
+    }
+    assert!(answered, "{text}");
+    let reply = text.lines().rfind(|l| l.starts_with("data:")).unwrap();
+    let reply: Value = serde_json::from_str(reply.trim_start_matches("data:").trim()).unwrap();
+    let t = reply["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(t.starts_with("Project: beta (the agent's workspace") && t.contains("BetaError") && !t.contains("AlphaError"), "{t}");
+
+    // Later calls of that session are plain JSON, still scoped.
+    let res: Value = http.post(&url).header("accept", "application/json, text/event-stream").header("mcp-session-id", sid).json(&call).send().await.unwrap().json().await.unwrap();
+    assert!(res["result"]["content"][0]["text"].as_str().unwrap().contains("BetaError"));
+
+    // A per-project URL needs no roots.
+    let res: Value = http.post(format!("{url}?project=alpha")).header("mcp-session-id", "other").json(&call).send().await.unwrap().json().await.unwrap();
+    let t = res["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(t.starts_with("Project: alpha (named by the connection)") && t.contains("AlphaError"), "{t}");
+    std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
+}
+
 #[tokio::test]
 async fn claude_code_hooks_become_agent_events() {
     let addr = start().await;

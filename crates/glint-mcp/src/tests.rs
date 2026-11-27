@@ -74,15 +74,18 @@ async fn events_runs_and_last_error() {
     assert!(text.contains("select * from carts where id = ? (2.1 ms)"));
     assert!(text.contains("newest id:"));
 
-    let (text, _) = call(&s, "glint_events", json!({"kind": "core.exception"})).await;
+    let (text, _) = call(&s, "glint_events", json!({"kind": "core.exception", "project": "*"})).await;
+    assert!(text.starts_with("Project: all (as asked)\n"), "{text}");
     assert!(text.contains("TypeError: total is undefined @ renderTotal"));
 
     let (text, _) = call(&s, "glint_runs", json!({})).await;
-    let rows: Vec<_> = text.lines().skip(1).collect();
+    assert!(text.starts_with("Project: all (this agent's project is unknown"), "{text}");
+    let rows: Vec<_> = text.lines().skip(2).collect();
     assert!(rows[0].starts_with("req-2 · blog"));
     assert!(rows[1].starts_with("req-1 · shop") && rows[1].contains(" · 3 · 1 · "));
 
-    let (text, _) = call(&s, "glint_last_error", json!({})).await;
+    let (text, _) = call(&s, "glint_last_error", json!({"project": "shop"})).await;
+    assert!(text.starts_with("Project: shop (as asked)\n"), "{text}");
     assert!(text.contains("TypeError: total is undefined"));
     assert!(text.contains("at renderTotal (…/shop/src/cart.ts:88)"));
     assert!(text.contains("[vendor]"));
@@ -90,7 +93,7 @@ async fn events_runs_and_last_error() {
     assert!(text.contains("GET /cart"));
     assert!(!text.contains("other"), "context must stay within the run");
 
-    let id = text.split_whitespace().nth(2).unwrap().to_owned();
+    let id = text.lines().nth(1).unwrap().split_whitespace().nth(2).unwrap().to_owned();
     let (full, _) = call(&s, "glint_event", json!({"id": id, "max_chars": 200})).await;
     assert!(full.contains("truncated at 200 chars"));
     let (_, err) = call(&s, "glint_event", json!({"id": "missing"})).await;
@@ -108,10 +111,98 @@ async fn wait_for_sees_only_new_matching_events() {
     });
     let (text, err) = call(&s, "glint_wait_for", json!({"kind": "core.value", "timeout_s": 5})).await;
     assert!(!err);
-    assert!(text.contains("fresh") && !text.contains("old"));
+    assert!(text.contains("Arrived after the call") && text.contains("fresh") && !text.contains("old"), "{text}");
 
-    let (text, _) = call(&s, "glint_wait_for", json!({"kind": "core.value", "timeout_s": 1})).await;
-    assert_eq!(text, "No matching event within 1 s.");
+    let (text, _) = call(&s, "glint_wait_for", json!({"kind": "core.value", "lookback_s": 0, "timeout_s": 1})).await;
+    assert!(text.ends_with("No matching event: searched only new events (lookback_s=0), then waited 1 s."), "{text}");
+}
+
+#[tokio::test]
+async fn wait_for_finds_what_happened_just_before_the_call() {
+    let (s, hub) = server().await;
+    put(&hub, r#"{"kind":"core.value","payload":{"value":"early"},"meta":{"label":"marker"}}"#).await;
+    // The default lookback sees it, and says which window it searched.
+    let (text, _) = call(&s, "glint_wait_for", json!({"q": "marker", "timeout_s": 1})).await;
+    assert!(text.contains("Found in the 10 s before the call") && text.contains("early"), "{text}");
+    // lookback_s=0 waits only for new ones.
+    let (text, _) = call(&s, "glint_wait_for", json!({"q": "marker", "lookback_s": 0, "timeout_s": 1})).await;
+    assert!(text.contains("No matching event"), "{text}");
+    // after=<id> searches everything stored after that event, however old.
+    put(&hub, r#"{"id":"CUT","kind":"core.log","payload":{"message":"cut"}}"#).await;
+    put(&hub, r#"{"kind":"core.value","payload":{"value":"later"},"meta":{"label":"marker"}}"#).await;
+    let (text, _) = call(&s, "glint_wait_for", json!({"q": "marker", "after": "CUT", "lookback_s": 0, "timeout_s": 1})).await;
+    assert!(text.contains("Found in stored events after CUT") && text.contains("later") && !text.contains("early"), "{text}");
+}
+
+#[tokio::test]
+async fn tools_read_the_callers_project_and_say_so() {
+    let (s, hub) = server().await;
+    put(&hub, r#"[
+        {"kind":"core.exception","payload":{"class":"ShopError","message":"in shop"},"run":"a","project":"shop"},
+        {"kind":"core.exception","payload":{"class":"BlogError","message":"in blog"},"run":"b","project":"blog"}
+    ]"#)
+    .await;
+    let ask = |caller: Caller| {
+        let s = s.clone();
+        async move {
+            let r = s
+                .handle_from(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "glint_last_error", "arguments": {}}}), &caller)
+                .await;
+            r.reply.unwrap()["result"]["content"][0]["text"].as_str().unwrap().to_owned()
+        }
+    };
+    // Named by the connection (glint mcp's X-Glint-Project, or /mcp?project=).
+    let t = ask(Caller { session: None, project: Some("shop".into()) }).await;
+    assert!(t.starts_with("Project: shop (named by the connection)") && t.contains("ShopError") && !t.contains("BlogError"), "{t}");
+    let t = ask(Caller { session: None, project: Some("blog".into()) }).await;
+    assert!(t.contains("BlogError") && !t.contains("ShopError"), "{t}");
+    // Unknown, with two projects: no mixing, a list instead.
+    let t = ask(Caller::default()).await;
+    assert!(t.contains("does not know which project") && t.contains("- shop · ") && t.contains("- blog · "), "{t}");
+    assert!(!t.contains("Error:"), "{t}");
+    // An explicit argument wins over the connection's project.
+    let (t, _) = call(&s, "glint_events", json!({"project": "blog"})).await;
+    assert!(t.starts_with("Project: blog (as asked)") && t.contains("in blog") && !t.contains("in shop"), "{t}");
+}
+
+#[tokio::test]
+async fn workspace_roots_scope_an_http_session() {
+    let (s, hub) = server().await;
+    put(&hub, r#"[
+        {"kind":"core.exception","payload":{"class":"ShopError","message":"in shop"},"run":"a","project":"shop"},
+        {"kind":"core.exception","payload":{"class":"BlogError","message":"in blog"},"run":"b","project":"blog"}
+    ]"#)
+    .await;
+    let caller = Caller { session: Some("glint-1-claude-code".into()), project: None };
+    let msg = json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "glint_last_error", "arguments": {}}});
+    assert!(s.wants_roots(&msg, &caller));
+    let (ask, answered) = s.roots_request("glint-1-claude-code");
+    assert_eq!(ask["method"], "roots/list");
+    assert!(!s.wants_roots(&msg, &caller), "asked once per session");
+    // The client answers with its workspace: a folder named blog (no .git), with a space escaped.
+    let dir = std::env::temp_dir().join(format!("glint roots {}", std::process::id())).join("blog");
+    std::fs::create_dir_all(&dir).unwrap();
+    let uri = format!("file://{}", dir.display().to_string().replace(' ', "%20"));
+    let r = s.handle_from(json!({"jsonrpc": "2.0", "id": ask["id"], "result": {"roots": [{"uri": uri, "name": "blog"}]}}), &caller).await;
+    assert!(r.reply.is_none(), "a response gets no reply");
+    answered.await.unwrap();
+    let t = s.handle_from(msg.clone(), &caller).await.reply.unwrap()["result"]["content"][0]["text"].as_str().unwrap().to_owned();
+    assert!(t.starts_with("Project: blog (the agent's workspace ") && t.contains("BlogError") && !t.contains("ShopError"), "{t}");
+    // The client says its roots changed: asked again on the next call.
+    s.handle_from(json!({"jsonrpc": "2.0", "method": "notifications/roots/list_changed"}), &caller).await;
+    assert!(s.wants_roots(&msg, &caller));
+    // A call that names a project, or a connection that does, needs no roots.
+    assert!(!s.wants_roots(&json!({"method": "tools/call", "params": {"arguments": {"project": "x"}}}), &caller));
+    assert!(!s.wants_roots(&msg, &Caller { session: Some("s2".into()), project: Some("x".into()) }));
+    std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
+}
+
+#[test]
+fn root_uris_become_paths() {
+    assert_eq!(root_path("file:///Users/a%20b/shop").as_deref(), Some("/Users/a b/shop"));
+    assert_eq!(root_path("file://localhost/srv/x").as_deref(), Some("/srv/x"));
+    assert_eq!(root_path("file:///C:/work/app").as_deref(), Some("C:/work/app"));
+    assert_eq!(root_path("https://x"), None);
 }
 
 #[tokio::test]
@@ -126,7 +217,7 @@ async fn expect_passes_on_markers_old_and_new_and_fails_on_a_crash() {
     });
     let (text, err) = call(&s, "glint_expect", json!({"project": "shop", "timeout_s": 5, "expect": ["label:cart payload.value.total>0", "label:\"order saved\" payload.value.paid=true"]})).await;
     assert!(!err, "{text}");
-    assert!(text.starts_with("PASS") && text.contains("— A") && text.contains("— B"), "{text}");
+    assert!(text.starts_with("Project: shop (as asked)\nPASS") && text.contains("— A") && text.contains("— B"), "{text}");
 
     let h = hub.clone();
     tokio::spawn(async move {
@@ -134,7 +225,7 @@ async fn expect_passes_on_markers_old_and_new_and_fails_on_a_crash() {
         put(&h, r#"{"kind":"core.exception","payload":{"class":"TypeError","message":"coupon is null","frames":[]},"project":"shop"}"#).await;
     });
     let (text, _) = call(&s, "glint_expect", json!({"project": "shop", "lookback_s": 0, "timeout_s": 5, "expect": ["label:\"never sent\""]})).await;
-    assert!(text.starts_with("FAIL") && text.contains("TypeError: coupon is null"), "{text}");
+    assert!(text.contains("\nFAIL") && text.contains("TypeError: coupon is null"), "{text}");
 
     let (text, err) = call(&s, "glint_expect", json!({"expect": ["nonsense"]})).await;
     assert!(err && text.contains("expected"), "{text}");
@@ -170,7 +261,7 @@ async fn annotate_show_clear() {
     let (text, _) = call(&s, "glint_clear", json!({})).await;
     let cursor = text.split("after=").nth(1).unwrap().split_whitespace().next().unwrap().to_owned();
     put(&hub, r#"{"kind":"core.log","payload":{"message":"after clear"}}"#).await;
-    let (text, _) = call(&s, "glint_events", json!({"after": cursor})).await;
+    let (text, _) = call(&s, "glint_events", json!({"after": cursor, "project": "*"})).await;
     assert!(text.contains("after clear") && !text.contains("boom"));
 
     let all = hub.query(glint_core::Query::default()).await.unwrap();
