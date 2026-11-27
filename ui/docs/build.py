@@ -359,14 +359,14 @@ def sections():
 <h2>What Glint records with no code at all</h2>
 <p>Uncaught errors. PHP still prints its error and exits with the same code, Python still prints the traceback, and a Node process still crashes as before. Glint only records them.</p>
 <table class="ref">
-<tr><td>PHP</td><td>uncaught exceptions and fatal errors (out of memory, a parse error in an included file). Works for scripts, php-fpm, Valet, Herd and <code>php -S -t public</code>. PHP skips the prepend file for a <code>php -S</code> router script, which is what <code>artisan serve</code> uses.</td></tr>
+<tr><td>PHP</td><td>uncaught exceptions and fatal errors (out of memory, a parse error in an included file). Works for scripts, php-fpm, Valet, Herd and <code>php -S -t public</code>. PHP skips the prepend file for a <code>php -S</code> router script; for <code>artisan serve</code> Glint loads it anyway.</td></tr>
 <tr><td>Python</td><td>uncaught exceptions in any thread.</td></tr>
 <tr><td>Node</td><td>uncaught exceptions and unhandled promise rejections.</td></tr>
 <tr><td>Browser</td><td>with one tag in the page you are developing: uncaught errors, unhandled rejections, <code>console.error</code> and <code>console.warn</code>, failed requests and resources that failed to load.</td></tr>
 </table>
 {cmd('<script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"></script>', "html")}
 <p>Only pages on <code>localhost</code>, <code>127.0.0.1</code>, <code>*.localhost</code> or <code>*.test</code> can send. Leave the tag out of production builds.</p>
-<p class="aside">Frameworks that catch exceptions to render an error page (Laravel, Express, Django) stop them from being uncaught. Call <code>glint($e)</code> in the framework's error handler to see them.</p>
+<p class="aside">Frameworks catch exceptions to render an error page, so those are never uncaught. Glint hooks into WordPress, Laravel, Django, Flask, FastAPI, Express and Next.js to report them anyway (see each one's page). For another framework, call <code>glint($e)</code> in its error handler.</p>
 """))
     s.append(("d-wp", "WordPress", f"""
 <h2>WordPress</h2>
@@ -395,6 +395,86 @@ WordPress::conditionals();          // is_single, is_admin and the other tags th
 WordPress::options('siteurl', 'permalink_structure');
 WordPress::queries();               // every query of this request as a table (needs SAVEQUERIES)""", "php")}
 <p>Plain <code>glint()</code>, <code>Glint\\Glint::measure()</code> and <code>Glint\\Glint::pause()</code> work in themes and plugins as everywhere else. A pause in a template stops the page until you continue it here.</p>
+"""))
+    s.append(("d-laravel", "Laravel", f"""
+<h2>Laravel</h2>
+<p>A Laravel app needs no package and no code. When <code>public/index.php</code>, <code>artisan serve</code>, an artisan command or a queue worker runs inside a Laravel app, Glint hooks in as the app boots and reports:</p>
+<table class="ref">
+<tr><td>the request</td><td>one run per request with a summary at its root: method, route, controller action, views, response code, time, memory and number of queries. Everything else nests under it, so the call tree shows the request.</td></tr>
+<tr><td>SQL</td><td>every query with its bindings, time, connection and the line in your app that ran it. A query from a Blade view points at the template, not the compiled file.</td></tr>
+<tr><td>exceptions</td><td>what the exception handler reports, with the request: URL, route, action and input (passwords, tokens and keys hidden)</td></tr>
+<tr><td>logs</td><td>everything written with <code>Log::</code>, at its level, with the line that wrote it</td></tr>
+<tr><td>queue jobs</td><td>in a worker each job is a run of its own, with its SQL and exception under it; a failed job counts as a failure. A job on the sync driver nests under the request that dispatched it.</td></tr>
+<tr><td>HTTP calls</td><td>calls of the HTTP client (<code>Http::get()</code> and friends) that failed: connection errors, 4xx and 5xx</td></tr>
+</table>
+<p>How it gets in: Laravel defines its <code>env()</code> helper only when none exists and calls it while the configuration loads. Glint defines an identical <code>env()</code> first and hooks in on that first call. With a cached configuration (<code>php artisan config:cache</code>) the call never happens. Clear the cache in development, or require the SDK with Composer, and Laravel discovers its service provider:</p>
+{cmd("composer require --dev glint/glint")}
+<p>An app with <code>APP_ENV=production</code> is left alone. <code>GLINT_LARAVEL=off</code> in the environment turns the integration off.</p>
+"""))
+    s.append(("d-django", "Django", f"""
+<h2>Django</h2>
+<p>A Django project needs no middleware and no settings. Glint hooks in when Django's request handler loads, under <code>runserver</code>, gunicorn, uvicorn or any other server, sync or async:</p>
+<table class="ref">
+<tr><td>the request</td><td>one run per request with a summary at its root: method, route, view, response code, time, memory and number of queries</td></tr>
+<tr><td>SQL</td><td>every query of every database connection with its parameters, time, rows and the line in your code that ran it; a failed query counts as a failure</td></tr>
+<tr><td>exceptions</td><td>what Django turns into an error page, with the request it happened in</td></tr>
+<tr><td>logs</td><td>records of your own loggers, and warnings and errors of Django's, with the line that wrote them</td></tr>
+<tr><td>HTTP calls</td><td>calls made with <code>requests</code> or <code>httpx</code> that failed: connection errors, 4xx and 5xx</td></tr>
+</table>
+<p>It works through the Python shim from <code>glint install</code>, so a virtual environment needs nothing either. <code>GLINT_FRAMEWORKS=off</code> turns the framework hooks off.</p>
+"""))
+    s.append(("d-flask", "Flask and FastAPI", f"""
+<h2>Flask and FastAPI</h2>
+<p>Flask, FastAPI and other Starlette apps report on their own, like Django:</p>
+<table class="ref">
+<tr><td>the request</td><td>one run per request with a summary at its root: method, route, endpoint, response code, time, memory and number of queries</td></tr>
+<tr><td>SQL</td><td>every statement that goes through SQLAlchemy (also Flask-SQLAlchemy and SQLModel), with its parameters, time, rows and the line in your code that ran it</td></tr>
+<tr><td>exceptions</td><td>unhandled exceptions, with the request they happened in</td></tr>
+<tr><td>logs</td><td>records of your own loggers, with the line that wrote them</td></tr>
+<tr><td>HTTP calls</td><td>calls made with <code>requests</code> or <code>httpx</code> that failed</td></tr>
+</table>
+<p>Async endpoints keep their request: what an awaited function sends still nests under it.</p>
+"""))
+    s.append(("d-express", "Express", f"""
+<h2>Express and other Node servers</h2>
+<p>Every HTTP server in a Node process reports its requests: Express, Fastify, Koa or plain <code>node:http</code>. For Express, Glint also knows the route and catches errors:</p>
+<table class="ref">
+<tr><td>the request</td><td>one run per request with a summary at its root: method, route pattern, response code, time, memory and number of queries</td></tr>
+<tr><td>SQL</td><td>queries of <code>pg</code>, <code>mysql2</code> and <code>node:sqlite</code> with their values, time, rows and the line in your code that ran them, also through a pool</td></tr>
+<tr><td>exceptions</td><td>errors that reach Express's error handling (thrown in a route or passed to <code>next(err)</code>), with the request. Glint looks before your own error handler, which still runs.</td></tr>
+<tr><td>HTTP calls</td><td><code>fetch()</code> calls that failed: network errors, 4xx and 5xx</td></tr>
+</table>
+<p>This comes with the Node shim from <code>glint install</code> (<code>NODE_OPTIONS</code>). Prisma is not hooked; send its queries yourself if you need them:</p>
+{code("""const prisma = new PrismaClient({ log: [{ emit: "event", level: "query" }] });
+prisma.$on("query", (e) => glint.send("sql.query", { sql: e.query, bindings: JSON.parse(e.params), duration_ms: e.duration }));""", "js")}
+<p><code>GLINT_FRAMEWORKS=off</code> turns these hooks off; <code>NODE_ENV=production</code> turns Glint off.</p>
+"""))
+    s.append(("d-next", "Next.js", f"""
+<h2>Next.js</h2>
+<p><code>next dev</code> reports each page and route handler request as a run, with the SQL of <code>pg</code>, <code>mysql2</code> and <code>node:sqlite</code> under it, failed <code>fetch()</code> calls, and the errors Next.js prints for a route, with the request. Requests for <code>/_next/</code> assets are left out.</p>
+<p>For the browser side, add the browser script to the root layout in development:</p>
+{code("""// app/layout.js
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <head>
+        {process.env.NODE_ENV === "development" && (
+          <script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop" />
+        )}
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}""", "js")}
+"""))
+    s.append(("d-vite", "Vite", f"""
+<h2>Vite</h2>
+<p>The Vite plugin puts the browser script on the dev server's pages with the right project name, so the browser's errors, failed requests and <code>window.glint()</code> markers arrive here. A production build stays as it is.</p>
+{code("""// vite.config.js
+import glint from "glint-sdk/vite"; // sdks/js in the Glint repository, or ~/.glint/sdk/js
+
+export default { plugins: [glint()] };""", "js")}
+<p>Options: <code>glint({{ project: "shop", url: "http://127.0.0.1:23600" }})</code>. Without them the project is the git repository's name and the address comes from <code>GLINT_URL</code>.</p>
 """))
     s.append(("d-tree", "Call tree", f"""
 <h2>Call tree and timing</h2>

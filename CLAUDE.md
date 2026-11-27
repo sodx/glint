@@ -37,6 +37,13 @@ glintd's UI. `app/bundle-macos.sh` makes `target/release/Glint.app` without taur
 from `app/icons/make.py`. The CLI lives in `Contents/Resources/bin` because `glint` and `Glint`
 collide on case-insensitive file systems.
 
+Framework integrations with no code, hooked in by the global shims: Laravel (`sdks/php/src/Laravel.php`,
+via an `env()` defined before Laravel's), Django, Flask, FastAPI, SQLAlchemy, requests and httpx
+(`sdks/python/glint/_frameworks.py`, via a `sys.meta_path` hook), Node servers, Express, Next.js,
+fetch, pg, mysql2 and node:sqlite (`sdks/js/src/frameworks.js`), plus a Vite plugin
+(`sdks/js/src/vite.js`). One run per request with a `core.measure` root; manifest in
+`docs/mappings/frameworks.md`; `python3 examples/frameworks/check.py` checks them live.
+
 `glint expect` / MCP `glint_expect` / `POST /v1/expect` share `glint-core::expect` (term syntax, evaluator, async runner).
 
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`

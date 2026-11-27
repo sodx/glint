@@ -106,6 +106,26 @@ methods for code: `post()`, `user()`, `query()`, `hooks('save_post')`, `template
 `conditionals()`, `options()` and `queries()`. A production site is left alone, and `GLINT_WP`
 chooses what to report.
 
+## Laravel, Django, Flask, FastAPI, Express, Next.js and Vite
+
+These need no package, middleware or settings either: the global install hooks into them when
+they load. Each request becomes a run with one summary at its root (method, route, controller or
+view, status, time, memory, number of queries), and under it every SQL query with the line in your
+code that ran it, the framework's exceptions with their request, log records, and outgoing HTTP
+calls that failed.
+
+| Framework | Hooked through | SQL from |
+| --- | --- | --- |
+| Laravel (also `artisan serve` and queue workers, one run per job) | the PHP prepend file, as the app boots | every connection (`DB::listen`) |
+| Django | the Python shim, when the request handler loads | every connection (`execute_wrapper`) |
+| Flask, FastAPI, Starlette | the Python shim | SQLAlchemy |
+| Express, Next.js, any `node:http` server | the Node shim (`NODE_OPTIONS`) | `pg`, `mysql2`, `node:sqlite` |
+
+`sdks/js/src/vite.js` is a Vite plugin that puts the browser script on dev server pages and
+nothing in a production build. `examples/frameworks/` holds a small app for each, and
+`python3 examples/frameworks/check.py` runs the ones whose toolchain is installed against a
+sandbox glintd and checks what arrives. The in-app docs have a page per framework.
+
 ## Call tree, pauses and checks
 
 Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends nests under it:

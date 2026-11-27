@@ -42,3 +42,17 @@ languages:
   any:
     pipe: { status: supported, note: "anything that prints to stdout/stderr" }
     http: { status: supported, note: "POST JSON to /v1/events, docs/PROTOCOL.md" }
+
+# Framework integrations: hooked in by the global SDK shims with no code (sdks/*/ and
+# sdks/global/). verified = run by examples/frameworks/check.py against a sandbox glintd.
+frameworks:
+  wordpress: { status: supported, via: sdks/php/src/WordPress.php }
+  laravel: { status: supported, via: sdks/php/src/Laravel.php, verified: "10.50 on PHP 8.1 (artisan serve, queue:work)", note: "11 and 12 need PHP 8.2; not run yet" }
+  django: { status: supported, via: sdks/python/glint/_frameworks.py, verified: "6.1 on CPython 3.14 (runserver)" }
+  flask: { status: supported, via: sdks/python/glint/_frameworks.py, verified: "3.1 with SQLAlchemy 2.1, requests 2.34" }
+  fastapi: { status: supported, via: sdks/python/glint/_frameworks.py, verified: "0.165 on Starlette 1.10, uvicorn 0.54, httpx 0.29" }
+  express: { status: supported, via: sdks/js/src/frameworks.js, verified: "4.22 on Node 24, pg 8.23 against PostgreSQL 16, node:sqlite", note: "Express 5 and mysql2 not run yet" }
+  nextjs: { status: supported, via: sdks/js/src/frameworks.js, verified: "15.5 next dev on Node 24" }
+  node-http: { status: supported, via: sdks/js/src/frameworks.js, note: "any node:http or node:https server (Fastify, Koa); only plain node:http run" }
+  vite: { status: supported, via: sdks/js/src/vite.js, verified: "6.4" }
+  prisma: { status: planned, note: "not hooked; docs show a $on('query') snippet" }
