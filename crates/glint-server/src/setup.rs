@@ -4,6 +4,8 @@
 //! checked and set up, the same as in their terminal. glintd itself often runs with a bare PATH
 //! (started at login, or by the desktop app).
 //!
+//! `POST /v1/report` ("Send diagnostics") runs `glint report` the same way (see `report`).
+//!
 //! Only this server's own pages can call these (the origin guard lets other origins send events
 //! and nothing else).
 
@@ -15,6 +17,8 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
+
+use crate::report::login_shell;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -31,8 +35,15 @@ fn cli() -> Option<PathBuf> {
     candidates.push(home.join(".glint/bin/glint"));
     candidates.push(PathBuf::from("/Applications/Glint.app/Contents/Resources/bin/glint"));
     candidates.push(home.join("Applications/Glint.app/Contents/Resources/bin/glint"));
-    let found = candidates.into_iter().find(|p| p.is_file())?;
+    let found = candidates.into_iter().find(|p| exact_file(p))?;
     Some(unquarantined(&found, &home).unwrap_or(found))
+}
+
+/// A file with exactly this name. macOS file systems ignore case, so inside Glint.app
+/// `Contents/MacOS/glint` finds the window's own executable `Glint`, which must not run as the CLI.
+fn exact_file(p: &std::path::Path) -> bool {
+    let (Some(dir), Some(name)) = (p.parent(), p.file_name()) else { return false };
+    p.is_file() && std::fs::read_dir(dir).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() == name)))
 }
 
 /// A Glint.app downloaded from the internet carries macOS's quarantine flag on every file, and
@@ -57,28 +68,6 @@ fn unquarantined(cli: &std::path::Path, home: &std::path::Path) -> Option<PathBu
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&copy, std::fs::Permissions::from_mode(0o755)).ok()?;
     Some(copy)
-}
-
-/// The user's login shell, from the user database (a process started at login has no $SHELL).
-fn login_shell() -> String {
-    let user = std::env::var("USER").unwrap_or_default();
-    let from_db = if cfg!(target_os = "macos") {
-        std::process::Command::new("dscl")
-            .args([".", "-read", &format!("/Users/{user}"), "UserShell"])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().nth(1).map(str::to_owned))
-    } else {
-        std::process::Command::new("getent")
-            .args(["passwd", &user])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().rsplit(':').next().map(str::to_owned))
-    };
-    from_db
-        .or_else(|| std::env::var("SHELL").ok())
-        .filter(|s| std::path::Path::new(s).is_file())
-        .unwrap_or_else(|| "/bin/sh".into())
 }
 
 /// Runs `glint <args> --json` in a login shell; returns the steps and everything it printed.
@@ -111,6 +100,9 @@ async fn attempt(shell: &str, flags: &str, line: &str, timeout: Duration) -> Res
     let child = tokio::process::Command::new(shell)
         .args([flags, line])
         .env("SHELL", shell)
+        // The CLI may run from a copy in ~/.glint/cache (see `unquarantined`), where it cannot
+        // find this glintd next to itself; `glint install` copies the one named here.
+        .envs(std::env::current_exe().ok().map(|e| ("GLINT_DAEMON", e)))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -171,5 +163,59 @@ pub async fn install() -> Response {
             Json(json!({ "steps": steps, "log": log })).into_response()
         }
         Err(e) => crate::routes::error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+/// `POST /v1/report` → `{path, complete}`: "Send diagnostics" in the window. Runs `glint report` in
+/// the login shell; when the CLI cannot run (quarantine, a broken profile), writes what glintd can
+/// see itself, with the reason. Either way the file is in ~/Downloads and shown in Finder.
+pub async fn report() -> Response {
+    let bundle = crate::report::own_bundle();
+    let mut args = "report --no-reveal".to_owned();
+    if let Some(b) = &bundle {
+        args.push_str(&format!(" --app '{}'", b.display().to_string().replace('\'', "'\\''")));
+    }
+    let ran = run(&args, Duration::from_secs(90)).await;
+    let from_cli = match &ran {
+        Ok((v, _)) => v.get("path").and_then(Value::as_str).map(PathBuf::from).filter(|p| p.is_file()),
+        Err(_) => None,
+    };
+    let complete = from_cli.is_some();
+    let why = match ran {
+        Ok((v, log)) => format!("glint report gave no file: {v}\n{log}"),
+        Err(e) => e,
+    };
+    let path = match from_cli {
+        Some(p) => Ok(p),
+        None => tokio::task::spawn_blocking(move || {
+            let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+            let mut sections = crate::report::common(&home, bundle.as_deref(), "could not run (see below)", env!("CARGO_PKG_VERSION"));
+            sections.insert(1, ("glint report".into(), format!("The glint command line tool could not write this report, so glintd wrote what it can see.\n{why}")));
+            crate::report::save(&home, None, &crate::report::render(&sections))
+        })
+        .await
+        .map_err(|e| std::io::Error::other(e.to_string()))
+        .and_then(|r| r),
+    };
+    match path {
+        Ok(p) => {
+            let shown = p.clone();
+            let _ = tokio::task::spawn_blocking(move || crate::report::reveal(&shown)).await;
+            Json(json!({ "path": p.display().to_string(), "complete": complete })).into_response()
+        }
+        Err(e) => crate::routes::error(StatusCode::INTERNAL_SERVER_ERROR, format!("could not write the report: {e}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn exact_file_ignores_a_name_that_only_matches_without_case() {
+        let dir = std::env::temp_dir().join(format!("glint-exact-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Glint"), "").unwrap();
+        assert!(super::exact_file(&dir.join("Glint")));
+        assert!(!super::exact_file(&dir.join("glint")));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

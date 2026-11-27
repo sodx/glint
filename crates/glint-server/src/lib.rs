@@ -7,6 +7,7 @@
 mod guard;
 mod otlp;
 mod ray;
+pub mod report;
 mod routes;
 pub(crate) mod source;
 mod setup;

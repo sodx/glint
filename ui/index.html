@@ -1290,7 +1290,16 @@ async function runSetup() {
   } catch (err) { S.setup = { ...(S.setup || {}), running: false, error: err.message }; }
   render();
 }
-function setupCard() {
+// Settings always offer "Send diagnostics"; the first-run card only when something failed.
+async function sendReport() {
+  S.reporting = true; render(); drawSetMac();
+  try {
+    const r = await api("/v1/report", { method: "POST" });
+    toast(`Saved ${r.path.split("/").pop()} in Downloads`);
+  } catch (err) { toast(`Could not write the report: ${err.message}`); }
+  S.reporting = false; render(); drawSetMac();
+}
+function setupCard(inSettings) {
   const st = S.setup;
   if (!st) return `<div class="ob-card"><h3>This Mac</h3><p class="ob-muted">Checking what is set up…</p></div>`;
   const by = Object.fromEntries((st.steps || []).map(x => [x.name, x]));
@@ -1311,7 +1320,11 @@ function setupCard() {
   const err = st.error ? `<p class="ob-err">${esc(st.error)}</p>` : "";
   const lead = missing ? "One click sets up the rest: glint() without imports, errors with no code, and your coding agents." : st.steps ? "Everything is set up." : "";
   const setupAgain = !missing && noAgent && !st.running ? `<button class="btn" data-act="setup">Set up this Mac</button>` : "";
-  return `<div class="ob-card"><h3>This Mac</h3>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${agentHint}${err}<div class="ob-actions">${btn}${setupAgain}${again}</div>${after}</div>`;
+  const failing = st.error || (st.steps || []).some(x => x.status === "fail");
+  const diag = (inSettings || failing) && !st.running
+    ? `<button class="link" data-act="report"${S.reporting ? " disabled" : ""}>${S.reporting ? "Collecting diagnostics…" : "Send diagnostics"}</button>` : "";
+  const diagHint = diag ? `<p class="ob-muted">Send diagnostics saves a report to your Downloads folder and shows it in Finder. Nothing leaves this Mac: send the file to whoever helps you with Glint.</p>` : "";
+  return `<div class="ob-card"><h3>This Mac</h3>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${agentHint}${err}<div class="ob-actions">${btn}${setupAgain}${again}${diag}</div>${after}${diagHint}</div>`;
 }
 function tryCard() {
   const CC = `<button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button>`;
@@ -1492,6 +1505,7 @@ document.addEventListener("click", ev => {
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
   if (act === "docs") return openDocs();
   if (act === "setup") return runSetup();
+  if (act === "report") return sendReport();
   if (act === "setup-check") { S.setup = null; render(); return loadSetup().then(drawSetMac); }
   if (act === "sample") return sendSample();
   if (act === "settings") return openSettings();
@@ -1539,7 +1553,7 @@ async function openSettings() {
   drawSettings(); d.querySelector("[data-key]")?.focus();
   drawSetMac(); if (!S.setup || S.setup.error) loadSetup().then(drawSetMac);
 }
-function drawSetMac() { const el = $("setMac"); if (el && !$("settings").hidden) el.innerHTML = setupCard(); }
+function drawSetMac() { const el = $("setMac"); if (el && !$("settings").hidden) el.innerHTML = setupCard(true); }
 function closeSettings() { $("settings").hidden = true; }
 function drawSettings() {
   const i = setInfo, st = i.settings, d = i.data;

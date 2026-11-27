@@ -1,0 +1,72 @@
+# A brand new tester on a clean Mac: build the disk image, install Glint.app from it with the
+# download quarantine flag on, start it, press "Set up this Mac", and check that PHP, Python, Node
+# and Claude Code all reach Glint, then that `glint uninstall` cleans up.
+# The checks live in scripts/clean-mac-check.sh, which also runs locally in a sandbox HOME.
+name: clean-mac
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: clean-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tester:
+    runs-on: macos-14 # Apple silicon
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+      GLINT_CHECK_OUT: ${{ github.workspace }}/clean-mac-out
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            app -> target
+
+      - name: Build the disk image
+        run: app/bundle-macos.sh --dmg
+
+      # What a tester usually has. The script writes their folders into the login profile, the
+      # way Homebrew and nvm do, because "Set up this Mac" runs in the login shell.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Act like a new tester
+        run: scripts/clean-mac-check.sh --ci --launch-app --app target/release/Glint-*.dmg
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p "$GLINT_CHECK_OUT"
+          cp ~/.glint/setup.log ~/.glint/glintd.log "$GLINT_CHECK_OUT/" 2>/dev/null || true
+          ~/.glint/bin/glint doctor --json > "$GLINT_CHECK_OUT/doctor.txt" 2>&1 || \
+            /Applications/Glint.app/Contents/Resources/bin/glint doctor --json > "$GLINT_CHECK_OUT/doctor.txt" 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clean-mac-results
+          path: clean-mac-out
+          if-no-files-found: warn

@@ -100,3 +100,15 @@ the stored events and settings gone.
 | `glint: command not found` | Open a new terminal window, or run `/Applications/Glint.app/Contents/Resources/bin/glint`. |
 | Claude Code says it has no Glint server | Glint was not set up yet, or the session started before setup. Click **Set up this Mac** in the Glint window, then start a new Claude Code session. An agent you install later gets Glint the next time you click it. |
 | Setup reported a problem | Read `~/.glint/setup.log`. PHP's configuration folder may need `sudo` on some setups; run the install command from step 4 in Terminal to see the details. |
+
+## Sending diagnostics
+
+When something still does not work, click Send diagnostics in the Glint window (Settings > This
+Mac, or the first-run card when a step failed), or run `glint report` in Terminal. Glint writes
+one text file to your Downloads folder and shows it in Finder. Nothing is sent anywhere: send the
+file yourself to whoever helps you.
+
+The file has the versions of the app, glintd, the `glint` tool and macOS, what `glint doctor`
+finds, the last `~/.glint/setup.log`, the end of glintd's log, `~/.glint/config.toml` with
+secrets removed, whether Glint.app still carries the download quarantine flag, your login
+shell and its PATH, and the coding agents Glint found.

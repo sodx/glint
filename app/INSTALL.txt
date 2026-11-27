@@ -20,6 +20,10 @@ This build runs on Macs with Apple silicon (M1 or newer) and macOS 11 or later.
              python3 -c 'glint("hello from Python")'
              node -e 'glint("hello from Node")'
 
+6. Something not working? Click "Send diagnostics" in the Glint window (Settings > This Mac).
+   It saves a report to Downloads and shows it in Finder; send that file to whoever gave you
+   Glint. Nothing is sent by itself.
+
 The full guide, in English and Russian, is in docs/INSTALL.md and docs/INSTALL.ru.md of the
 Glint repository.
 
@@ -44,3 +48,7 @@ Glint для Mac
    Потом откройте новое окно терминала и новую сессию Claude Code. «Show me an example» покажет пример.
 
 5. Проверьте (команды выше, в шаге 5 английской части).
+
+6. Что-то не работает? Нажмите «Send diagnostics» в окне Glint (Settings > This Mac). Отчёт
+   сохранится в «Загрузки» и откроется в Finder; перешлите этот файл тому, кто дал вам Glint.
+   Сам Glint ничего не отправляет.

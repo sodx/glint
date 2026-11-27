@@ -37,6 +37,11 @@ glintd's UI. `app/bundle-macos.sh` makes `target/release/Glint.app` without taur
 from `app/icons/make.py`. The CLI lives in `Contents/Resources/bin` because `glint` and `Glint`
 collide on case-insensitive file systems.
 
+`scripts/clean-mac-check.sh` (CI: `.github/workflows/clean-mac.yml`) installs the DMG like a new
+tester (quarantine flag on), runs setup through glintd and checks PHP, Python, Node, Claude Code,
+agent detection, `glint report` and uninstall; locally it runs in a sandbox HOME on a spare port.
+"Send diagnostics" (`POST /v1/report`) and `glint report` share `glint-server::report`.
+
 `glint expect` / MCP `glint_expect` / `POST /v1/expect` share `glint-core::expect` (term syntax, evaluator, async runner).
 
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
