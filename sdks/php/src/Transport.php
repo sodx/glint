@@ -115,6 +115,25 @@ final class Transport
         }
     }
 
+    /** @var array{file?: string, line?: int, fn?: string}|null where emitAt says the event comes from */
+    private static ?array $at = null;
+
+    /**
+     * Like emit(), with the call site given instead of found from the stack (integrations report
+     * the theme or plugin line that caused something, not their own hook).
+     *
+     * @param array{file?: string, line?: int, fn?: string}|null $site
+     */
+    public static function emitAt(string $kind, mixed $payload, array $meta = [], ?array $site = null): ?string
+    {
+        self::$at = $site;
+        try {
+            return self::emit($kind, $payload, $meta);
+        } finally {
+            self::$at = null;
+        }
+    }
+
     public static function emit(string $kind, mixed $payload, array $meta = [], ?string $fixedId = null): ?string
     {
         try {
@@ -289,6 +308,9 @@ final class Transport
         $cwd = getcwd();
         if ($cwd !== false) {
             $o['cwd'] = $cwd;
+        }
+        if (self::$at !== null) { // given by emitAt(); [] means none
+            return $o + array_filter(self::$at, static fn ($v) => $v !== null);
         }
 
         // Frame k: 'file'/'line' is where frame k's function was called; 'function' is that callee.

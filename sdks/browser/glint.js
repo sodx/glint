@@ -145,11 +145,30 @@
   );
   addEventListener("unhandledrejection", (ev) => exception(ev.reason, "unhandled rejection"));
 
+  // Console-style formatting: "%s and %o" filled from the arguments, as the console shows it.
+  function short(a) {
+    if (typeof a === "string") return a;
+    if (a instanceof Error) return `${a.name}: ${a.message}`;
+    if (a && typeof a === "object" && typeof a.name === "string") return a.name; // e.g. a block type
+    try {
+      const s = JSON.stringify(encode(a));
+      return s && s.length > 300 ? s.slice(0, 300) + "…" : String(s);
+    } catch {
+      return String(a);
+    }
+  }
+  function format(args) {
+    if (typeof args[0] !== "string" || !/%[sdifoOc]/.test(args[0])) return args.map(short).join(" ");
+    let i = 1;
+    const head = args[0].replace(/%[sdifoOc]/g, (m) => (m === "%c" ? (i++, "") : i < args.length ? short(args[i++]) : m));
+    return [head, ...args.slice(i).map(short)].join(" ");
+  }
+
   for (const level of ["error", "warn"]) {
     const orig = console[level];
     console[level] = function (...args) {
       try {
-        const msg = args.map((a) => (typeof a === "string" ? a : a instanceof Error ? `${a.name}: ${a.message}` : JSON.stringify(encode(a)))).join(" ");
+        const msg = format(args);
         send("core.log", { message: msg.slice(0, 4000) }, { level, label: `console.${level}` }, site());
       } catch {
         // ignore
@@ -261,7 +280,7 @@
     }
     return undefined;
   };
-  window.__glint = { run, project, flush };
+  window.__glint = { run, project, flush, format };
   if (typeof window.glint === "undefined") window.glint = glint;
   send("core.log", { message: `${location.pathname}${location.search}`, fields: { url: location.href, title: document.title } }, { label: "page" }, {});
 })();

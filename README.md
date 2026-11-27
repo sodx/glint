@@ -87,6 +87,18 @@ markers sent with `window.glint()`:
 <script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"></script>
 ```
 
+## WordPress
+
+A WordPress site on this machine needs no plugin. Glint hooks in before WordPress loads and reports
+each request with its summary (template, queries, memory, time), every `$wpdb` query with the
+theme or plugin line behind it, database errors, `WP_Error`s, `_doing_it_wrong()` and deprecation
+notices, mail sent with `wp_mail()`, HTTP API calls, and REST responses with an error status. The
+browser script goes into the front end, wp-admin and the login page. In the block editor, invalid
+blocks and error notices such as "Updating failed" arrive with the reason. `Glint\WordPress` adds
+methods for code: `post()`, `user()`, `query()`, `hooks('save_post')`, `template()`,
+`conditionals()`, `options()` and `queries()`. A production site is left alone, and `GLINT_WP`
+chooses what to report.
+
 ## Call tree, pauses and checks
 
 Wrap a piece of work in `glint.measure("checkout", fn)` and everything `fn` sends nests under it:

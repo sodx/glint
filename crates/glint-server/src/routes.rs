@@ -146,7 +146,13 @@ async fn data_clear(State(s): State<AppState>) -> Response {
 /// The browser SDK (`sdks/browser/glint.js`), for a `<script>` tag in a page under development.
 async fn browser_js() -> Response {
     (
-        [(header::CONTENT_TYPE, "application/javascript; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")],
+        [
+            (header::CONTENT_TYPE, "application/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+            // Pages that are cross-origin isolated (WordPress's block editor is) may only load
+            // scripts from other origins that allow it.
+            (header::HeaderName::from_static("cross-origin-resource-policy"), "cross-origin"),
+        ],
         include_str!("../../../sdks/browser/glint.js"),
     )
         .into_response()

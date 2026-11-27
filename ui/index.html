@@ -551,7 +551,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <div class="docs-shell">
     <nav class="docs-nav" aria-label="Documentation">
       <div class="docs-brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="docsTitle">Glint docs</span></div>
-      <a href="#d-start">Start</a><a href="#d-api">Methods</a><a href="#d-nocode">With no code</a><a href="#d-tree">Call tree</a><a href="#d-expect">glint expect</a><a href="#d-agents">Coding agents</a><a href="#d-cli">Command line</a><a href="#d-app">This window</a><a href="#d-config">Settings and data</a><a href="#d-langs">Other languages</a><a href="#d-help">When something is off</a>
+      <a href="#d-start">Start</a><a href="#d-api">Methods</a><a href="#d-nocode">With no code</a><a href="#d-wp">WordPress</a><a href="#d-tree">Call tree</a><a href="#d-expect">glint expect</a><a href="#d-agents">Coding agents</a><a href="#d-cli">Command line</a><a href="#d-app">This window</a><a href="#d-config">Settings and data</a><a href="#d-langs">Other languages</a><a href="#d-help">When something is off</a>
       <button class="link docs-close" data-act="docs-close">Close <kbd>esc</kbd></button>
     </nav>
     <article class="docs-body"><section id="d-start">
@@ -640,6 +640,33 @@ curl -s &quot;localhost:23600/v1/ctl/p-42?timeout_s=25&quot;</code></pre></div><
 <pre class="code cmd"><code data-lang="html">&lt;script src=&quot;http://127.0.0.1:23600/v1/browser.js&quot; data-project=&quot;shop&quot;&gt;&lt;/script&gt;</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
 <p>Only pages on <code>localhost</code>, <code>127.0.0.1</code>, <code>*.localhost</code> or <code>*.test</code> can send. Leave the tag out of production builds.</p>
 <p class="aside">Frameworks that catch exceptions to render an error page (Laravel, Express, Django) stop them from being uncaught. Call <code>glint($e)</code> in the framework's error handler to see them.</p>
+</section><section id="d-wp">
+<h2>WordPress</h2>
+<p>A WordPress site on this machine needs no plugin. Glint recognises a WordPress request and hooks in before WordPress loads, so every page, admin screen, REST call and cron run reports on its own:</p>
+<table class="ref">
+<tr><td>the request</td><td>method and path first, and at the end a summary: response code, time, number of queries, memory, the template file, the conditional tags that were true, and the main query</td></tr>
+<tr><td>SQL</td><td>every <code>$wpdb</code> query with the theme or plugin line that caused it and the rows it returned; database errors count as failures. Timings appear when <code>SAVEQUERIES</code> is on in <code>wp-config.php</code>.</td></tr>
+<tr><td>errors</td><td>each <code>WP_Error</code> as it is created, <code>_doing_it_wrong()</code>, deprecation notices from themes and plugins, and PHP warnings</td></tr>
+<tr><td>mail</td><td>what <code>wp_mail()</code> sends (to, subject, body) and mail that failed, with the reason</td></tr>
+<tr><td>HTTP</td><td>calls made with <code>wp_remote_get()</code> and friends; failed ones count as failures</td></tr>
+<tr><td>REST</td><td>responses with an error status, with the route and WordPress's error code. The block editor saves over REST, so "Updating failed" arrives here with the reason.</td></tr>
+<tr><td>browser</td><td>the browser script on the front end, in wp-admin and on the login page, so JavaScript errors, failed requests and console errors arrive too</td></tr>
+<tr><td>block editor</td><td>invalid blocks, with the saved HTML and what the editor expected, and the editor's error notices</td></tr>
+</table>
+<p>The editor heartbeat that runs every 15 to 60 seconds is left out. A site whose <code>WP_ENVIRONMENT_TYPE</code> is <code>production</code> is left alone. To keep only some of this, set <code>GLINT_WP</code> (a constant in <code>wp-config.php</code> or an environment variable) to a list such as <code>requests,errors,mail,rest,editor</code>; add <code>hooks</code> to count every action and filter that fired; <code>off</code> turns it all off. WP-CLI commands are reported when <code>GLINT_WP_CLI</code> is set.</p>
+<h3>Methods for your code</h3>
+<pre class="code"><code data-lang="php">use Glint\WordPress;
+
+WordPress::post($post_id);          // the post with its fields, meta, terms and permalink
+WordPress::user();                  // the current user: roles, capabilities that are on, meta
+WordPress::query();                 // the main WP_Query: vars, the SQL it ran, the posts it found
+WordPress::query($custom_query);    // or any WP_Query
+WordPress::hooks(&#x27;save_post&#x27;);      // what listens to a hook: priority, callback, file and line
+WordPress::template();              // the template file in use and the theme
+WordPress::conditionals();          // is_single, is_admin and the other tags that are true now
+WordPress::options(&#x27;siteurl&#x27;, &#x27;permalink_structure&#x27;);
+WordPress::queries();               // every query of this request as a table (needs SAVEQUERIES)</code></pre>
+<p>Plain <code>glint()</code>, <code>Glint\Glint::measure()</code> and <code>Glint\Glint::pause()</code> work in themes and plugins as everywhere else. A pause in a template stops the page until you continue it here.</p>
 </section><section id="d-tree">
 <h2>Call tree and timing</h2>
 <p>Wrap work in <code>measure()</code> and everything it sends nests under it. A checkout request then reads <code>checkout → load order → select …</code> instead of a flat list. Click the arrow left of a row to fold it. The bars on the right are a small waterfall: where in the run each piece started and how long it took. OpenTelemetry spans nest the same way.</p>
@@ -836,6 +863,7 @@ const KIND_ICON = {
   "core.html": "log", "core.json": "value", "core.exception": "exc", "core.trace": "exc", "llm.call": "llm",
   "agent.tool_call": "tool", "agent.tool_result": "tool", "agent.step": "prompt", "agent.session": "prompt", "agent.permission": "prompt",
   "ctl.pause": "pause", "core.measure": "measure", "core.span": "measure", "core.table": "table",
+  "x-wp.request": "job", "x-wp.error": "exc", "x-wp.mail": "log", "x-wp.http": "tool", "x-wp.rest": "tool",
 };
 const ms = e => { const p = e.payload || {}; const v = p.duration_ms ?? p.latency_ms; return typeof v === "number" && v > 0 ? v : null; };
 /* When something started, in ms. SDKs send a timed event when it ends (ts is the end);
@@ -915,7 +943,17 @@ function summary(e) {
     case "core.trace": body = `${(p.frames || []).length} frames`; break;
     case "core.table": body = `${(p.rows || []).length} rows`; break;
     case "core.measure": body = p.name || "measure"; if (p.memory_bytes) body += ` · ${(p.memory_bytes / 1048576).toFixed(1)} MiB`; break;
-    case "sql.query": body = p.sql || ""; mono = true; break;
+    case "sql.query": body = p.sql || ""; mono = true; if (p.error) { t = "SQL error"; body = `${p.error} · ${p.sql}`; } break;
+    // WordPress (sdks/php/src/WordPress.php)
+    case "x-wp.request": {
+      t = "WordPress"; const c = (p.conditionals || []).filter(x => x !== "is_admin").slice(0, 2).join(" ");
+      body = [p.status, p.duration_ms != null ? p.duration_ms + " ms" : "", p.queries != null ? p.queries + " queries" : "", p.memory_mb != null ? p.memory_mb + " MB" : "", p.template ? p.template.split("/").pop() : "", c].filter(Boolean).join(" · ");
+      break;
+    }
+    case "x-wp.error": t = "WP_Error"; lead = p.code || ""; body = p.message || ""; break;
+    case "x-wp.mail": t = p.failed ? "Mail failed" : "Mail"; body = p.failed ? p.error || "" : `${[].concat(p.to || []).join(", ")} · ${p.subject || ""}`; break;
+    case "x-wp.http": t = "HTTP"; body = `${p.method || "GET"} ${p.url || ""} ${p.error ? "· " + p.error : p.status != null ? "→ " + p.status : ""}`; break;
+    case "x-wp.rest": t = "REST"; body = `${p.status} ${p.method || ""} ${p.route || ""}${p.message ? " · " + p.message : ""}`; break;
     case "llm.call": {
       lead = p.model || lead || "llm";
       const user = [...(p.messages || [])].reverse().find(m => m.role === "user");

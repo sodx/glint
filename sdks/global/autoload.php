@@ -17,6 +17,21 @@ if (!function_exists('glint')) {
     require_once __DIR__ . '/src/helpers.php';
 }
 
+// WordPress, with no plugin: when this request is a WordPress one, register Glint's hooks before
+// WordPress loads (see src/WordPress.php). Other scripts only pay for two file checks.
+(static function (): void {
+    $dir = dirname((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    for ($i = 0; $i < 3 && strlen($dir) > 1; $i++, $dir = dirname($dir)) {
+        if (is_file($dir . '/wp-settings.php')) {
+            try {
+                \Glint\WordPress::preload();
+            } catch (\Throwable) {
+            }
+            return;
+        }
+    }
+})();
+
 // Uncaught exceptions: report, then rethrow, so PHP prints its usual "Uncaught …" error and exits
 // as it would have. An application that installs its own handler (a framework) replaces this one.
 set_exception_handler(static function (Throwable $e): void {

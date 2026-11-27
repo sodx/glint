@@ -368,6 +368,34 @@ def sections():
 <p>Only pages on <code>localhost</code>, <code>127.0.0.1</code>, <code>*.localhost</code> or <code>*.test</code> can send. Leave the tag out of production builds.</p>
 <p class="aside">Frameworks that catch exceptions to render an error page (Laravel, Express, Django) stop them from being uncaught. Call <code>glint($e)</code> in the framework's error handler to see them.</p>
 """))
+    s.append(("d-wp", "WordPress", f"""
+<h2>WordPress</h2>
+<p>A WordPress site on this machine needs no plugin. Glint recognises a WordPress request and hooks in before WordPress loads, so every page, admin screen, REST call and cron run reports on its own:</p>
+<table class="ref">
+<tr><td>the request</td><td>method and path first, and at the end a summary: response code, time, number of queries, memory, the template file, the conditional tags that were true, and the main query</td></tr>
+<tr><td>SQL</td><td>every <code>$wpdb</code> query with the theme or plugin line that caused it and the rows it returned; database errors count as failures. Timings appear when <code>SAVEQUERIES</code> is on in <code>wp-config.php</code>.</td></tr>
+<tr><td>errors</td><td>each <code>WP_Error</code> as it is created, <code>_doing_it_wrong()</code>, deprecation notices from themes and plugins, and PHP warnings</td></tr>
+<tr><td>mail</td><td>what <code>wp_mail()</code> sends (to, subject, body) and mail that failed, with the reason</td></tr>
+<tr><td>HTTP</td><td>calls made with <code>wp_remote_get()</code> and friends; failed ones count as failures</td></tr>
+<tr><td>REST</td><td>responses with an error status, with the route and WordPress's error code. The block editor saves over REST, so "Updating failed" arrives here with the reason.</td></tr>
+<tr><td>browser</td><td>the browser script on the front end, in wp-admin and on the login page, so JavaScript errors, failed requests and console errors arrive too</td></tr>
+<tr><td>block editor</td><td>invalid blocks, with the saved HTML and what the editor expected, and the editor's error notices</td></tr>
+</table>
+<p>The editor heartbeat that runs every 15 to 60 seconds is left out. A site whose <code>WP_ENVIRONMENT_TYPE</code> is <code>production</code> is left alone. To keep only some of this, set <code>GLINT_WP</code> (a constant in <code>wp-config.php</code> or an environment variable) to a list such as <code>requests,errors,mail,rest,editor</code>; add <code>hooks</code> to count every action and filter that fired; <code>off</code> turns it all off. WP-CLI commands are reported when <code>GLINT_WP_CLI</code> is set.</p>
+<h3>Methods for your code</h3>
+{code("""use Glint\\WordPress;
+
+WordPress::post($post_id);          // the post with its fields, meta, terms and permalink
+WordPress::user();                  // the current user: roles, capabilities that are on, meta
+WordPress::query();                 // the main WP_Query: vars, the SQL it ran, the posts it found
+WordPress::query($custom_query);    // or any WP_Query
+WordPress::hooks('save_post');      // what listens to a hook: priority, callback, file and line
+WordPress::template();              // the template file in use and the theme
+WordPress::conditionals();          // is_single, is_admin and the other tags that are true now
+WordPress::options('siteurl', 'permalink_structure');
+WordPress::queries();               // every query of this request as a table (needs SAVEQUERIES)""", "php")}
+<p>Plain <code>glint()</code>, <code>Glint\\Glint::measure()</code> and <code>Glint\\Glint::pause()</code> work in themes and plugins as everywhere else. A pause in a template stops the page until you continue it here.</p>
+"""))
     s.append(("d-tree", "Call tree", f"""
 <h2>Call tree and timing</h2>
 <p>Wrap work in <code>measure()</code> and everything it sends nests under it. A checkout request then reads <code>checkout → load order → select …</code> instead of a flat list. Click the arrow left of a row to fold it. The bars on the right are a small waterfall: where in the run each piece started and how long it took. OpenTelemetry spans nest the same way.</p>

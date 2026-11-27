@@ -63,6 +63,13 @@ pub async fn check(State(allow): State<Allowlist>, req: Request, next: Next) -> 
     if !host.is_some_and(|h| allow.host_ok(h)) {
         return (StatusCode::FORBIDDEN, "glint: unexpected Host header").into_response();
     }
+    // The browser SDK is a public static file: any page may load it, also in CORS mode, which
+    // cross-origin isolated pages (WordPress's block editor) need.
+    if req.uri().path() == "/v1/browser.js" {
+        let mut r = next.run(req).await;
+        r.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, header::HeaderValue::from_static("*"));
+        return r;
+    }
     let Some(origin) = req.headers().get(header::ORIGIN).and_then(|o| o.to_str().ok()).map(str::to_owned) else {
         return next.run(req).await;
     };
