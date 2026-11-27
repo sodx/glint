@@ -4,10 +4,9 @@
 # The checks live in scripts/clean-mac-check.sh, which also runs locally in a sandbox HOME.
 name: clean-mac
 
+# Manual only: macOS minutes count ten times against a private repo's Actions quota. Before a
+# release, run scripts/clean-mac-check.sh locally instead; it makes the same checks for free.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -16,7 +15,7 @@ concurrency:
 
 jobs:
   tester:
-    runs-on: macos-14 # Apple silicon
+    runs-on: macos-15 # Apple silicon
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
