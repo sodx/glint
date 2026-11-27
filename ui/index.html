@@ -399,7 +399,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .docs-body table.ref { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 13.5px; }
 .docs-body table.ref td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
 .docs-body table.ref td:first-child { white-space: nowrap; padding-right: 18px; width: 1%; }
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 12px 0 4px; overflow-x: auto; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 12px 0 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tabs button { padding: 8px 12px; font: 500 13.5px var(--sans); color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
 .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
 .tabs button:hover { color: var(--text); }
@@ -433,7 +433,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .ob-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); margin: 6px 0 0 4px; }
 .ob-dash { color: var(--faint); text-align: center; }
 .ob-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
-.ob-code { position: relative; margin: 6px 0 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px 44px 10px 12px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-all; }
+.ob-code { position: relative; margin: 6px 0 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px 44px 10px 12px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ob-code .cc { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
 .ob-code .k { color: var(--kw); } .ob-code .s { color: var(--str); } .ob-code .n { color: var(--num); } .ob-code .v { color: var(--accent); } .ob-code .f { font-weight: 600; } .ob-code .c { color: var(--faint); }
 .ob-tabs .tabs { margin: 4px 0 0; }
@@ -1484,10 +1484,13 @@ function setupCard(inSettings) {
   const err = st.error ? `<p class="ob-err">${esc(st.error)}</p>` : "";
   const lead = missing ? "One click sets up the rest: glint() without imports, errors with no code, and your coding agents." : st.steps ? "Everything is set up." : "";
   const setupAgain = !missing && noAgent && !st.running ? `<button class="btn" data-act="setup">Set up this Mac</button>` : "";
-  const failing = st.error || (st.steps || []).some(x => x.status === "fail");
+  // Before setup every missing part reads "fail"; only a failed check or a setup that left
+  // something broken is a problem worth a diagnostics report.
+  const failing = st.error || (st.justRan && (st.steps || []).some(x => x.status === "fail"));
+  const diagText = "Send diagnostics saves a report to your Downloads folder and shows it in Finder. Nothing leaves this Mac: send the file to whoever helps you with Glint.";
   const diag = (inSettings || failing) && !st.running
-    ? `<button class="link" data-act="report"${S.reporting ? " disabled" : ""}>${S.reporting ? "Collecting diagnostics…" : "Send diagnostics"}</button>` : "";
-  const diagHint = diag ? `<p class="ob-muted">Send diagnostics saves a report to your Downloads folder and shows it in Finder. Nothing leaves this Mac: send the file to whoever helps you with Glint.</p>` : "";
+    ? `<button class="link" data-act="report" title="${diagText}"${S.reporting ? " disabled" : ""}>${S.reporting ? "Collecting diagnostics…" : "Send diagnostics"}</button>` : "";
+  const diagHint = diag && failing ? `<p class="ob-muted">${diagText}</p>` : "";
   return `<div class="ob-card"><h3>This Mac</h3>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${agentHint}${err}<div class="ob-actions">${btn}${setupAgain}${again}${diag}</div>${after}${diagHint}</div>`;
 }
 function tryCard() {
