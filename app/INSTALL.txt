@@ -1,0 +1,44 @@
+Glint for Mac
+
+This build runs on Macs with Apple silicon (M1 or newer) and macOS 11 or later.
+
+1. Drag Glint into the Applications folder.
+
+2. Open Glint. The first time, macOS says it cannot check the app, because this build is
+   not signed through Apple. Click Done, then open System Settings > Privacy & Security,
+   scroll down to "Glint was blocked", click Open Anyway and confirm with your password.
+   (Or run this once in Terminal:  xattr -dr com.apple.quarantine /Applications/Glint.app )
+
+3. A small spark appears in the menu bar and the Glint window opens. Allow notifications
+   when macOS asks: that is how Glint tells you when something fails.
+
+4. Right-click the spark and choose "Set up this Mac...". In a few seconds a notification
+   says what was set up. Open a new terminal window afterwards.
+
+5. Try it:   echo '<?php glint("hello from PHP");' > /tmp/hi.php && php /tmp/hi.php
+             python3 -c 'glint("hello from Python")'
+             node -e 'glint("hello from Node")'
+
+The full guide, in English and Russian, is in docs/INSTALL.md and docs/INSTALL.ru.md of the
+Glint repository.
+
+
+Glint для Mac
+
+Эта сборка работает на Mac с Apple silicon (M1 и новее), macOS 11 и новее.
+
+1. Перетащите Glint в папку «Программы».
+
+2. Откройте Glint. В первый раз macOS скажет, что не может проверить приложение: сборка
+   не подписана через Apple. Нажмите «Готово», затем откройте «Системные настройки» >
+   «Конфиденциальность и безопасность», прокрутите вниз до «Glint заблокирован», нажмите
+   «Всё равно открыть» и подтвердите паролем.
+   (Или один раз выполните в Терминале:  xattr -dr com.apple.quarantine /Applications/Glint.app )
+
+3. В строке меню появится маленькая искра, откроется окно Glint. Разрешите уведомления,
+   когда macOS спросит: так Glint сообщает об ошибках.
+
+4. Нажмите на искру правой кнопкой и выберите «Set up this Mac...». Через несколько секунд
+   придёт уведомление о том, что настроено. После этого откройте новое окно терминала.
+
+5. Проверьте (команды выше, в шаге 5 английской части).

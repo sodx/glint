@@ -119,6 +119,63 @@ fn toggle(app: &AppHandle) {
     }
 }
 
+// ------------------------------------------------------------------ set up this Mac
+
+/// The `glint` CLI inside this app bundle (Contents/Resources/bin/glint).
+fn bundled_cli() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let p = exe.parent()?.parent()?.join("Resources/bin/glint");
+    p.is_file().then_some(p)
+}
+
+/// The user's login shell (an app started from Finder has no $SHELL to go by).
+fn login_shell() -> String {
+    let user = std::env::var("USER").unwrap_or_default();
+    Command::new("dscl")
+        .args([".", "-read", &format!("/Users/{user}"), "UserShell"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().nth(1).map(str::to_owned))
+        .filter(|s| std::path::Path::new(s).is_file())
+        .unwrap_or_else(|| "/bin/zsh".into())
+}
+
+/// "Set up this Mac…": runs the bundled `glint install` in a login shell, so that the user's PATH
+/// (Homebrew, nvm, pyenv) decides which php, python3 and node get glint(). The full output goes to
+/// ~/.glint/setup.log; a notification sums it up.
+fn set_up_this_mac(app: &AppHandle) {
+    let Some(cli) = bundled_cli() else {
+        let _ = app.notification().builder().title("Glint").body("This copy of Glint has no command line tool inside; reinstall the app.").show();
+        return;
+    };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let shell = login_shell();
+        let cmd = format!("'{}' install 2>&1", cli.display());
+        let out = Command::new(&shell).args(["-lic", &cmd]).env("SHELL", &shell).stdin(Stdio::null()).output();
+        let text = match out {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).into_owned(),
+            Err(e) => format!("could not run {shell}: {e}"),
+        };
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            let _ = std::fs::create_dir_all(home.join(".glint"));
+            let _ = std::fs::write(home.join(".glint/setup.log"), &text);
+        }
+        let ok: Vec<&str> = text.lines().filter(|l| l.trim_start().starts_with('✓')).filter_map(|l| l.split_whitespace().nth(1)).collect();
+        let failed = text.lines().filter(|l| l.trim_start().starts_with('✗')).count();
+        let mut done: Vec<&str> = ok.clone();
+        done.dedup();
+        let body = if failed == 0 && !done.is_empty() {
+            format!("Ready: {}. Open a new terminal, then call glint() in any PHP, Python or Node program.", done.join(", "))
+        } else if failed > 0 {
+            format!("{failed} step(s) need a look; the details are in ~/.glint/setup.log.")
+        } else {
+            "Nothing was set up; the details are in ~/.glint/setup.log.".to_owned()
+        };
+        let _ = app.notification().builder().title("Glint is set up").body(body).show();
+    });
+}
+
 fn open_in_browser() {
     let url = base_url();
     #[cfg(target_os = "macos")]
@@ -261,7 +318,21 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
 
 // ------------------------------------------------------------------ main
 
+/// A downloaded copy of Glint carries macOS's quarantine flag on every file inside, and macOS
+/// kills the bundled glintd and glint while they have it. Glint is running, so the user has
+/// already let it open: clear the flag on our own bundle so its tools run too.
+fn clear_own_quarantine() {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let bundle = std::env::current_exe().ok().and_then(|e| e.ancestors().find(|a| a.extension().is_some_and(|x| x == "app")).map(std::path::Path::to_path_buf));
+    if let Some(b) = bundle {
+        let _ = Command::new("xattr").args(["-dr", "com.apple.quarantine"]).arg(&b).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+}
+
 fn main() {
+    clear_own_quarantine();
     ensure_daemon();
     let seen_by_user = Arc::new(AtomicBool::new(true));
     let seen = seen_by_user.clone();
@@ -328,8 +399,9 @@ fn main() {
             let status = MenuItem::with_id(app, "status", "Connecting…", false, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open Glint", true, Some("Alt+CmdOrCtrl+G"))?;
             let browser = MenuItem::with_id(app, "browser", "Open in Browser", true, None::<&str>)?;
+            let setup = MenuItem::with_id(app, "setup", "Set up this Mac…", bundled_cli().is_some(), None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Glint", true, Some("CmdOrCtrl+Q"))?;
-            let menu = Menu::with_items(app, &[&status, &PredefinedMenuItem::separator(app)?, &open, &browser, &PredefinedMenuItem::separator(app)?, &quit])?;
+            let menu = Menu::with_items(app, &[&status, &PredefinedMenuItem::separator(app)?, &open, &browser, &setup, &PredefinedMenuItem::separator(app)?, &quit])?;
             TrayIconBuilder::with_id("main")
                 .icon(Image::from_bytes(TRAY_OK)?)
                 .icon_as_template(true)
@@ -339,6 +411,7 @@ fn main() {
                 .on_menu_event(|app, e| match e.id.as_ref() {
                     "open" => show(app),
                     "browser" => open_in_browser(),
+                    "setup" => set_up_this_mac(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -367,6 +440,11 @@ fn main() {
             });
 
             let seen = seen_by_user.clone();
+            // First run on this Mac: point at the one-click setup.
+            let first_run = std::env::var_os("HOME").map(PathBuf::from).is_some_and(|h| !h.join(".glint/bin/glint").exists());
+            if first_run && bundled_cli().is_some() {
+                let _ = app.notification().builder().title("Welcome to Glint").body("Choose \"Set up this Mac…\" in the menu bar spark to get glint() in PHP, Python and Node and connect your coding agents.").show();
+            }
             std::thread::spawn(move || watch(handle, status, seen));
             Ok(())
         })

@@ -3,6 +3,7 @@
 #
 #   app/bundle-macos.sh                 # → target/release/Glint.app
 #   app/bundle-macos.sh --install       # … and copy it to ~/Applications
+#   app/bundle-macos.sh --dmg           # … and a disk image to share: target/release/Glint-<version>-macos-<arch>.dmg
 #
 # No tauri-cli needed: the bundle is a plain folder with an Info.plist.
 set -eu
@@ -45,6 +46,21 @@ cat > "$out/Contents/Info.plist" <<EOF
 EOF
 codesign --force --deep --sign - "$out" >/dev/null 2>&1 || echo "warning: ad-hoc codesign failed" >&2
 echo "built $out"
+
+if [ "${1:-}" = "--dmg" ]; then
+  # A disk image to share: Glint.app, a link to /Applications, and the install notes.
+  arch=$(uname -m)
+  dmg="$root/target/release/Glint-$version-macos-$arch.dmg"
+  stage="$root/target/release/dmg"
+  rm -rf "$stage" "$dmg"
+  mkdir -p "$stage"
+  cp -R "$out" "$stage/"
+  ln -s /Applications "$stage/Applications"
+  cp "$root/app/INSTALL.txt" "$stage/Read me first.txt"
+  hdiutil create -quiet -volname "Glint $version" -srcfolder "$stage" -ov -format UDZO "$dmg"
+  rm -rf "$stage"
+  echo "built $dmg"
+fi
 
 if [ "${1:-}" = "--install" ]; then
   mkdir -p "$HOME/Applications"

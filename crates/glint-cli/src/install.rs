@@ -147,7 +147,13 @@ fn install_service(a: &Args) -> Step {
         Ok(p) => p,
         Err(e) => return fail("service", format!("cannot find this executable: {e}")),
     };
-    let daemon = here.with_file_name(if cfg!(windows) { "glintd.exe" } else { "glintd" });
+    let name = if cfg!(windows) { "glintd.exe" } else { "glintd" };
+    // Next to this binary (a build, ~/.glint/bin), or inside Glint.app, where this binary is
+    // Contents/Resources/bin/glint and glintd is Contents/MacOS/glintd.
+    let daemon = [here.with_file_name(name), here.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|c| c.join("MacOS").join(name)).unwrap_or_default()]
+        .into_iter()
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| here.with_file_name(name));
     if !daemon.exists() {
         return fail("service", format!("glintd not found next to {} — build or install it first (cargo install --path crates/glintd)", here.display()));
     }

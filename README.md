@@ -20,6 +20,13 @@ Any language can send events with a JSON POST. Glint also accepts what programs 
 OpenTelemetry, Ray's protocol, piped output and log lines. Everything stays on your machine, in one
 SQLite file behind a daemon that listens on loopback only.
 
+## Install the Mac app
+
+Download `Glint-<version>-macos-arm64.dmg`, drag Glint into Applications, and follow
+[docs/INSTALL.md](docs/INSTALL.md) (in Russian: [docs/INSTALL.ru.md](docs/INSTALL.ru.md)). The
+app's menu has "Set up this Mac…", which does what `glint install` does below. To build the disk
+image yourself: `app/bundle-macos.sh --dmg`.
+
 ## Requirements
 
 You need Rust 1.88 or newer to build. The zero-setup `glint()` works with PHP 8.0+, Python 3.9+
