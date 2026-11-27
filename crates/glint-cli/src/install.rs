@@ -234,6 +234,16 @@ pub(crate) fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
     }
     let tmp = to.with_extension("new");
     fs::copy(from, &tmp)?;
+    // The copy keeps a downloaded Glint.app's quarantine flag, and macOS kills a quarantined
+    // glintd or glint at launch with no message. ~/.glint is ours to change, so drop it there.
+    if cfg!(target_os = "macos") {
+        let _ = std::process::Command::new("xattr")
+            .args(["-d", "com.apple.quarantine"])
+            .arg(&tmp)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
     fs::rename(&tmp, to)
 }
 
