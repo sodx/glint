@@ -39,6 +39,12 @@ pub struct RunSummary {
     pub errors: u64,
     /// Id of the newest event in the run, a cursor for queries.
     pub last_id: String,
+    /// The calling file of the run's first event: what tells runs of one language apart.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// The run's first log line (e.g. `GET /checkout/8`), when it starts with one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

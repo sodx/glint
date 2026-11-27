@@ -141,8 +141,17 @@ ol.entries { list-style: none; margin: 0 0 96px; padding: 0; }
 .frames { list-style: none; margin: 0; padding: 0; font: 13px/1.5 var(--mono); }
 .frames li { display: flex; gap: 12px; padding: 3px 0; }
 .frames .fn { color: var(--text); min-width: 0; }
-.frames a { color: var(--muted); text-decoration: none; margin-left: auto; white-space: nowrap; }
-.frames a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.frames .fn { flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frames .fpath { margin-left: auto; }
+.fpath, .origin-line .where { all: unset; display: inline-flex; min-width: 0; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; border-radius: 3px; white-space: nowrap; }
+span.fpath, span.where { cursor: default; }
+.origin-line .where { color: var(--faint); }
+button.fpath:hover, .origin-line button.where:hover { color: var(--accent); }
+button.fpath:focus-visible, .origin-line button.where:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pdir { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.pbase { flex-shrink: 0; }
+.snippet.loading { display: none; }
+.snippet .file .fpath { font-size: 12px; max-width: 80%; }
 .frames .vendor { color: var(--faint); }
 .note { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 14px; }
 .note svg { color: var(--accent); margin-top: 2px; }
@@ -217,6 +226,8 @@ ol.entries::before { content: ""; position: absolute; left: 20.5px; top: 20px; b
 .new .node { color: var(--accent); border-color: var(--accent); }
 
 /* source snippet in exceptions */
+/* Code reads as typed: no ligatures turning === into ≡ or => into ⇒. */
+.snippet, .code, .tree, .frames, .mono, .term { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
 .snippet { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font: 13px/1.75 var(--mono); }
 .snippet .file { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .snippet ol { margin: 0; padding: 6px 0; list-style: none; background: var(--code); overflow-x: auto; }
@@ -334,8 +345,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .has-note { font-size: 11px; color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent); border-radius: 999px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; }
 .origin-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
 .origin-line > * + *::before { content: "·"; margin-right: 10px; color: var(--faint); opacity: .7; }
-.origin-line .where { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border-radius: 3px; }
-.origin-line a.where:hover { color: var(--text); }
+.origin-line .where { max-width: 100%; }
 .origin-line .where .i { width: 11px; height: 11px; opacity: 0; transition: opacity .12s; }
 .entry:hover .origin-line .where .i, .origin-line .where:focus-visible .i { opacity: .8; }
 .qa a.qa-a { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
@@ -418,6 +428,7 @@ const S = {
   run: null, entries: [], byId: new Map(), pendingUpd: new Map(),
   open: new Set(), q: "", showAll: false,
   fail: null, fails: [], seen: null, ack: new Set(store.get("ack", [])), pauses: [], answered: [],
+  editor: store.get("editor", null), editors: [],
   offline: false, loaded: false,
 };
 
@@ -432,7 +443,27 @@ const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n
 const levelOf = e => e.meta?.level ? LEVELS.indexOf(e.meta.level) : e.kind === "core.exception" ? 4 : 1;
 const lvName = e => { const l = levelOf(e); return l >= 4 ? "error" : l === 3 ? "warn" : "info"; };
 const loc = e => e.origin?.file ? base(e.origin.file) + (e.origin.line ? ":" + e.origin.line : "") : "";
-const editorHref = (file, line) => file && /^(\/|[A-Za-z]:)/.test(file) ? `vscode://file${file.startsWith("/") ? "" : "/"}${file}${line ? ":" + line : ""}` : null;
+/* Files open through glintd (POST /v1/open), which runs the editor's URL handler itself: that
+   works the same in a browser and in the desktop app, whose web view ignores vscode:// links. */
+const EDITORS = { vscode: "VS Code", cursor: "Cursor", windsurf: "Windsurf", zed: "Zed", phpstorm: "PhpStorm", webstorm: "WebStorm", pycharm: "PyCharm", idea: "IntelliJ IDEA", sublime: "Sublime Text" };
+const isAbs = file => !!file && /^(\/|[A-Za-z]:)/.test(file);
+function openBtn(e, frame, label, cls = "where") {
+  return `<button class="${cls}" data-act="open" data-id="${esc(e.id)}"${frame != null ? ` data-frame="${frame}"` : ""} title="Open in ${esc(EDITORS[S.editor] || "editor")}">${label}</button>`;
+}
+async function openInEditor(id, frame) {
+  const q = new URLSearchParams({ event: id }); if (frame != null && frame !== "") q.set("frame", frame); if (S.editor) q.set("editor", S.editor);
+  try { const r = await api("/v1/open?" + q, { method: "POST" }); toast(`Opened in ${EDITORS[r.editor] || r.editor}`); }
+  catch (err) { toast(`Could not open: ${err.message}`); }
+}
+/* A path as the project sees it: relative to the program's working directory when inside it,
+   else the last folders. The directory part may be cut; file:line never is. */
+function pathParts(file, line, e) {
+  let p = String(file || ""); const cwd = e?.origin?.cwd;
+  if (cwd && p.startsWith(cwd.replace(/[\\/]$/, "") + "/")) p = p.slice(cwd.replace(/[\\/]$/, "").length + 1);
+  else { const parts = p.split(/[\\/]/).filter(Boolean); if (parts.length > 4) p = "…/" + parts.slice(-4).join("/"); }
+  const i = p.search(/[^\\/]*$/);
+  return `<span class="pdir">${esc(p.slice(0, i))}</span><span class="pbase">${esc(p.slice(i))}${line ? ":" + line : ""}</span>`;
+}
 async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.json(); }
 function copy(text) { try { navigator.clipboard?.writeText(text).catch(() => {}); } catch {} }
 let toastT;
@@ -445,6 +476,13 @@ function glint() { const m = $("liveMark"); m.classList.remove("glint"); void m.
 function runTitle(id) {
   if (!id) return "";
   let m;
+  // A run of a program is named by what it did first: its request line (`GET /checkout/8`), else
+  // its script (`worker.py`), so runs of one language can be told apart.
+  if (/^(js|python|php)-/.test(id)) {
+    const r = S.allRuns.find(x => x.run === id);
+    if (r?.head && /^[A-Z]+ \/\S*/.test(r.head)) return r.head.split(" ").slice(0, 2).join(" ");
+    if (r?.file) return r.file.split(/[\\/]/).pop();
+  }
   if ((m = id.match(/^claude-code:(.+)$/))) return "Agent session " + m[1].slice(0, 8);
   if ((m = id.match(/^otel-(.+)$/))) return "Trace " + m[1].slice(0, 8);
   if (/^pipe-/.test(id)) return "glint pipe";
@@ -518,7 +556,7 @@ function summary(e) {
       break;
     }
     case "agent.tool_result": lead = p.tool || ""; body = p.ok === false ? "failed" : "ok"; if (p.ok === false) t = "Failed"; break;
-    case "agent.step": lead = p.status || "step"; body = p.input || p.output || ""; break;
+    case "agent.step": lead = p.status === "stopped" ? (p.output ? "reply" : "turn done") : p.status || "step"; body = p.input || p.output || ""; break;
     case "agent.session": body = `Session ${p.status || ""}${p.reason ? " · " + p.reason : ""}`; break;
     case "agent.permission": t = "Waiting"; lead = p.tool || ""; body = toolKey(p.args); mono = true; break;
     case "core.span": lead = ""; body = p.name || "span"; if (p.status === "error") t = "Error"; break;
@@ -591,14 +629,32 @@ function tree(v) {
 }
 
 /* ---------------- expanded panes ---------------- */
-function frameList(frames) {
+function frameList(frames, e) {
   const app = frames.filter(f => !f.vendor), vendor = frames.length - app.length;
   const li = f => {
-    const href = editorHref(f.file, f.line);
-    const where = `${esc(f.file ? shortPath(f.file) : "?")}${f.line ? ":" + f.line : ""}`;
-    return `<li><span class="fn">${esc((f.class ? f.class + "::" : "") + (f.fn || "{main}"))}</span>${href ? `<a href="${esc(href)}">${where}</a>` : `<a>${where}</a>`}</li>`;
+    const i = frames.indexOf(f), where = f.file ? pathParts(f.file, f.line, e) : "?";
+    return `<li><span class="fn">${esc((f.class ? f.class + "::" : "") + (f.fn || "{main}"))}</span>${isAbs(f.file) ? openBtn(e, i, where, "fpath") : `<span class="fpath">${where}</span>`}</li>`;
   };
   return `<ol class="frames">${(app.length ? app : frames).slice(0, 40).map(li).join("")}${app.length && vendor ? `<li class="vendor"><span>+ ${vendor} vendor frame${vendor > 1 ? "s" : ""}</span></li>` : ""}</ol>`;
+}
+/* The code around a line, read by glintd from the file the event names (GET /v1/source). */
+S.src = new Map();
+function srcSlot(e, frame) {
+  const key = e.id + ":" + (frame ?? ""), got = S.src.get(key);
+  if (got === undefined) return `<div class="snippet loading" data-src="${esc(key)}"></div>`;
+  if (!got) return "";
+  return `<div class="snippet"><div class="file">${openBtn(e, frame, pathParts(got.file, got.line, e), "fpath")}<span>line ${got.line}</span></div><ol>${got.lines.map((l, i) => {
+    const n = got.start + i; return `<li class="${n === got.line ? "hit" : ""}"><span>${n}</span><span>${esc(l) || " "}</span></li>`; }).join("")}</ol></div>`;
+}
+function fillSources() {
+  document.querySelectorAll(".snippet.loading[data-src]").forEach(async el => {
+    const key = el.dataset.src; if (S.src.has(key)) return;
+    S.src.set(key, null); // in flight; a failure stays empty
+    const [id, frame] = key.split(":"), q = new URLSearchParams({ event: id }); if (frame) q.set("frame", frame);
+    try { S.src.set(key, await api("/v1/source?" + q)); } catch { S.src.set(key, false); }
+    const e = S.byId.get(id); if (!e) return;
+    document.querySelectorAll(`.snippet[data-src="${CSS.escape(key)}"]`).forEach(x => { x.outerHTML = srcSlot(e, frame === "" ? null : +frame); });
+  });
 }
 const shortPath = p => { const parts = String(p).split(/[\\/]/).filter(Boolean); return parts.length > 3 ? "…/" + parts.slice(-3).join("/") : p; };
 function snippet(f) {
@@ -611,10 +667,9 @@ function note(e) { return e.meta?.note ? `<div class="note"><svg class="i"><use 
    host and worktree are in the tooltip. */
 function originLine(e) {
   const o = e.origin || {};
-  const where = o.file ? shortPath(o.file) + (o.line ? ":" + o.line : "") : "";
-  const href = editorHref(o.file, o.line);
+  const where = o.file ? pathParts(o.file, o.line, e) : "";
   const tip = [o.file && o.file + (o.line ? ":" + o.line : ""), o.lang, o.sdk, o.host, o.pid && "pid " + o.pid, o.branch && "branch " + o.branch, o.via && "via " + o.via].filter(Boolean).join(" · ");
-  const file = where ? (href ? `<a class="where" href="${esc(href)}" title="Open in editor">${esc(where)}<svg class="i" aria-hidden="true"><use href="#i-open"/></svg></a>` : `<span class="where">${esc(where)}</span>`) : "";
+  const file = where ? (isAbs(o.file) ? openBtn(e, null, where + `<svg class="i" aria-hidden="true"><use href="#i-open"/></svg>`) : `<span class="where">${where}</span>`) : "";
   return `<div class="origin-line" title="${esc(tip)}">${file}${o.fn ? `<span>${esc(o.fn)}</span>` : ""}<span>${esc(clock(e.ts))}</span></div>`;
 }
 function pane(e) {
@@ -631,11 +686,12 @@ function pane(e) {
     }
     case "core.exception": {
       const frames = p.frames || [];
-      h = snippet(frames.find(f => !f.vendor && f.snippet)) + (frames.length ? frameList(frames) : p.stacktrace ? `<div class="code">${esc(p.stacktrace)}</div>` : "") + h;
+      const sent = frames.find(f => !f.vendor && f.snippet), first = frames.findIndex(f => !f.vendor && isAbs(f.file));
+      h = (sent ? snippet(sent) : first >= 0 ? srcSlot(e, first) : "") + (frames.length ? frameList(frames, e) : p.stacktrace ? `<div class="code">${esc(p.stacktrace)}</div>` : "") + h;
       let c = p.cause, n = 0; while (c && n++ < 5) { h += `<div class="kv"><span>caused by <b>${esc(c.class)}</b>: ${esc(c.message)}</span></div>`; c = c.cause; }
       h += `<div class="pane-actions"><button class="btn" data-act="copyexc" data-id="${esc(e.id)}">Copy for agent</button></div>`; break;
     }
-    case "core.trace": h += frameList(p.frames || []); break;
+    case "core.trace": h += frameList(p.frames || [], e); break;
     case "core.measure": h += `<div class="kv"><span><b>${p.duration_ms ?? "?"} ms</b></span>${p.memory_bytes ? `<span>${(p.memory_bytes / 1048576).toFixed(1)} MiB</span>` : ""}${p.since_last_ms != null && !p.new_timer ? `<span>+${p.since_last_ms} ms since last</span>` : ""}</div>`; break;
     case "sql.query": {
       let i = 0; const b = p.bindings || [];
@@ -720,7 +776,8 @@ function runHead() {
   const wo = S.entries.find(e => e.origin && (e.origin.branch || e.origin.worktree))?.origin;
   const wt = wo ? `<span class="wt" title="Git worktree ${esc(wo.worktree || "")}">${esc(wo.branch || wo.worktree)}</span> · ` : "";
   $("runSwitch").innerHTML = `<span class="title">${esc(runTitle(r.run))}</span><span class="meta">${wt}${S.entries.length} event${S.entries.length === 1 ? "" : "s"}${errs ? " · " + errs + " error" + (errs > 1 ? "s" : "") : ""} · ${rel(r.last)}</span><svg class="i"><use href="#i-down"/></svg>`;
-  $("runMenu").innerHTML = S.runs.slice(0, 40).map(x => {
+  const rm = $("runMenu"); // an open menu keeps its order under the pointer
+  if (!rm.classList.contains("open") || !rm.children.length) rm.innerHTML = S.runs.slice(0, 40).map(x => {
     const paused = S.pauses.some(p => p.run === x.run);
     const st = paused ? ["pause", "waiting"] : x.errors ? ["error", x.errors + " error" + (x.errors > 1 ? "s" : "")] : ["ok", x.events + (x.events === 1 ? " event" : " events")];
     return `<button role="menuitem" data-run="${esc(x.run)}" aria-current="${x.run === S.run}" class="lv-${st[0]}"><span class="dot"></span><span><b style="font-weight:500">${esc(runTitle(x.run))}</b> <span class="state">· ${st[1]}</span></span><span class="when">${rel(x.last)}</span></button>`;
@@ -728,6 +785,8 @@ function runHead() {
 }
 function projMenu() {
   $("projName").textContent = S.project || "no project";
+  const pm = $("projMenu"); // an open menu keeps its order under the pointer
+  if (pm.classList.contains("open") && pm.children.length) return;
   $("projMenu").innerHTML = S.projects.map(p => {
     const runs = S.allRuns.filter(r => r.project === p), failing = runs.filter(r => r.errors).length;
     return `<button role="menuitem" data-proj="${esc(p)}" class="${failing ? "lv-error" : ""}" aria-current="${p === S.project}"><span class="dot"></span><span><b style="font-weight:500">${esc(p)}</b> <span class="state">· ${runs.length} run${runs.length === 1 ? "" : "s"}${failing ? " · " + failing + " failing" : ""}</span></span><span class="when">${runs[0] ? rel(runs[0].last) : ""}</span></button>`;
@@ -761,10 +820,11 @@ function entries() {
     const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
     return `<li class="entry lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>
       <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}</span><span class="right">${d ? `<span class="dur" title="${d} ms"><i style="--w:${Math.max(4, d / slowest * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
-      <div class="qa"><button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${editorHref(e.origin?.file, e.origin?.line) ? `<a class="qa-a" href="${esc(editorHref(e.origin.file, e.origin.line))}" aria-label="Open ${esc(l)} in editor" title="Open in editor"><svg class="i"><use href="#i-open"/></svg></a>` : ""}</div>
+      <div class="qa"><button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")}"><svg class="i"><use href="#i-open"/></svg></button>` : ""}</div>
       <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
   }).join("");
   S.entries.forEach(e => (e.isNew = false));
+  fillSources();
 }
 function onboarding() {
   const CC = `<button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button>`;
@@ -820,9 +880,10 @@ async function loadStatus() {
   S.pauses = pauses.filter(p => !S.project || p.project === S.project);
 }
 /* The newest failure the user has not seen; if all are seen, the newest one (shown as "seen"). */
+// The status line is about the newest failure only. Once you have seen it, it calms down; older
+// failures stay in their runs instead of queueing up one after another.
 function pickFail() {
-  const unseen = S.fails.filter(e => !S.ack.has(e.id));
-  S.fail = unseen[unseen.length - 1] || S.fails[S.fails.length - 1] || null;
+  S.fail = S.fails[S.fails.length - 1] || null;
 }
 async function loadAll() {
   try { await loadRuns(); await Promise.all([loadRun(), loadStatus()]); S.loaded = true; S.offline = false; }
@@ -900,6 +961,7 @@ document.addEventListener("click", ev => {
   if (act === "continue") return answer(b.dataset.id, "continue");
   if (act === "stop") return answer(b.dataset.id, "stop");
   if (act === "copyexc") return copyException(b.dataset.id);
+  if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
   if (act === "jtoggle") {
     const j = b.parentElement, shut = j.classList.toggle("shut");
     const all = ev.altKey ? [j, ...j.querySelectorAll(".j")] : [j];
@@ -940,6 +1002,7 @@ function commands() {
   S.projects.filter(p => p !== S.project).forEach(p => c.push({ g: "Projects", label: `Switch to ${p}`, ico: "run", run: () => goProject(p) }));
   c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: openSearch });
   if (S.fail) c.push({ g: "Actions", label: "Copy the last failure for your agent", ico: "copy", run: () => copyException(S.fail.id) });
+  (S.editors.length ? S.editors : Object.keys(EDITORS)).forEach(id => c.push({ g: "Editor", label: `Open files in ${EDITORS[id] || id}${id === S.editor ? " ✓" : ""}`, ico: "run", run: () => { S.editor = id; store.set("editor", id); toast(`Files open in ${EDITORS[id] || id}`); } }));
   return c;
 }
 function drawPalette() {
@@ -990,6 +1053,8 @@ document.addEventListener("keydown", e => {
 
 setInterval(() => document.querySelectorAll(".ago").forEach(a => (a.textContent = rel(a.dataset.t))), 1000);
 loadAll().then(connect);
+// Which editors glintd found; the first is the default until you pick one (⌘K → "Open files in").
+api("/v1/editors").then(r => { S.editors = r.editors || []; if (!S.editor) S.editor = S.editors[0] || "vscode"; }).catch(() => { S.editor ||= "vscode"; });
 </script>
 </body>
 </html>

@@ -64,7 +64,9 @@ def check(name, ok, detail=""):
 
 if http("GET", f"{GLINT}/v1/info")[0] != 200:
     raise SystemExit(f"glintd is not answering at {GLINT}; run `glint install` or start glintd")
-since = events(limit=1)[0]["id"] if events(limit=1) else ""
+# By time, not id: ids are opaque (agent hooks, for one, bring their own).
+from datetime import datetime, timezone
+since = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 procs = [
     subprocess.Popen(["php", "-S", "127.0.0.1:8091", "-t", os.path.join(HERE, "shop")], cwd=HERE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
@@ -100,7 +102,7 @@ try:
     print("   ", out.get("r"))
     time.sleep(0.5)
 
-    got = [e for e in events(limit=400) if e["id"] > since]
+    got = [e for e in events(limit=1000) if e["ts"] >= since]
     by_sdk = lambda sdk: [e for e in got if (e.get("origin") or {}).get("sdk", "").startswith(sdk)]
     php, py, js = by_sdk("glint-php"), by_sdk("glint-python"), by_sdk("glint-js")
     kinds = lambda es: {e["kind"] for e in es}

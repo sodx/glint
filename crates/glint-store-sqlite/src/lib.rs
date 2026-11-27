@@ -174,15 +174,19 @@ impl Store for SqliteStore {
 
     fn runs(&self, project: Option<&str>, limit: usize) -> Result<Vec<RunSummary>, StoreError> {
         // Bookkeeping events (updates, resumes) don't make a run "active".
-        let sql = "SELECT g.run, g.project, g.first, g.last, g.n, g.errors, e.id
+        let sql = "SELECT g.run, g.project, g.first, g.last, g.n, g.errors, e.id,
+                          json_extract(f.body, '$.origin.file'),
+                          CASE WHEN f.kind = 'core.log' THEN json_extract(f.body, '$.payload.message') END
                    FROM (SELECT run, MAX(project) AS project, MIN(ts) AS first, MAX(ts) AS last,
-                                COUNT(*) AS n, SUM(level >= 4) AS errors, MAX(seq) AS last_seq
+                                COUNT(*) AS n, SUM(level >= 4) AS errors, MAX(seq) AS last_seq,
+                                MIN(seq) AS first_seq
                          FROM events
                          WHERE kind NOT IN ('core.update', 'ctl.resume') AND (?1 IS NULL OR project = ?1)
                          GROUP BY run
                          ORDER BY last_seq DESC
                          LIMIT ?2) g
                    JOIN events e ON e.seq = g.last_seq
+                   JOIN events f ON f.seq = g.first_seq
                    ORDER BY g.last_seq DESC";
         self.read(|conn| {
             let mut stmt = conn.prepare_cached(sql).map_err(backend)?;
@@ -196,6 +200,8 @@ impl Store for SqliteStore {
                         events: r.get::<_, i64>(4)?.try_into().unwrap_or(0),
                         errors: r.get::<_, Option<i64>>(5)?.unwrap_or(0).try_into().unwrap_or(0),
                         last_id: r.get(6)?,
+                        file: r.get(7)?,
+                        head: r.get::<_, Option<String>>(8)?.map(|h| h.chars().take(120).collect()),
                     })
                 })
                 .map_err(backend)?;

@@ -8,6 +8,7 @@ mod guard;
 mod otlp;
 mod ray;
 mod routes;
+mod source;
 
 use std::future::Future;
 use std::net::SocketAddr;
