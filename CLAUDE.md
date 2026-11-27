@@ -15,10 +15,11 @@ M0 done: `glintd` ingests the native protocol, stores in SQLite + FTS5, streams 
 serves a single-file live-feed UI (`ui/index.html`, no build step yet; Vite + TS arrives with M1).
 Next: M1 in `docs/ROADMAP.md`.
 
-M1 in progress: Ray-compatible ingest on `:23517` is done (`docs/mappings/ray.md`).
+M1 in progress: Ray-compatible ingest on `:23517` (`docs/mappings/ray.md`) and the `glint` CLI
+(`send`, `pipe`) are done.
 
 Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray),
-`glint-server`, `glintd`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
+`glint-server`, `glintd`, `glint-cli` (binary `glint`). The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack
 
@@ -71,7 +72,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p glintd                      # http://127.0.0.1:23600, DB at ~/.glint/glint.db
 GLINT_DB=/tmp/g.db GLINT_ADDR=127.0.0.1:23700 GLINT_RAY_ADDR=off cargo run -p glintd
 curl -d '{"kind":"core.value","payload":{"value":42}}' http://127.0.0.1:23600/v1/events
+cargo run -q -p glint-cli -- send 42 '{"a":1}' hello --label demo
+npm run dev 2>&1 | cargo run -q -p glint-cli -- pipe --label web
 ```
+
+`glint pipe` must never break the user's pipeline: output is echoed byte for byte, and when
+glintd is down lines are dropped with one warning. `glint send` fails loudly instead.
 
 `ui/index.html` is compiled into the binary (`include_str!`): rebuild `glintd` after editing it.
 

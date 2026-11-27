@@ -14,7 +14,7 @@ Each milestone ends with something a person can use. Order is a guide, not a con
 
 ## M1 — Useful daily (current target)
 
-- `glint` CLI: `send`, `pipe`, `tail`.
+- ✅ `glint` CLI: `send`, `pipe`. `tail` (log files) still to do.
 - SDKs: JS/TS, Python, PHP (+ conformance suite v1 and runner).
 - UI moves to Vite + TS; screens, configurable open-in-editor scheme, markdown rendering.
 - Retention (count/age) and `glint clear`.

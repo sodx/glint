@@ -13,7 +13,8 @@ glint($order)->label('before save')->orange();
 glint(user, request.headers).pause()
 ```
 ```bash
-npm run dev 2>&1 | glint pipe
+npm run dev 2>&1 | glint pipe --label web     # output still prints; Glint gets levels, JSON logs, stack traces
+glint send '{"user":{"id":7}}' --label checkout
 ```
 
 ## Why
@@ -25,7 +26,16 @@ npm run dev 2>&1 | glint pipe
 - **Local and private.** One daemon, one SQLite file, loopback only.
 - **Small and fast.** Rust core, Tauri app.
 
+## Try it
+
+```bash
+cargo run -p glintd                     # UI at http://127.0.0.1:23600
+cargo run -q -p glint-cli -- send 42 hello
+```
+
+Existing Ray client libraries work unchanged: glintd also listens on Ray's port `23517`.
+
 ## Status
 
-Design phase. Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+M0 and part of M1 are done (daemon, live UI, Ray-compatible ingest, `glint send` / `glint pipe`). Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/PROTOCOL.md](docs/PROTOCOL.md).
