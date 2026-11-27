@@ -66,6 +66,10 @@ Code that runs in Docker, a dev container or on a machine you reach over SSH nee
 run `glint docker` in the project folder and add what it prints to your compose file (see
 "Docker and remote machines" in the README).
 
+Glint updates itself: when a new version is out, the menu-bar menu shows **Update to x.y.z…** and
+the window shows a banner; one click installs it, glintd and the `glint` command included, and
+restarts Glint. The version you have is in the window title and in About Glint.
+
 ## What setup changes on your Mac
 
 Setup writes these files, and `glint uninstall` removes them again:

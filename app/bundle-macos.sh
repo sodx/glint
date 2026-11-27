@@ -16,14 +16,18 @@ if [ -z "${GLINT_SKIP_BUILD:-}" ]; then
   (cd app && cargo build --release)
 fi
 
+# Binaries come from CARGO_TARGET_DIR when it is set (one target folder for several checkouts).
+bins="${CARGO_TARGET_DIR:-$root/target}/release"
+appbin="${CARGO_TARGET_DIR:-$root/app/target}/release/glint-app"
+
 out="$root/target/release/Glint.app"
 rm -rf "$out"
 mkdir -p "$out/Contents/MacOS" "$out/Contents/Resources"
-cp app/target/release/glint-app "$out/Contents/MacOS/Glint"
-cp target/release/glintd "$out/Contents/MacOS/"
+cp "$appbin" "$out/Contents/MacOS/Glint"
+cp "$bins/glintd" "$out/Contents/MacOS/"
 # Not next to "Glint": macOS file systems are case-insensitive, so `glint` would replace it.
 mkdir -p "$out/Contents/Resources/bin"
-cp target/release/glint "$out/Contents/Resources/bin/glint"
+cp "$bins/glint" "$out/Contents/Resources/bin/glint"
 cp app/icons/icon.icns "$out/Contents/Resources/Glint.icns"
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' app/Cargo.toml | head -1)
 cat > "$out/Contents/Info.plist" <<EOF
