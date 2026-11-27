@@ -453,7 +453,7 @@ dependencies = [
 
 [[package]]
 name = "glint-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "clap",
@@ -469,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "glint-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "glint-protocol",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "glint-ingest"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "glint-mcp"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "glint-core",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "glint-protocol"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "serde",
@@ -521,7 +521,7 @@ dependencies = [
 
 [[package]]
 name = "glint-server"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum",
  "chrono",
@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "glint-store-sqlite"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "glint-core",
@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "glintd"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "glint-core",
