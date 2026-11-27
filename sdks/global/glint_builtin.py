@@ -40,14 +40,23 @@ if not hasattr(_b, "glint"):
 
 
 # Uncaught exceptions, in the main thread and in other threads: report, then let Python print the
-# traceback and exit exactly as before. Ctrl-C and sys.exit() are not failures.
+# traceback and exit exactly as before. Ctrl-C and sys.exit() are not failures. Exit is not
+# delayed: when this process already found glintd unreachable nothing is imported or sent, and the
+# flush waits only while events are actually being delivered (a few hundred ms when glintd stalls).
 def _report(exc):
     if isinstance(exc, (KeyboardInterrupt, SystemExit)):
         return
     try:
+        t = getattr(_sys.modules.get("glint"), "_transport", None)
+        if t is not None and getattr(t, "is_down", lambda: False)():
+            return
         g = _load()
         g.exception(exc).label("uncaught")
-        g.flush(1.5)
+        t = getattr(_sys.modules.get("glint"), "_transport", None)
+        if t is not None and hasattr(t, "flush_at_exit"):
+            t.flush_at_exit()
+        else:  # an older SDK
+            g.flush(0.3)
     except Exception:
         pass
 
