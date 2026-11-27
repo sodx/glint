@@ -556,6 +556,7 @@ dependencies = [
  "glint-core",
  "glint-server",
  "glint-store-sqlite",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
