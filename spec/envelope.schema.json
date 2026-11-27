@@ -26,7 +26,8 @@
         "sdk": { "type": "string", "description": "<name>/<semver>" },
         "file": { "type": "string" }, "line": { "type": "integer", "minimum": 0 }, "col": { "type": "integer", "minimum": 0 },
         "fn": { "type": "string" }, "host": { "type": "string" }, "pid": { "type": "integer", "minimum": 0 },
-        "thread": { "type": "string" }, "cwd": { "type": "string" }
+        "thread": { "type": "string" }, "cwd": { "type": "string" },
+        "path_map": { "type": "string", "description": "Code in a container: comma-separated <container path>:<host path> pairs. The server rewrites file paths with it and drops the key." }
       },
       "additionalProperties": true
     },

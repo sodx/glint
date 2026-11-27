@@ -34,15 +34,20 @@ if (!function_exists('glint')) {
 
 // Uncaught exceptions: report, then rethrow, so PHP prints its usual "Uncaught …" error and exits
 // as it would have. An application that installs its own handler (a framework) replaces this one.
-set_exception_handler(static function (Throwable $e): void {
+// The rethrow goes to the handler that was there before, or to PHP itself. Not
+// restore_exception_handler(): since PHP 8.3 the running handler comes back after it returns, so
+// the rethrow would call it again, forever.
+$glintPreviousHandler = null;
+$glintPreviousHandler = set_exception_handler(static function (Throwable $e) use (&$glintPreviousHandler): void {
     try {
         \Glint\Glint::exception($e)->label('uncaught');
     } catch (Throwable) {
         // a debugging aid never changes what the program does
     }
-    restore_exception_handler();
+    set_exception_handler($glintPreviousHandler);
     throw $e;
 });
+unset($glintPreviousHandler);
 
 // Fatal errors that are not exceptions (out of memory, a parse error in an included file, …).
 register_shutdown_function(static function (): void {

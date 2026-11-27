@@ -9,6 +9,7 @@
 //! | `db` | `GLINT_DB` | `~/.glint/glint.db` |
 //! | `ray_addr` | `GLINT_RAY_ADDR` | `127.0.0.1:23517`; `off` disables; skipped if the port is taken (the Ray app) |
 //! | `otlp_addr` | `GLINT_OTLP_ADDR` | `127.0.0.1:4318`; `off` disables; skipped if taken (a collector) |
+//! | `remote_addr` | `GLINT_REMOTE_ADDR` | `off`; e.g. the Docker bridge `172.17.0.1:23600`: events in, nothing out. Retried until the address exists |
 //! | `keep_days` | `GLINT_KEEP_DAYS` | `7`: older events are deleted (`0` keeps them) |
 //! | `max_events` | `GLINT_MAX_EVENTS` | `100000`: the oldest beyond this are deleted (`0`: no cap) |
 //! | `editor` | `GLINT_EDITOR` | the first installed of vscode, cursor, phpstorm, zed, … |
@@ -98,9 +99,13 @@ async fn main() -> Result<()> {
         let _ = stop_tx.send(true);
     });
 
+    let remote = remote_listener(&settings.remote_addr, hub.clone(), stopped())?;
     let ray = ray_listener.map(|l| tokio::spawn(glint_server::serve_ray(l, hub.clone(), stopped())));
     let otlp = otlp_listener.map(|l| tokio::spawn(glint_server::serve_otlp(l, hub.clone(), stopped())));
     glint_server::serve(listener, hub, glint_server::Options { adapters, admin: Some(admin), editor: Some(settings.editor.clone()) }, stopped()).await?;
+    if let Some(remote) = remote {
+        remote.await.context("remote listener")??;
+    }
     if let Some(ray) = ray {
         ray.await.context("ray listener")??;
     }
@@ -116,6 +121,43 @@ async fn main() -> Result<()> {
     }
     tracing::info!("stopped");
     Ok(())
+}
+
+/// The listener for containers and other machines. Its address may not exist yet when glintd
+/// starts at login (Docker creates its bridge later), so binding is retried every 10 s.
+fn remote_listener(
+    value: &str,
+    hub: glint_core::Hub,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> Result<Option<tokio::task::JoinHandle<std::io::Result<()>>>> {
+    if value.eq_ignore_ascii_case("off") || value.is_empty() {
+        return Ok(None);
+    }
+    let addr: SocketAddr = value.parse().context("remote_addr (GLINT_REMOTE_ADDR) must be host:port or `off`")?;
+    if addr.ip().is_unspecified() {
+        tracing::warn!(%addr, "remote_addr takes events from every network this machine is on; prefer the Docker bridge address");
+    }
+    Ok(Some(tokio::spawn(async move {
+        let mut shutdown = Box::pin(shutdown);
+        let mut warned = false;
+        let listener = loop {
+            match TcpListener::bind(addr).await {
+                Ok(l) => break l,
+                Err(err) => {
+                    if !warned {
+                        tracing::warn!(%addr, %err, "remote_addr not available yet; retrying every 10 s");
+                        warned = true;
+                    }
+                    tokio::select! {
+                        () = &mut shutdown => return Ok(()),
+                        () = tokio::time::sleep(Duration::from_secs(10)) => {}
+                    }
+                }
+            }
+        };
+        tracing::info!(%addr, "taking events from containers and other machines (events in, nothing out)");
+        glint_server::serve_remote(listener, hub, shutdown).await
+    })))
 }
 
 /// Binds an optional listener from `var` (`off` disables). A taken port is not fatal: the

@@ -58,6 +58,26 @@ pub fn dev_origin(origin: &str) -> bool {
     matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]") || host.ends_with(".localhost") || host.ends_with(".test")
 }
 
+/// Whether the listener for containers and other machines serves this request: sending events,
+/// waiting for the program's own pause (its id is known only to it), and the browser script.
+pub fn ingest_allowed(method: &axum::http::Method, path: &str) -> bool {
+    use axum::http::Method;
+    let own_pause = path.strip_prefix("/v1/ctl/").is_some_and(|id| !id.is_empty() && !id.contains('/'));
+    match *method {
+        Method::POST => path == "/v1/events",
+        Method::GET => own_pause || path == "/v1/browser.js",
+        _ => false,
+    }
+}
+
+pub async fn ingest_only(req: Request, next: Next) -> Response {
+    if ingest_allowed(req.method(), req.uri().path()) {
+        next.run(req).await
+    } else {
+        (StatusCode::FORBIDDEN, "glint: this address only takes events (remote_addr); read them on 127.0.0.1").into_response()
+    }
+}
+
 pub async fn check(State(allow): State<Allowlist>, req: Request, next: Next) -> Response {
     let host = req.headers().get(header::HOST).and_then(|v| v.to_str().ok());
     if !host.is_some_and(|h| allow.host_ok(h)) {
@@ -123,6 +143,23 @@ mod tests {
         assert!(!a.host_ok("evil.example:23600") && !a.host_ok("127.0.0.1:80"));
         assert!(a.origin_ok("http://localhost:23600") && a.origin_ok("tauri://localhost"));
         assert!(!a.origin_ok("https://evil.example") && !a.origin_ok("null"));
+    }
+
+    #[test]
+    fn remote_listener_takes_events_only() {
+        use axum::http::Method;
+        assert!(ingest_allowed(&Method::POST, "/v1/events"));
+        assert!(ingest_allowed(&Method::GET, "/v1/ctl/01ABC"));
+        assert!(ingest_allowed(&Method::GET, "/v1/browser.js"));
+        for (m, p) in [
+            (Method::GET, "/v1/events"), (Method::GET, "/"), (Method::GET, "/v1/info"), (Method::GET, "/v1/ctl"),
+            (Method::POST, "/v1/ctl/01ABC/resume"), (Method::GET, "/v1/ctl/"), (Method::POST, "/mcp"),
+            (Method::GET, "/v1/settings"), (Method::POST, "/v1/open"), (Method::GET, "/v1/source"),
+        ] {
+            assert!(!ingest_allowed(&m, p), "{m} {p}");
+        }
+        let a = Allowlist::for_addr("172.17.0.1:23600".parse().unwrap());
+        assert!(a.host_ok("host.docker.internal:23600") && a.host_ok("172.17.0.1:23600"));
     }
 
     #[test]

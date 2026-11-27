@@ -42,9 +42,10 @@ window shows the run as a call tree.
 
 | Env | Default | |
 |-----|---------|--|
-| `GLINT_URL` | `http://127.0.0.1:23600` | where glintd listens |
+| `GLINT_URL` | `http://127.0.0.1:23600`; in a container `http://host.docker.internal:23600` | where glintd listens |
 | `GLINT_ENABLED` | on, except `NODE_ENV=production` | `0` / `1` force it |
 | `GLINT_PROJECT` | from the daemon (cwd name) | project name |
+| `GLINT_PATH_MAP` | unset | `/app:/Users/me/shop`: container path to host path, so files open in your editor |
 
 Or at runtime: `glint.configure({ url, enabled, project })`.
 

@@ -99,6 +99,26 @@ pub async fn serve(
         .await
 }
 
+/// Serves the listener for containers and other machines (`remote_addr`) until `shutdown`
+/// resolves: programs there may send events and wait for their own pause, and nothing else, so
+/// reaching this address never lets anyone read events, settings or files.
+pub async fn serve_remote(
+    listener: TcpListener,
+    hub: Hub,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    let addr = listener.local_addr()?;
+    let (stop_tx, stop_rx) = watch::channel(false);
+    let opts = Options { adapters: vec!["native".to_owned()], admin: None, editor: None };
+    let app = router(hub, addr, stop_rx, opts).layer(axum::middleware::from_fn(guard::ingest_only));
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown.await;
+            let _ = stop_tx.send(true);
+        })
+        .await
+}
+
 /// Serves the OTLP/HTTP receiver (`docs/mappings/otlp.md`) until `shutdown` resolves.
 pub async fn serve_otlp(
     listener: TcpListener,

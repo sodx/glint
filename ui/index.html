@@ -561,6 +561,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="set-row"><label for="s-addr">This window and the API</label><div class="set-ctl"><input id="s-addr" data-key="addr" spellcheck="false"></div></div>
       <div class="set-row"><label for="s-ray_addr">Ray-compatible port</label><div class="set-ctl"><input id="s-ray_addr" data-key="ray_addr" spellcheck="false"></div><p class="set-help"><code>off</code> to turn it off.</p></div>
       <div class="set-row"><label for="s-otlp_addr">OpenTelemetry receiver</label><div class="set-ctl"><input id="s-otlp_addr" data-key="otlp_addr" spellcheck="false"></div><p class="set-help"><code>off</code> to turn it off.</p></div>
+      <div class="set-row"><label for="s-remote_addr">Address for containers</label><div class="set-ctl"><input id="s-remote_addr" data-key="remote_addr" spellcheck="false"></div><p class="set-help">Docker on Linux: the bridge address, <code>172.17.0.1:23600</code>. Takes events only. <code>off</code> to turn it off.</p></div>
       <div class="set-row"><label for="s-db">Database file</label><div class="set-ctl"><input id="s-db" data-key="db" spellcheck="false"></div></div>
     </section>
   </div>
@@ -570,7 +571,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <div class="docs-shell">
     <nav class="docs-nav" aria-label="Documentation">
       <div class="docs-brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="docsTitle">Glint docs</span></div>
-      <a href="#d-start">Start</a><a href="#d-api">Methods</a><a href="#d-nocode">With no code</a><a href="#d-wp">WordPress</a><a href="#d-tree">Call tree</a><a href="#d-expect">glint expect</a><a href="#d-agents">Coding agents</a><a href="#d-cli">Command line</a><a href="#d-app">This window</a><a href="#d-config">Settings and data</a><a href="#d-langs">Other languages</a><a href="#d-help">When something is off</a>
+      <a href="#d-start">Start</a><a href="#d-api">Methods</a><a href="#d-nocode">With no code</a><a href="#d-wp">WordPress</a><a href="#d-docker">Docker and remote</a><a href="#d-tree">Call tree</a><a href="#d-expect">glint expect</a><a href="#d-agents">Coding agents</a><a href="#d-cli">Command line</a><a href="#d-app">This window</a><a href="#d-config">Settings and data</a><a href="#d-langs">Other languages</a><a href="#d-help">When something is off</a>
       <button class="link docs-close" data-act="docs-close">Close <kbd>esc</kbd></button>
     </nav>
     <article class="docs-body"><section id="d-start">
@@ -686,6 +687,35 @@ WordPress::conditionals();          // is_single, is_admin and the other tags th
 WordPress::options(&#x27;siteurl&#x27;, &#x27;permalink_structure&#x27;);
 WordPress::queries();               // every query of this request as a table (needs SAVEQUERIES)</code></pre>
 <p>Plain <code>glint()</code>, <code>Glint\Glint::measure()</code> and <code>Glint\Glint::pause()</code> work in themes and plugins as everywhere else. A pause in a template stops the page until you continue it here.</p>
+</section><section id="d-docker">
+<h2>Docker and remote machines</h2>
+<p>Code in a container or on another machine has no <code>glint install</code>, and 127.0.0.1 there is not this Mac. Run <code>glint docker</code> in the project folder. It writes a copy of the SDKs to <code>~/.glint/sdk/container</code> and prints the lines to add to the service in <code>docker-compose.yml</code>:</p>
+<pre class="code cmd"><code data-lang="bash">glint docker                 # compose; --run for docker run, --devcontainer, --ssh HOST</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<pre class="code"><code data-lang="yaml">    volumes:
+      - /Users/me/.glint/sdk/container:/opt/.glint/sdk:ro
+    environment:
+      GLINT_URL: http://host.docker.internal:23600
+      GLINT_PROJECT: shop
+      GLINT_PATH_MAP: /var/www/html:/Users/me/shop
+      PHP_INI_SCAN_DIR: &quot;:/opt/.glint/sdk/php/conf.d&quot;
+    extra_hosts:
+      - host.docker.internal:host-gateway</code></pre>
+<p>Recreate the container and <code>glint()</code> works in PHP, Python and Node there, and uncaught errors arrive as they do on the Mac. <code>PHP_INI_SCAN_DIR</code> loads the prepend file, <code>PYTHONPATH</code> runs a <code>sitecustomize.py</code>, and <code>NODE_OPTIONS</code> imports the global; the command sets only the ones for the languages it finds in the folder (<code>--lang</code> to choose).</p>
+<table class="ref">
+<tr><td><code>GLINT_URL</code></td><td>where glintd is. Inside a container the SDKs already try <code>http://host.docker.internal:23600</code> when it is not set.</td></tr>
+<tr><td><code>GLINT_PROJECT</code></td><td>the project. A path like <code>/var/www/html</code> does not say which repository it is, so the command names the git repository of this folder.</td></tr>
+<tr><td><code>GLINT_PATH_MAP</code></td><td><code>container path:Mac path</code>, several separated by commas. glintd rewrites file paths and stack frames with it, so the source view and Open in editor show the files on this Mac. Use <code>--app-dir</code> when your compose file mounts the code somewhere else.</td></tr>
+</table>
+<h3>Docker on Linux</h3>
+<p>Docker Desktop on a Mac passes <code>host.docker.internal</code> to the Mac's 127.0.0.1, so nothing else is needed there. On Linux, <code>host-gateway</code> is the Docker bridge, which glintd does not listen on. Set <code>remote_addr</code> in Settings, or in <code>~/.glint/config.toml</code>, to the bridge address and restart glintd:</p>
+<pre class="code"><code data-lang="toml">remote_addr = &quot;172.17.0.1:23600&quot;</code></pre>
+<p>That address only takes events: a program there can send and wait for its own pause, and cannot read events, settings or files. glintd retries every 10 seconds when Docker creates the bridge after it started. Do not use <code>0.0.0.0</code>: every network this machine is on could then write events.</p>
+<h3>Dev containers</h3>
+<p><code>glint docker --devcontainer</code> prints <code>mounts</code>, <code>runArgs</code> and <code>containerEnv</code> for <code>.devcontainer/devcontainer.json</code>. The path map there is <code>${containerWorkspaceFolder}:${localWorkspaceFolder}</code>, so it fits any checkout.</p>
+<h3>SSH</h3>
+<p>Keep glintd on the Mac and open a reverse tunnel, so 127.0.0.1:23600 on the remote machine reaches it:</p>
+<pre class="code cmd"><code data-lang="bash">ssh -R 23600:127.0.0.1:23600 devbox</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>Or put <code>RemoteForward 23600 127.0.0.1:23600</code> under the host in <code>~/.ssh/config</code>; VS Code Remote SSH reads that file too. <code>glint docker --ssh devbox</code> prints the commands that copy the SDK there and the lines for the remote shell profile. Set <code>GLINT_PATH_MAP</code> only when the same code is also on the Mac; otherwise the files open only on the remote machine.</p>
 </section><section id="d-tree">
 <h2>Call tree and timing</h2>
 <p>Wrap work in <code>measure()</code> and everything it sends nests under it. A checkout request then reads <code>checkout → load order → select …</code> instead of a flat list. Click the arrow left of a row to fold it. The bars on the right are a small waterfall: where in the run each piece started and how long it took. OpenTelemetry spans nest the same way.</p>
