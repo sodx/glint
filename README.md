@@ -26,6 +26,12 @@ glint send '{"user":{"id":7}}' --label checkout
 - **Local and private.** One daemon, one SQLite file, loopback only.
 - **Small and fast.** Rust core, Tauri app.
 
+## Requirements
+
+Rust 1.88+ to build. The zero-config `glint()` covers PHP 8.0+, Python 3.9+ and Node 18+ (the
+`python3`, `php` and `node` on your PATH). macOS and Linux; the desktop app is macOS for now
+(`app/bundle-macos.sh`, needs the Xcode command line tools and about 1 GB of build space).
+
 ## Try it
 
 ```bash

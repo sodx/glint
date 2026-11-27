@@ -100,7 +100,7 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
              and Node without an import; prefer it over print/var_dump/console.log to inspect values, read them \
              back with glint_wait_for or glint_events, and remove those calls when done. Uncaught errors of \
              PHP, Python and Node processes are recorded with no code; for a web front end in development add \
-             <script src=\"http://127.0.0.1:23600/v1/browser.js\" data-project=\"{project}\"></script> to the dev \
+             <script src=\"{base}/v1/browser.js\" data-project=\"{project}\"></script> to the dev \
              page. To prove a change works: place glint() markers, run it, confirm them with glint_wait_for. \
              When something fails at runtime, start with glint_last_error."
         );
