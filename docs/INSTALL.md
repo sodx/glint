@@ -32,8 +32,11 @@ Cursor and others) reads the same events. Everything stays on your machine.
 3. A small spark appears in the menu bar and the Glint window opens. Allow notifications when
    macOS asks. Glint uses them to tell you when a program fails or waits for you.
 
-4. Right-click the spark and choose **Set up this Mac…**. After a few seconds a notification lists
-   what was set up. Open a new terminal window afterwards, so your shell picks up the changes.
+4. The Glint window shows what is set up on this Mac. Click **Set up this Mac** there (or
+   right-click the spark and choose **Set up this Mac…**). After a few seconds the list shows a
+   check mark next to each part that is ready. Open a new terminal window afterwards, so your
+   shell picks up the changes. **Show me an example** fills the window with a sample run, so you can
+   see what Glint looks like before you send anything yourself.
 
    The same from Terminal:
 

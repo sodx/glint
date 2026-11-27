@@ -444,8 +444,8 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
                     " · {} events, {:.1} MB, kept {} days / at most {} events",
                     d["events"],
                     d["bytes"].as_f64().unwrap_or(0.0) / 1_048_576.0,
-                    d["keep_days"],
-                    d["max_events"]
+                    v["settings"]["keep_days"],
+                    v["settings"]["max_events"]
                 )
             } else {
                 String::new()
@@ -469,6 +469,16 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
             Ok(_) => fail(name, format!("glint() not available — {hint}")),
         }
     };
+    let service = if cfg!(target_os = "macos") {
+        Some(a.home.join("Library/LaunchAgents").join(format!("{SERVICE_LABEL}.plist")))
+    } else if cfg!(target_os = "linux") {
+        Some(a.home.join(".config/systemd/user/glintd.service"))
+    } else {
+        None
+    };
+    if let Some(p) = service {
+        steps.push(if p.exists() { done("service", "glintd starts at login".into()) } else { fail("service", "glintd does not start at login yet — run `glint install`".into()) });
+    }
     // `php -r` skips auto_prepend_file; a script on stdin does not.
     steps.push(check("php", "php", &[], "<?php echo function_exists('glint') ? 'yes' : 'no';", "run `glint install --only php`"));
     steps.push(check("python", "python3", &["-c", "import builtins; print('yes' if hasattr(builtins, 'glint') else 'no')"], "", "run `glint install --only python`"));

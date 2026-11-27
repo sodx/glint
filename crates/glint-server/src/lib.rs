@@ -9,6 +9,7 @@ mod otlp;
 mod ray;
 mod routes;
 pub(crate) mod source;
+mod setup;
 
 use std::future::Future;
 use std::net::SocketAddr;

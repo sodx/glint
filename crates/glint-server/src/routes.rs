@@ -72,6 +72,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/browser.js", get(browser_js))
         .route("/v1/expect", post(expect))
         .route("/v1/settings", get(settings_get).put(settings_put))
+        .route("/v1/setup", get(crate::setup::status).post(crate::setup::install))
         .route("/v1/data/prune", post(data_prune))
         .route("/v1/data/clear", post(data_clear))
         .route("/v1/source", get(crate::source::source))

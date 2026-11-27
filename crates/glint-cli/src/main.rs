@@ -109,7 +109,11 @@ enum Command {
         setup: Setup,
     },
     /// Check that glintd is reachable and glint() is available in each language.
-    Doctor,
+    Doctor {
+        /// Also print the result as one machine-readable line, `GLINT_JSON:[…]`.
+        #[arg(long)]
+        json: bool,
+    },
     /// A test from what programs did: wait for events matching each expectation, fail on errors.
     ///
     /// `glint expect 'label:cart payload.value.total>0' 'label:"order saved"' -- ./checkout.sh`.
@@ -186,6 +190,9 @@ struct Setup {
     /// Shell profile for PATH and NODE_OPTIONS (default: from $SHELL).
     #[arg(long)]
     shell_profile: Option<std::path::PathBuf>,
+    /// Also print the result as one machine-readable line, `GLINT_JSON:[…]` (for the window).
+    #[arg(long)]
+    json: bool,
 }
 
 impl Setup {
@@ -196,7 +203,22 @@ impl Setup {
     }
 }
 
-fn setup(steps: &[install::Step], dry_run: bool, then: &str) -> Result<(), String> {
+fn setup(steps: &[install::Step], dry_run: bool, then: &str, json: bool) -> Result<(), String> {
+    if json {
+        // One line, behind a marker: a login shell may print its own things around it.
+        let list: Vec<_> = steps
+            .iter()
+            .map(|s| {
+                let (status, detail) = match &s.result {
+                    Ok(d) if s.skipped => ("skip", d),
+                    Ok(d) => ("ok", d),
+                    Err(e) => ("fail", e),
+                };
+                json!({ "name": s.name, "status": status, "detail": detail })
+            })
+            .collect();
+        println!("GLINT_JSON:{}", serde_json::Value::Array(list));
+    }
     if dry_run {
         println!("(dry run: nothing was changed)");
     }
@@ -256,16 +278,16 @@ fn main() -> ExitCode {
             }
         }
         Command::Install { setup: s } => {
-            let dry = s.dry_run;
-            s.args(&cli.url).and_then(|a| setup(&install::install(&a), dry, "Done. Open a new shell, then try glint(\"hello\") in any PHP, Python or Node program."))
+            let (dry, json) = (s.dry_run, s.json);
+            s.args(&cli.url).and_then(|a| setup(&install::install(&a), dry, "Done. Open a new shell, then try glint(\"hello\") in any PHP, Python or Node program.", json))
         }
         Command::Uninstall { setup: s } => {
-            let dry = s.dry_run;
-            s.args(&cli.url).and_then(|a| setup(&install::uninstall(&a), dry, ""))
+            let (dry, json) = (s.dry_run, s.json);
+            s.args(&cli.url).and_then(|a| setup(&install::uninstall(&a), dry, "", json))
         }
-        Command::Doctor => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None }
+        Command::Doctor { json } => Setup { only: vec![], dry_run: false, php_ini_dir: None, shell_profile: None, json }
             .args(&cli.url)
-            .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "")),
+            .and_then(|a| setup(&install::doctor(&a, &cli.url), false, "", json)),
         Command::Expect { expect, project, all_projects, unordered, allow_errors, timeout, lookback, command } => {
             let a = expect::Args { expect, project, all_projects, unordered, allow_errors, timeout, lookback, command };
             return match expect::run(&cli.url, &a) {

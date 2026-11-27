@@ -12,8 +12,9 @@ This build runs on Macs with Apple silicon (M1 or newer) and macOS 11 or later.
 3. A small spark appears in the menu bar and the Glint window opens. Allow notifications
    when macOS asks: that is how Glint tells you when something fails.
 
-4. Right-click the spark and choose "Set up this Mac...". In a few seconds a notification
-   says what was set up. Open a new terminal window afterwards.
+4. The Glint window lists what is set up. Click "Set up this Mac" there (or right-click the
+   spark and choose "Set up this Mac..."). In a few seconds each part gets a check mark.
+   Open a new terminal window afterwards. "Show me an example" shows a sample run.
 
 5. Try it:   echo '<?php glint("hello from PHP");' > /tmp/hi.php && php /tmp/hi.php
              python3 -c 'glint("hello from Python")'
@@ -38,7 +39,8 @@ Glint для Mac
 3. В строке меню появится маленькая искра, откроется окно Glint. Разрешите уведомления,
    когда macOS спросит: так Glint сообщает об ошибках.
 
-4. Нажмите на искру правой кнопкой и выберите «Set up this Mac...». Через несколько секунд
-   придёт уведомление о том, что настроено. После этого откройте новое окно терминала.
+4. Окно Glint показывает, что настроено. Нажмите там «Set up this Mac» (или правой кнопкой
+   по искре, «Set up this Mac...»). Через несколько секунд у каждой части появится галочка.
+   Потом откройте новое окно терминала. «Show me an example» покажет пример.
 
 5. Проверьте (команды выше, в шаге 5 английской части).

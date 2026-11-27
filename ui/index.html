@@ -420,6 +420,24 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .docs-body pre .k { color: var(--kw); } .docs-body pre .s { color: var(--str); } .docs-body pre .n { color: var(--num); }
 .docs-body pre .v { color: var(--accent); } .docs-body pre .f { color: var(--text); font-weight: 600; }
 .docs-body pre.cmd { padding-right: 46px; }
+
+/* ---------------- first run ---------------- */
+.onboard { gap: 14px; }
+.ob-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 16px 18px; }
+.ob-card h3 { font: 600 15px var(--sans); margin: 0 0 4px; }
+.ob-muted { color: var(--muted); font-size: 13.5px; margin: 0 0 8px; line-height: 1.5; }
+.ob-err { color: var(--red); font-size: 13px; white-space: pre-wrap; }
+.ob-list { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 6px; }
+.ob-row { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; font-size: 14px; }
+.ob-row .i { width: 16px; height: 16px; color: var(--green); margin-top: 2px; }
+.ob-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); margin: 6px 0 0 4px; }
+.ob-dash { color: var(--faint); text-align: center; }
+.ob-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.ob-code { position: relative; margin: 6px 0 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px 44px 10px 12px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-all; }
+.ob-code .cc { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
+.ob-code .k { color: var(--kw); } .ob-code .s { color: var(--str); } .ob-code .n { color: var(--num); } .ob-code .v { color: var(--accent); } .ob-code .f { font-weight: 600; } .ob-code .c { color: var(--faint); }
+.ob-tabs .tabs { margin: 4px 0 0; }
+#setMac .ob-card { margin-bottom: 16px; }
 /* ---------------- settings ---------------- */
 .sheet { overflow-y: auto; }
 .sheet-body { max-width: 640px; margin: 0 auto; padding: 28px 20px 80px; }
@@ -516,6 +534,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <div class="sheet-body">
     <header class="sheet-head"><h1 id="setTitle">Settings</h1><span class="sheet-saved" id="setSaved" aria-live="polite"></span><button class="link" data-act="settings-close">Close <kbd>esc</kbd></button></header>
     <p class="sheet-lead">Changes apply right away and are saved to <code id="setPath">~/.glint/config.toml</code>.</p>
+    <div id="setMac"></div>
 
     <section class="set-group">
       <h2>Stored events</h2>
@@ -848,6 +867,7 @@ function runTitle(id) {
   }
   if ((m = id.match(/^claude-code:(.+)$/))) return "Agent session " + m[1].slice(0, 8);
   if ((m = id.match(/^otel-(.+)$/))) return "Trace " + m[1].slice(0, 8);
+  if (/^example-/.test(id)) { const r = S.allRuns.find(x => x.run === id); return (r?.head || "Example run") + " · example"; }
   if (/^browser-/.test(id)) { const r = S.allRuns.find(x => x.run === id); return r?.head?.startsWith("/") ? "Page " + r.head : "Browser page"; }
   if (/^pipe-/.test(id)) return "glint pipe";
   if (/^send-/.test(id)) return "glint send";
@@ -1243,16 +1263,98 @@ function entries() {
   S.entries.forEach(e => (e.isNew = false));
   fillSources();
 }
+/* ---------------- first run ----------------
+   Someone who just opened Glint sees what is set up on this Mac, one button that sets up the
+   rest, ways to try it in their language, and an example to look at before writing any code. */
+S.setup = null; // null: not asked yet; {steps} | {error}; .running while setting up
+const SETUP_ROWS = [
+  ["service", "Glint starts when you log in"],
+  ["php", "glint() in PHP"],
+  ["python", "glint() in Python"],
+  ["node", "glint() in Node"],
+  ["agents", "Coding agents know about Glint"],
+];
+async function loadSetup() {
+  try { S.setup = await api("/v1/setup"); } catch (err) { S.setup = { error: err.message }; }
+  render();
+}
+async function runSetup() {
+  S.setup = { ...(S.setup || {}), running: true }; render(); drawSetMac();
+  try {
+    const r = await api("/v1/setup", { method: "POST" });
+    const failed = r.steps.filter(x => x.status === "fail").length;
+    // Show the state as the status check sees it, not the install's own list.
+    try { S.setup = { ...(await api("/v1/setup")), justRan: true }; } catch { S.setup = { steps: r.steps, justRan: true }; }
+    toast(failed ? `${failed} step(s) need a look; see ~/.glint/setup.log` : "This Mac is set up");
+    drawSetMac();
+  } catch (err) { S.setup = { ...(S.setup || {}), running: false, error: err.message }; }
+  render();
+}
+function setupCard() {
+  const st = S.setup;
+  if (!st) return `<div class="ob-card"><h3>This Mac</h3><p class="ob-muted">Checking what is set up…</p></div>`;
+  const by = Object.fromEntries((st.steps || []).map(x => [x.name, x]));
+  const rows = SETUP_ROWS.map(([k, label]) => {
+    const x = by[k], state = !x ? "unknown" : x.status;
+    const mark = state === "ok" ? icon("check") : state === "fail" ? `<span class="ob-dot"></span>` : `<span class="ob-dash">–</span>`;
+    const note = !x ? "" : state === "ok" ? "" : state === "skip" ? x.detail : x.detail.replace(/ — run `.*`.*$/, "").replace(/run `glint install.*`/, "");
+    return `<li class="ob-row ob-${state}">${mark}<span>${esc(label)}${note ? `<span class="ob-muted"> · ${esc(note)}</span>` : ""}</span></li>`;
+  }).join("");
+  const missing = (st.steps || []).some(x => x.status === "fail" && x.name !== "daemon");
+  const btn = st.running ? `<button class="btn primary" disabled>Setting up…</button>`
+    : missing || st.error ? `<button class="btn primary" data-act="setup">Set up this Mac</button>` : "";
+  const after = st.justRan ? `<p class="ob-muted">Open a new terminal window so your shell picks up the changes.</p>` : "";
+  const err = st.error ? `<p class="ob-err">${esc(st.error)}</p>` : "";
+  const lead = missing ? "One click sets up the rest: glint() without imports, errors with no code, and your coding agents." : st.steps ? "Everything is set up." : "";
+  return `<div class="ob-card"><h3>This Mac</h3>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${err}<div class="ob-actions">${btn}</div>${after}</div>`;
+}
+function tryCard() {
+  const CC = `<button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button>`;
+  const ex = {
+    php: `echo '<?php glint(["hello" => "from PHP"]);' > /tmp/hi.php && php /tmp/hi.php`,
+    python: `python3 -c 'glint({"hello": "from Python"})'`,
+    node: `node -e 'glint({ hello: "from Node" })'`,
+    browser: `<script src="${location.origin}/v1/browser.js" data-project="my-site"><\/script>`, // "<\/" keeps this page's own script open
+  };
+  const tabs = [["php", "PHP"], ["python", "Python"], ["node", "Node"], ["browser", "Browser"]];
+  const lang = store.get("lang", "php");
+  return `<div class="ob-card"><h3>Try it</h3>
+    <p class="ob-muted">After setup, paste one of these into a new terminal window. The value appears here a moment later.</p>
+    <div class="tabbed ob-tabs"><div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-tab="${k}" aria-selected="${k === lang}">${n}</button>`).join("")}</div>
+    ${tabs.map(([k]) => `<div class="pane" data-pane="${k}"${k === lang ? "" : " hidden"}><pre class="ob-code"><code data-lang="${k === "browser" ? "html" : "bash"}">${esc(ex[k])}</code>${CC}</pre></div>`).join("")}</div>
+    <div class="ob-actions"><button class="btn" data-act="sample">Show me an example</button><button class="link" data-act="docs">Read the docs</button></div></div>`;
+}
+function agentCard() {
+  return `<div class="ob-card"><h3>With your coding agent</h3>
+    <p class="ob-muted">Once set up, Claude Code hears about new failures with your next prompt. You can also ask it directly:</p>
+    <pre class="ob-code"><code>look in Glint for what failed and fix it</code></pre></div>`;
+}
 function onboarding() {
-  const CC = `<button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button>`;
-  $("status").innerHTML = `<div class="say idle"><svg class="mark glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><div class="text"><b>Glint is running</b> — nothing has arrived yet<span class="sub">Events show up here the moment a program sends one. Pick whichever fits:</span></div></div>`;
-  $("entries").innerHTML = `<li class="onboard">
-    <div class="way"><span class="lbl">From any shell</span><div class="code">glint send '{"hello": "world"}'${CC}</div></div>
-    <div class="way"><span class="lbl">Watch a dev server</span><div class="code">npm run dev 2>&1 | glint pipe${CC}</div></div>
-    <div class="way"><span class="lbl">From your code</span><div class="code"><span class="kw">import</span> glint <span class="kw">from</span> <span class="str">"glint-sdk"</span>\nglint(order).label(<span class="str">"before save"</span>)${CC}</div></div>
-    <div class="way"><span class="lbl">Existing Ray clients</span><div class="code">ray($order)  // spatie/ray sends to Glint on :23517${CC}</div></div>
-    <div class="way"><span class="lbl">Let your agent read it</span><div class="code">claude mcp add --transport http glint ${esc(location.origin)}/mcp${CC}</div></div></li>`;
+  $("status").innerHTML = `<div class="say idle"><svg class="mark glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><div class="text"><b>Glint is running</b>. Nothing has arrived yet.<span class="sub">Glint shows what your programs do: values you send with glint(), logs, SQL, errors and timings.</span></div></div>`;
+  $("entries").innerHTML = `<li class="onboard">${setupCard()}${tryCard()}${agentCard()}</li>`;
+  $("entries").querySelectorAll("code[data-lang]").forEach(c => { c.innerHTML = highlight(c.textContent, c.dataset.lang); });
+  if (S.setup === null) { S.setup = undefined; loadSetup(); }
   document.body.dataset.state = "idle";
+}
+/* An example run to look at before writing code: a checkout with nested work, SQL, a warning and an exception. */
+async function sendSample() {
+  const id = () => "ex-" + Math.random().toString(36).slice(2, 10), run = "example-" + Date.now().toString(36), project = "example";
+  const at = (file, line, fn) => ({ lang: "php", sdk: "glint example", file, line, fn });
+  const m = id(), q = id();
+  const events = [
+    { run, project, kind: "core.log", payload: { message: "POST /checkout/8" }, meta: { label: "request" }, origin: at("/example/shop/public/index.php", 1) },
+    { id: q, run, project, parent: m, kind: "core.measure", payload: { name: "load order", duration_ms: 4.1 }, origin: at("/example/shop/app/Checkout.php", 21, "Checkout->handle") },
+    { run, project, parent: q, kind: "sql.query", payload: { sql: "select * from orders where id = ?", bindings: [8], duration_ms: 1.2, rows: 1, conn: "mysql" }, origin: at("/example/shop/app/Orders.php", 14, "Orders->find") },
+    { run, project, parent: m, kind: "core.value", payload: { value: { id: 8, customer: "Alan Turing", items: [{ sku: "C-3", qty: 1, price: 15 }], coupon: null, total: 15 } }, meta: { label: "order" }, origin: at("/example/shop/app/Checkout.php", 24, "Checkout->handle") },
+    { run, project, parent: m, kind: "core.log", payload: { message: "order below minimum, applying fee", fields: { total: 15 } }, meta: { level: "warn" }, origin: at("/example/shop/app/Pricing.php", 40, "Pricing->fee") },
+    { id: m, run, project, kind: "core.measure", payload: { name: "checkout", duration_ms: 38.6 }, origin: at("/example/shop/app/Checkout.php", 18, "Checkout->handle") },
+    { run, project, kind: "core.exception", payload: { class: "UnexpectedValueException", message: "no fee configured for order 8", frames: [{ file: "/example/shop/app/Pricing.php", line: 42, fn: "fee", class: "Pricing" }, { file: "/example/shop/app/Checkout.php", line: 27, fn: "handle", class: "Checkout" }] }, origin: at("/example/shop/app/Pricing.php", 42, "Pricing->fee") },
+  ];
+  try {
+    await api("/v1/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(events) });
+    S.project = project; store.set("project", project); S.run = null; await loadAll();
+    toast("This is an example run. Click a row to open it.");
+  } catch (err) { toast(err.message); }
 }
 
 /* ---------------- render orchestration ---------------- */
@@ -1371,6 +1473,8 @@ function openSearch() { document.body.classList.add("searching"); $("q").focus()
 function closeSearch() { document.body.classList.remove("searching"); S.q = ""; $("q").value = ""; render(); }
 
 document.addEventListener("click", ev => {
+  const tab = ev.target.closest("[data-tab]");
+  if (tab && !tab.closest("#docs")) return selectTab(tab);
   const fold = ev.target.closest(".tree .fold"); // a folded node's preview unfolds it, like its brace
   if (fold) { fold.previousElementSibling.click(); return; }
   const b = ev.target.closest("button"); if (!b) return;
@@ -1382,6 +1486,8 @@ document.addEventListener("click", ev => {
   if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
   if (act === "docs") return openDocs();
+  if (act === "setup") return runSetup();
+  if (act === "sample") return sendSample();
   if (act === "settings") return openSettings();
   if (act === "settings-close") return closeSettings();
   if (act === "data-prune") return api("/v1/data/prune", { method: "POST" }).then(r => { toast(r.removed ? `Removed ${r.removed} old events` : "Nothing old enough to remove"); return openSettings(); }).catch(e => toast(e.message));
@@ -1425,7 +1531,9 @@ async function openSettings() {
   const d = $("settings"); d.hidden = false;
   try { setInfo = await api("/v1/settings"); } catch (err) { $("setData").textContent = `Settings are not available: ${err.message}`; return; }
   drawSettings(); d.querySelector("[data-key]")?.focus();
+  drawSetMac(); if (!S.setup || S.setup.error) loadSetup().then(drawSetMac);
 }
+function drawSetMac() { const el = $("setMac"); if (el && !$("settings").hidden) el.innerHTML = setupCard(); }
 function closeSettings() { $("settings").hidden = true; }
 function drawSettings() {
   const i = setInfo, st = i.settings, d = i.data;
@@ -1503,13 +1611,13 @@ function selectTab(b, remember = true) {
   if (!b) return;
   const id = b.dataset.tab;
   // One language for the whole page: picking Python shows Python in every example.
-  const boxes = remember ? [...$("docs").querySelectorAll(".tabbed")] : [b.closest(".tabbed")];
+  const boxes = remember ? [...document.querySelectorAll(".tabbed")] : [b.closest(".tabbed")];
   for (const box of boxes) {
     if (!box.querySelector(`[data-tab="${id}"]`)) continue;
     box.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.tab === id)));
     box.querySelectorAll("[data-pane]").forEach(p => (p.hidden = p.dataset.pane !== id));
   }
-  if (remember) { store.set("lang", id); const y = b.getBoundingClientRect().top; requestAnimationFrame(() => { const body = $("docs").querySelector(".docs-body"); body.scrollTop += b.getBoundingClientRect().top - y; }); }
+  if (remember) { store.set("lang", id); const y = b.getBoundingClientRect().top; requestAnimationFrame(() => { const body = $("docs").hidden ? document.scrollingElement : $("docs").querySelector(".docs-body"); body.scrollTop += b.getBoundingClientRect().top - y; }); }
 }
 $("docs").addEventListener("click", ev => {
   const t = ev.target.closest("[data-tab]"); if (t) return selectTab(t);
@@ -1529,6 +1637,8 @@ function commands() {
   c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: openSearch });
   c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", hint: "?", ico: "run", run: () => openDocs() });
   c.push({ g: "Actions", label: "Settings: data, editor, agents", hint: ",", ico: "run", run: () => openSettings() });
+  c.push({ g: "Actions", label: "Set up this Mac: glint() in PHP, Python, Node and coding agents", ico: "run", run: () => runSetup() });
+  c.push({ g: "Actions", label: "Show me an example run", ico: "run", run: () => sendSample() });
   if (S.fail) c.push({ g: "Actions", label: "Copy the last failure for your agent", ico: "copy", run: () => copyException(S.fail.id) });
   (S.editors.length ? S.editors : Object.keys(EDITORS)).forEach(id => c.push({ g: "Editor", label: `Open files in ${EDITORS[id] || id}${id === S.editor ? " ✓" : ""}`, ico: "run", run: () => api("/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ editor: id }) }).then(() => { S.editor = id; toast(`Files open in ${EDITORS[id] || id}`); }).catch(e => toast(e.message)) }));
   return c;
