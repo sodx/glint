@@ -189,7 +189,7 @@ if [ "$launch_app" = 1 ]; then
 else
   # What the app does when nothing answers: run the bundled glintd, logging to ~/.glint/glintd.log.
   extra=()
-  [ "$ci" = 0 ] && extra=(GLINT_ADDR="127.0.0.1:$port" GLINT_RAY_ADDR=off GLINT_OTLP_ADDR=off)
+  [ "$ci" = 0 ] && extra=(GLINT_ADDR="127.0.0.1:$port" GLINT_OTLP_ADDR=off)
   env -i "${base_env[@]}" ${extra[@]+"${extra[@]}"} "$app/Contents/MacOS/glintd" >> "$home/.glint/glintd.log" 2>&1 &
   pids="$pids $!"
   if wait_up 20; then pass "bundled glintd answers at $url"; else fail "bundled glintd did not start (glintd.log follows)"; tail -30 "$home/.glint/glintd.log"; fi

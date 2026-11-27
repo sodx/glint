@@ -70,7 +70,7 @@ def get(url):
 def start_glintd(a, home):
     url = f"http://127.0.0.1:{a.port}"
     env = dict(os.environ, HOME=home, GLINT_DB=os.path.join(home, "glint.db"), GLINT_ADDR=f"127.0.0.1:{a.port}",
-               GLINT_RAY_ADDR="off", GLINT_OTLP_ADDR="off")
+               GLINT_OTLP_ADDR="off")
     log = open(os.path.join(home, "glintd.log"), "w")
     proc = subprocess.Popen([os.path.join(a.bin_dir, "glintd")], env=env, stdout=log, stderr=subprocess.STDOUT)
     for _ in range(100):
@@ -189,7 +189,7 @@ def main():
         proc.terminate()
     summary(rows)
     print(f"\nResults: {a.out}/results.jsonl. The private glintd's database is {home}/glint.db:")
-    print(f"  GLINT_ADDR=127.0.0.1:{a.port} GLINT_DB={home}/glint.db GLINT_RAY_ADDR=off GLINT_OTLP_ADDR=off HOME={home} glintd")
+    print(f"  GLINT_ADDR=127.0.0.1:{a.port} GLINT_DB={home}/glint.db GLINT_OTLP_ADDR=off HOME={home} glintd")
     print("  then open its window and press g for the Agents view.")
 
 

@@ -15,15 +15,15 @@ and a debugger that an agent can drive.
 | # | Goal | Consequence |
 |---|------|-------------|
 | G1 | Every language, every framework, eventually. | The *protocol* is the product. Clients are thin and replaceable; the core never knows about a language. |
-| G2 | Zero install for common stacks. | Accept protocols people already emit: OpenTelemetry (OTLP), Ray-compatible payloads, plain stdin/NDJSON, log files. |
+| G2 | Zero install for common stacks. | Accept what programs already emit: OpenTelemetry (OTLP), plain stdin/NDJSON, log files. |
 | G3 | AI-native, not AI-bolted-on. | Agents are first-class consumers (MCP) and producers (LLM-call and agent-step event kinds). |
 | G4 | Local-first, private by default. | Binds to loopback, data in one SQLite file, nothing leaves the machine unless a user turns on a remote model. |
 | G5 | Fast and small. | Rust core, Tauri shell, single binary daemon. Ingest ≥ 50k events/s, UI stays live at 1k events/s. |
 | G6 | Unknown is fine. | Any payload kind renders (generic JSON tree). New kinds never break old UIs or old clients. |
-| G7 | Data, not pictures. | Clients send structured values; the viewer renders. Pre-rendered HTML is not the primary form (Ray's main limitation, see `docs/research/ray.md`), so events stay searchable, diffable and readable by agents. |
-| G8 | Open and specified. | Open source, normative spec and conformance suite. Ray has neither: its app is closed, and its protocol is learned by proxying traffic. |
+| G7 | Data, not pictures. | Clients send structured values; the viewer renders. Pre-rendered HTML is not the primary form, so events stay searchable, diffable and readable by agents. |
+| G8 | Open and specified. | Open source, normative spec and conformance suite. |
 
-Positioning note (2026-11): Ray 4 is a native Rust app and Ray 3 ships an MCP server, so "fast" and
+Positioning note (2026-11): fast native apps and MCP servers are common among debugging tools, so "fast" and
 "has MCP" are baseline expectations, not differentiators. Glint competes on G1, G3 (tracing LLMs and agents,
 not just showing their output), G7 and G8.
 
@@ -36,15 +36,15 @@ Jaeger scale. Glint is a dev-time tool.
 
 ```
  ┌──────────────────────────── producers ────────────────────────────┐
- │  glint SDKs        Ray clients      OTel SDKs / OpenLLMetry        │
- │  (php, js, py,     (spatie/ray,     (any lang, any LLM framework)  │
- │   go, rust, ...)    node-ray, ...)                                 │
+ │  glint SDKs                         OTel SDKs / OpenLLMetry        │
+ │  (php, js, py,                      (any lang, any LLM framework)  │
+ │   go, rust, ...)                                                   │
  │  `glint` CLI / pipe     log-file tail     Claude Code / agent hooks│
  └───────┬──────────────────┬───────────────────┬──────────────┬─────┘
-         │ Glint native     │ Ray protocol      │ OTLP/HTTP    │ stdin, files, hooks
+         │ Glint native     │                   │ OTLP/HTTP    │ stdin, files, hooks
          ▼                  ▼                   ▼              ▼
  ┌──────────────────────── glint-ingest (adapters) ───────────────────┐
- │  native  │  ray-compat  │  otlp  │  pipe  │  tail  │  agent-hooks  │
+ │  native  │  otlp  │  pipe  │  tail  │  agent-hooks                 │
  │      every adapter does one thing: foreign bytes  →  Envelope      │
  └───────────────────────────────┬────────────────────────────────────┘
                                  ▼
@@ -105,7 +105,7 @@ Rules:
 - `parent` builds trees: OTel spans, agent steps with their tool calls and LLM calls, and `measure` blocks.
 - Events are mutable by reference. A later `core.update { target, meta?, hidden?, removed? }` changes how an
   earlier event is shown (color, label, size, hide, remove) without creating a feed item. Fluent chains
-  (`glint(x)->red()->label('a')`) and Ray's same-uuid commands map onto this. Updates are stored, so history
+  (`glint(x)->red()->label('a')`) map onto this. Updates are stored, so history
   stays accurate. The UI shows the folded result.
 - `core.html` is untrusted. It is rendered sanitised in an isolated frame, with no scripts and no `file://`.
 - Size cap per envelope (default 1 MiB). Larger blobs go to a content-addressed side store, and the payload
@@ -152,7 +152,6 @@ Supporting every language does not mean writing 30 SDKs. It takes three layers, 
 | Adapter | Port / source | What you get for free |
 |---------|---------------|-----------------------|
 | `otlp` | OTLP/HTTP `:4318` (`/v1/logs`, `/v1/traces`) | Every language with an OpenTelemetry SDK. Spans become trees, and logs become `core.log`. `gen_ai.*` semantic conventions map to `llm.call`, so OpenLLMetry, LangChain, LlamaIndex, Vercel AI SDK and OpenAI/Anthropic instrumentors work with zero Glint code. |
-| `ray-compat` | HTTP `:23517` | Existing Ray client libraries (PHP/Laravel, JS, Python, Ruby, Go, Bash…) work when pointed at Glint. Data payloads map onto `core.*` and `sql.*`. Same-uuid commands become `core.update`. Full mapping and quirks: `docs/research/ray.md` §9. |
 | `pipe` | `stdin` of `glint pipe` | `my-app 2>&1 \| glint pipe`: each line becomes `core.log`. JSON lines are parsed, and level and timestamp are sniffed. Works with any program. |
 | `tail` | files / globs | `storage/logs/laravel.log`, `*.log`. Multiline stack traces are folded into `core.exception`. |
 | `agent-hooks` | HTTP + small hook scripts | Claude Code, Codex and Cursor hook events become `agent.*`. Glint shows what the agent is doing next to what the app is doing. |
@@ -206,7 +205,7 @@ rendered into the docs and into the app's "connect your project" screen.
 
 ## 7. Control plane: making the program wait
 
-Ray-style `pause()` and debugger-style breakpoints, generalised so that an agent can use them too:
+A `pause()` and debugger-style breakpoints, generalised so that an agent can use them too:
 
 1. The SDK sends `ctl.pause { id, reason }` and long-polls `GET /v1/ctl/<id>`.
 2. The UI shows "paused at file:line" with Continue and Continue with value.
@@ -274,7 +273,7 @@ platform. It sits next to your app's SQL and exceptions in the same timeline.
 - Web stack (Solid or Svelte, TypeScript, Vite), served by `glintd` at `http://127.0.0.1:23600/` and embedded
   in the Tauri shell. One UI codebase serves both.
 - Live feed over WebSocket (`/v1/stream`) with server-side filters. Virtualised list. Keyboard first.
-- Views: Feed (default, Ray-like), Runs (request, test and session list), Tree (spans, agent steps), LLM (calls
+- Views: Feed (default), Runs (request, test and session list), Tree (spans, agent steps), LLM (calls
   table and transcript), and Search (FTS and structured filters).
 - Clicking `file:line` opens the place in the editor. The URL scheme is configurable: `vscode://`,
   `phpstorm://`, `zed://`, `cursor://`, `idea://`.
@@ -306,7 +305,7 @@ glint/
 │   ├── glint-protocol/       # Envelope + known kinds as Rust types, schema checks, versioning
 │   ├── glint-core/           # bus, store trait, normaliser, redaction, control plane
 │   ├── glint-store-sqlite/   # SQLite + FTS5 implementation of Store
-│   ├── glint-ingest/         # adapters: native, ray, otlp, pipe, tail, agent-hooks
+│   ├── glint-ingest/         # adapters: native, otlp, pipe, tail, agent-hooks
 │   ├── glint-mcp/            # MCP server
 │   ├── glint-ai/             # optional LLM features (feature-gated)
 │   ├── glint-server/         # axum app wiring: HTTP, WS, static UI
@@ -329,7 +328,6 @@ The dependency direction is strictly downward:
 | Port | Purpose | Default |
 |------|---------|---------|
 | `23600` | native API, UI, WS stream, MCP-over-HTTP | on |
-| `23517` | Ray-compatible ingest | on (off if busy) |
 | `4318` | OTLP/HTTP ingest | on (off if busy; a real collector may own it) |
 
 - Loopback only by default. Binding to the LAN (for Docker, VMs or phones) requires explicit config and

@@ -6,7 +6,6 @@
 
 mod guard;
 mod otlp;
-mod ray;
 pub mod report;
 mod routes;
 pub(crate) mod source;
@@ -131,13 +130,3 @@ pub async fn serve_otlp(
     axum::serve(listener, app).with_graceful_shutdown(shutdown).await
 }
 
-/// Serves the Ray-compatible endpoints (`docs/mappings/ray.md`) until `shutdown` resolves.
-pub async fn serve_ray(
-    listener: TcpListener,
-    hub: Hub,
-    shutdown: impl Future<Output = ()> + Send + 'static,
-) -> std::io::Result<()> {
-    let addr = listener.local_addr()?;
-    let app = ray::router(hub).layer(axum::middleware::from_fn_with_state(Allowlist::for_addr(addr), guard::check));
-    axum::serve(listener, app).with_graceful_shutdown(shutdown).await
-}

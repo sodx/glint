@@ -446,7 +446,7 @@ def main() -> int:
     home = os.path.join(work, "home")
     shutil.rmtree(home, ignore_errors=True)  # a fresh store each time, also with --keep
     os.makedirs(home)
-    daemon_env = dict(os.environ, HOME=home, GLINT_DB=os.path.join(home, "glint.db"), GLINT_ADDR=f"127.0.0.1:{port}", GLINT_RAY_ADDR="off", GLINT_OTLP_ADDR="off")
+    daemon_env = dict(os.environ, HOME=home, GLINT_DB=os.path.join(home, "glint.db"), GLINT_ADDR=f"127.0.0.1:{port}", GLINT_OTLP_ADDR="off")
     c = Checker(work, glint)
     daemon = c.start([binary], work, daemon_env, os.path.join(work, "glintd.log"))
     failed = False

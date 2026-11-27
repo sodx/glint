@@ -4,7 +4,7 @@
 //! - **service**: copies `glintd` and `glint` to `~/.glint/bin` and starts glintd at login
 //!   (launchd on macOS, a systemd user unit on Linux).
 //! - **php**: `auto_prepend_file` in PHP's ini scan directory, so `glint()` exists in every
-//!   script (the same mechanism as Spatie's global-ray). An existing prepend file is chained.
+//!   script. An existing prepend file is chained.
 //! - **python**: a `.pth` file in the user site-packages that puts `glint` into builtins.
 //! - **node**: `NODE_OPTIONS=--import …/global.mjs` in the shell profile, so `glint` is a global.
 //!

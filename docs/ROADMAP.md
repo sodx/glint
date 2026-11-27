@@ -18,13 +18,12 @@ Each milestone ends with something a person can use. The order is a guide, not a
 - ✅ SDKs: JS/TS, Python, PHP, each passing 20/20 on conformance suite v1 (`glint conformance`).
 - UI moves to Vite and TS; screens, configurable open-in-editor scheme, markdown rendering.
 - Retention (count and age) and `glint clear`.
-- ✅ Ray-compatible ingest adapter (`docs/mappings/ray.md`), verified with spatie/ray 1.48.1.
 
 ## M2: Agents (in progress)
 - ✅ `glint-mcp`: runs, events, event, last_error, wait_for, pauses, resume, annotate, show,
   clear, over HTTP `/mcp` and stdio `glint mcp` (ADR 0004).
-- ✅ Control plane: pause/resume from UI, MCP and API; Ray `pause()`; JS `glint.pause()`.
-- `glint.pause()` in the Python and PHP SDKs (Ray's pause already covers PHP).
+- ✅ Control plane: pause/resume from UI, MCP and API; JS `glint.pause()`.
+- `glint.pause()` in the Python and PHP SDKs.
 - ✅ Agent-hooks adapter (Claude Code) → `agent.*` kinds (`docs/mappings/claude-code.md`).
 - Tree view of agent steps → tool calls in the UI (events carry `parent` already).
 

@@ -103,7 +103,7 @@ pub fn definitions() -> Value {
         {
             "name": "glint_pauses",
             "title": "Paused programs",
-            "description": "Programs currently paused at a glint/ray pause() call, waiting for someone to resume them.",
+            "description": "Programs currently paused at a glint pause() call, waiting for someone to resume them.",
             "inputSchema": { "type": "object", "properties": {} },
             "annotations": { "readOnlyHint": true }
         },

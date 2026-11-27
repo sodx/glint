@@ -10,6 +10,7 @@
   <img alt="macOS app, Linux CLI" src="https://img.shields.io/badge/macOS%20app-Linux%20CLI-181a21?labelColor=181a21">
   <img alt="PHP, Python, Node, browser" src="https://img.shields.io/badge/PHP%20%C2%B7%20Python%20%C2%B7%20Node%20%C2%B7%20browser-181a21?labelColor=181a21">
   <img alt="MCP" src="https://img.shields.io/badge/MCP-Claude%20Code%20%C2%B7%20Cursor%20%C2%B7%20Codex-181a21?labelColor=181a21">
+  <a href="#license"><img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-181a21?labelColor=181a21"></a>
 </p>
 
 <p align="center">
@@ -86,9 +87,15 @@ reached them. [How it works](docs/agents.md)
 | [Call tree, pauses and checks](docs/call-tree.md) | `measure`, `pause`, `glint expect` |
 | [Docker and remote machines](docs/docker.md) | `glint docker`, dev containers, SSH |
 | [Secrets](docs/secrets.md) | what is redacted and how to change it |
-| [Data and settings](docs/settings.md) | retention, `config.toml`, diagnostics, Ray and OpenTelemetry |
+| [Data and settings](docs/settings.md) | retention, `config.toml`, diagnostics, OpenTelemetry |
 | [Protocol](docs/PROTOCOL.md) · [Architecture](docs/ARCHITECTURE.md) | the wire format, the API and how glintd is built |
 | [Working on Glint](docs/development.md) | tests, end-to-end checks, releases |
 
 The window has the same docs built in (press `?`), with an example of every method in every
 language.
+
+## License
+
+Glint is licensed under either the [MIT license](LICENSE-MIT) or the
+[Apache License 2.0](LICENSE-APACHE), at your option. Contributions are accepted under the same
+terms.

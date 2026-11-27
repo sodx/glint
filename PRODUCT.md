@@ -36,9 +36,8 @@ of weight from the user:
 
 ## Positioning
 
-Ray (myray.app) is the reference neighbour: closed, paid, PHP-first, values arrive as HTML, its
-MCP lets agents write into the window. Glint differs on: structured data, an open protocol with a
-conformance suite, any language (native SDKs, Ray-compatible clients, OpenTelemetry, stdin), LLM
+Glint's strengths: structured data, an open protocol with a
+conformance suite, any language (native SDKs, OpenTelemetry, stdin), LLM
 and agent tracing in the same timeline, and pauses that a human or an agent can answer.
 
 ## Operating Context
@@ -72,14 +71,12 @@ and agent tracing in the same timeline, and pauses that a human or an agent can 
 Name: **Glint** ("a brief flash of light": a value flashing up in its own window). No logo,
 palette or typeface has been committed yet.
 
-Visual-clarity reference named by the user: **Ray's app** ("what Ray has is pretty good") — a calm
-vertical list of entries, each with a coloured edge, a small label, the value, and file:line
-quietly at the right; little chrome; screens to start fresh. Match that ease of reading; do not
-copy its look.
+Visual-clarity goal: a calm vertical list of entries, each with a coloured edge, a small label,
+the value, and file:line quietly at the right; little chrome; screens to start fresh.
 
 ## Evidence on Hand
 
-Real event shapes from verified runs: spatie/ray 1.48.1 dumps, Node and Python SDK output, a real
+Real event shapes from verified runs: PHP, Node and Python SDK output, a real
 Claude Code session, OpenTelemetry Python 1.45.2 GenAI spans. No users, testimonials, benchmarks
 or pricing exist; do not invent them.
 

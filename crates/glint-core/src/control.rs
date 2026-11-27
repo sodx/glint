@@ -28,7 +28,7 @@ pub enum Resolution {
         #[serde(skip_serializing_if = "Option::is_none")]
         value: Option<Value>,
     },
-    /// Ask the program to stop (Ray: `StopExecutionRequested`).
+    /// Ask the program to stop.
     Stop,
 }
 

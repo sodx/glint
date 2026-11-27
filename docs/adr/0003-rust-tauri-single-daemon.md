@@ -17,6 +17,6 @@ want a headless mode (servers, remote dev boxes) and an MCP server that works wi
 - UI work is TypeScript, not Rust; contributors need both.
 - Single-file store is easy to inspect and back up but not built for long retention — fine for a
   dev-time tool (see non-goals).
-- Note (2026-11-27): Ray 4 also moved to native Rust (GPUI). Performance is now parity, not an
+- Note (2026-11-27): other debugging desks also ship native apps. Performance is parity, not an
   advantage; we keep Tauri + web UI for the shared browser/headless mode and for renderer plugins
   written in web tech, which GPUI does not allow.

@@ -590,7 +590,7 @@ export default { plugins: [glint()] };""", "js")}
 """))
     s.append(("d-secrets", "Secrets", """
 <h2>Secrets</h2>
-<p>glintd replaces passwords, tokens and keys in every event before it stores it, so they never reach the database, this window or a coding agent, which sends what it reads to a cloud model. It works the same for every SDK, Ray, OpenTelemetry and <code>glint pipe</code>. An event that had secrets says how many were replaced when you open it.</p>
+<p>glintd replaces passwords, tokens and keys in every event before it stores it, so they never reach the database, this window or a coding agent, which sends what it reads to a cloud model. It works the same for every SDK, OpenTelemetry and <code>glint pipe</code>. An event that had secrets says how many were replaced when you open it.</p>
 <p>Two things are caught:</p>
 <ul>
 <li>Values under keys that look secret, at any depth: names containing <code>password</code>, <code>passwd</code>, <code>secret</code>, <code>api_key</code>, <code>authorization</code>, <code>cookie</code>, <code>private_key</code>, <code>access_key</code>, <code>credentials</code>, and names ending in <code>token</code> or <code>dsn</code>. Case, <code>_</code>, <code>-</code> and dots are ignored, so <code>X-Api-Key</code> and <code>apiKey</code> count. Header pairs and SQL bindings count too: in <code>WHERE password = ?</code> the bound value is replaced.</li>
@@ -620,14 +620,14 @@ export default { plugins: [glint()] };""", "js")}
 <tr><td>Rust</td><td>a crate with a <code>glint!()</code> macro that knows file and line; a panic hook for crashes.</td></tr>
 <tr><td>Elixir, Erlang</td><td>a Logger backend and <code>:telemetry</code> handlers, so existing logs and spans arrive with no code.</td></tr>
 </table>
-<p>Ray's client libraries already work for many of these through Glint's Ray-compatible port, and OpenTelemetry covers the rest for traces and LLM calls. <code>spec/conformance/README.md</code> has the full checklist.</p>
+<p>OpenTelemetry already covers many of these for traces and LLM calls. <code>spec/conformance/README.md</code> has the full checklist.</p>
 """))
     s.append(("d-help", "When something is off", """
 <h2>When something is off</h2>
 <table class="ref">
 <tr><td><code>glint()</code> is undefined</td><td>Open a new terminal: Node reads it from your shell profile. Code run with <code>php -r</code> never gets it; a script file does. Run <code>glint doctor</code>.</td></tr>
 <tr><td>nothing arrives</td><td>Check that glintd answers with <code>glint doctor</code>. Production mode and <code>GLINT_ENABLED=0</code> turn SDKs off.</td></tr>
-<tr><td>a port is taken</td><td>Ray's app owns 23517 and an OpenTelemetry collector 4318. Glint starts without those. Change the main address in Settings.</td></tr>
+<tr><td>a port is taken</td><td>An OpenTelemetry collector may own 4318. Glint then starts without its OpenTelemetry port. Change the main address in Settings.</td></tr>
 <tr><td>the wrong project</td><td>Projects are named after the git repository. Set <code>GLINT_PROJECT</code>, or <code>data-project</code> on the browser tag.</td></tr>
 <tr><td>start over</td><td>Delete all events in Settings, or run <code>glint uninstall</code> and delete <code>~/.glint</code>.</td></tr>
 </table>

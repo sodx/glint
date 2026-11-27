@@ -15,9 +15,7 @@ sent anywhere; you pass the file on yourself.
 The Docs view (`?`) has an example of every method in every language, a page per framework, and
 how to add a language of your own.
 
-## Ray and OpenTelemetry
-
-Ray client libraries work unchanged, because glintd also listens on Ray's port `23517`.
+## OpenTelemetry
 
 To trace LLM calls without Glint code, point any OpenTelemetry exporter at Glint. GenAI spans
 (from OpenLLMetry, vendor instrumentors, or the GenAI semantic conventions) become LLM calls with the

@@ -7,7 +7,6 @@
 //! |---|---|---|
 //! | `addr` | `GLINT_ADDR` | `127.0.0.1:23600` |
 //! | `db` | `GLINT_DB` | `~/.glint/glint.db` |
-//! | `ray_addr` | `GLINT_RAY_ADDR` | `127.0.0.1:23517`; `off` disables; skipped if the port is taken (the Ray app) |
 //! | `otlp_addr` | `GLINT_OTLP_ADDR` | `127.0.0.1:4318`; `off` disables; skipped if taken (a collector) |
 //! | `remote_addr` | `GLINT_REMOTE_ADDR` | `off`; e.g. the Docker bridge `172.17.0.1:23600`: events in, nothing out. Retried until the address exists |
 //! | `keep_days` | `GLINT_KEEP_DAYS` | `7`: older events are deleted (`0` keeps them) |
@@ -78,19 +77,14 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("binding {addr}; is another glintd running?"))?;
 
-    let ray_listener = optional_listener(&settings.ray_addr, "ray_addr (GLINT_RAY_ADDR)", "Ray-compatible ingest", "is the Ray app running?").await?;
     let otlp_listener = optional_listener(&settings.otlp_addr, "otlp_addr (GLINT_OTLP_ADDR)", "OTLP receiver", "is an OpenTelemetry collector running?").await?;
 
     let mut adapters = vec!["native".to_owned()];
-    if ray_listener.is_some() {
-        adapters.push("ray".to_owned());
-    }
     if otlp_listener.is_some() {
         adapters.push("otlp".to_owned());
     }
     tracing::info!(
         url = %format!("http://{}", listener.local_addr()?),
-        ray = %ray_listener.as_ref().and_then(|l| l.local_addr().ok()).map_or("off".to_owned(), |a| a.to_string()),
         otlp = %otlp_listener.as_ref().and_then(|l| l.local_addr().ok()).map_or("off".to_owned(), |a| a.to_string()),
         db = %db.display(),
         "glint is ready"
@@ -109,14 +103,10 @@ async fn main() -> Result<()> {
     });
 
     let remote = remote_listener(&settings.remote_addr, hub.clone(), stopped())?;
-    let ray = ray_listener.map(|l| tokio::spawn(glint_server::serve_ray(l, hub.clone(), stopped())));
     let otlp = otlp_listener.map(|l| tokio::spawn(glint_server::serve_otlp(l, hub.clone(), stopped())));
     glint_server::serve(listener, hub, glint_server::Options { adapters, admin: Some(admin), editor: Some(settings.editor.clone()) }, stopped()).await?;
     if let Some(remote) = remote {
         remote.await.context("remote listener")??;
-    }
-    if let Some(ray) = ray {
-        ray.await.context("ray listener")??;
     }
     if let Some(otlp) = otlp {
         otlp.await.context("otlp listener")??;

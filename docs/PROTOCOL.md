@@ -192,4 +192,4 @@ A client is conformant when it:
 ## 9. Foreign protocols
 
 These are accepted on their own ports and translated to envelopes. Mapping tables are in `docs/mappings/`:
-Ray (`:23517`), OTLP/HTTP logs and traces including `gen_ai.*` semconv (`:4318`), and NDJSON stdin (`glint pipe`).
+OTLP/HTTP logs and traces including `gen_ai.*` semconv (`:4318`), and NDJSON stdin (`glint pipe`).

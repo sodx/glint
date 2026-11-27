@@ -1,12 +1,11 @@
 # Language × integration layer → status. Rendered into docs and the app's "connect" screen.
-# Layers (docs/ARCHITECTURE.md §5): otlp = zero-SDK via OpenTelemetry, ray = existing Ray client,
+# Layers (docs/ARCHITECTURE.md §5): otlp = zero-SDK via OpenTelemetry,
 # pipe = `glint pipe`, sdk = first-party SDK passing spec/conformance.
 # status: supported | planned | community | n/a
 
 languages:
   javascript:
     sdk: { status: supported, path: sdks/js, conformance: "node sdks/js/conformance.mjs" }
-    ray: { status: supported, client: node-ray, note: "mapped from source; not yet run against the real client" }
     otlp: { status: planned, milestone: M3 }
     pipe: { status: supported }
   typescript:
@@ -17,7 +16,6 @@ languages:
     pipe: { status: supported }
   php:
     sdk: { status: supported, path: sdks/php, conformance: "php sdks/php/conformance.php", note: "tested on PHP 8.1" }
-    ray: { status: supported, client: spatie/ray, verified: "1.48.1 on PHP 8.1" }
     pipe: { status: supported }
   go:
     sdk: { status: planned, milestone: M5 }
@@ -29,7 +27,6 @@ languages:
     pipe: { status: supported }
   ruby:
     sdk: { status: planned, milestone: M5 }
-    ray: { status: supported, client: spatie/ruby-ray, note: "protocol-compatible; not run yet" }
     pipe: { status: supported }
   java-kotlin:
     sdk: { status: planned, milestone: M5 }

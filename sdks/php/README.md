@@ -1,8 +1,8 @@
 # glint/glint for PHP
 
-Send values, logs, exceptions and timings from PHP to Glint, the local debug desk. The API follows
-Ray's shape (a global `glint()` helper with a fluent chain), but Glint receives structured JSON,
-never pre-rendered HTML.
+Send values, logs, exceptions and timings from PHP to Glint, the local debug desk. The API is a
+global `glint()` helper with a fluent chain, and Glint receives structured JSON, never
+pre-rendered HTML.
 
 Requires PHP 8.1+ and `ext-json`. `ext-curl` is recommended; without it the SDK uses
 `file_get_contents` with a timeout. No other dependencies.

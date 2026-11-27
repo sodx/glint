@@ -17,12 +17,12 @@ serves the UI. The UI (`ui/index.html`, single file, no build step) follows PROD
 current run as one line per event. Design tokens are documented at the top of its CSS.
 Next: M1 in `docs/ROADMAP.md`.
 
-M1 in progress: Ray-compatible ingest on `:23517` (`docs/mappings/ray.md`) and the `glint` CLI
-(`send`, `pipe`) are done, as are SDKs for JS/TS, Python and PHP with the conformance suite
+M1 in progress: the `glint` CLI
+(`send`, `pipe`) is done, as are SDKs for JS/TS, Python and PHP with the conformance suite
 (`spec/conformance/`, runner `glint conformance`).
 
-M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume from UI, MCP, API;
-Ray `pause()` works), `glint.pause()` in the JS SDK and the Claude Code hooks adapter
+M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume from UI, MCP, API),
+`glint.pause()` in the JS SDK and the Claude Code hooks adapter
 (`glint hook`, `docs/mappings/claude-code.md`) are done.
 
 `glint install` / `uninstall` / `doctor` (`crates/glint-cli/src/install.rs`, agents in `agents.rs`): glintd as a login
@@ -59,7 +59,7 @@ fetch, pg, mysql2 and node:sqlite (`sdks/js/src/frameworks.js`), plus a Vite plu
 M3 in progress: OTLP receiver on `:4318` mapping GenAI spans to `llm.call`
 (`docs/mappings/otlp.md`), LLM card in the UI, MCP `glint_llm_calls`.
 
-Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, ray, otlp, agent hooks),
+Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-ingest` (native, otlp, agent hooks),
 `glint-server`, `glintd`, `glint-cli` (binary `glint`), `glint-mcp`; SDKs in `sdks/{js,python,php}`. The rest of the layout in ARCHITECTURE §10 is planned, not present.
 
 ## Stack
@@ -114,7 +114,7 @@ Crates that exist: `glint-protocol`, `glint-core`, `glint-store-sqlite`, `glint-
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p glintd                      # http://127.0.0.1:23600, DB at ~/.glint/glint.db
-GLINT_DB=/tmp/g.db GLINT_ADDR=127.0.0.1:23700 GLINT_RAY_ADDR=off cargo run -p glintd
+GLINT_DB=/tmp/g.db GLINT_ADDR=127.0.0.1:23700 cargo run -p glintd
 curl -d '{"kind":"core.value","payload":{"value":42}}' http://127.0.0.1:23600/v1/events
 cargo run -q -p glint-cli -- send 42 '{"a":1}' hello --label demo
 npm run dev 2>&1 | cargo run -q -p glint-cli -- pipe --label web

@@ -1,6 +1,6 @@
 <?php
 
-// Global helper, in the spirit of Ray:
+// Global helper:
 //
 //     glint($order)->label('before save')->orange();
 //

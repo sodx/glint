@@ -83,7 +83,7 @@ git checkout Cargo.toml app/Cargo.toml app/tauri.conf.json                 # und
 (cd target/release/dist-0.1.1 && python3 -m http.server 23790) &
 mkdir -p "$S/home" && HOME="$S/home" TMPDIR="$S" GLINT_APP_ID=local.glint.app.test \
   GLINT_URL=http://127.0.0.1:23711 GLINT_ADDR=127.0.0.1:23711 GLINT_DB="$S/g.db" \
-  GLINT_RAY_ADDR=off GLINT_OTLP_ADDR=off \
+  GLINT_OTLP_ADDR=off \
   GLINT_UPDATE_URL=http://127.0.0.1:23790/latest.json GLINT_UPDATE_NOW=1 \
   "$S/Glint.app/Contents/MacOS/Glint"
 ```
