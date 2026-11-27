@@ -50,6 +50,11 @@ Existing settings are kept, each edited file gets a one-time `.glint-backup`, an
 takes back exactly what was added. The server's MCP instructions tell a connected agent when to
 use it, including dropping `glint(value)` into code instead of print statements.
 
+Data stays small: glintd keeps 7 days and at most 100,000 events by default, removes older ones
+every 10 minutes and gives the space back. Settings live in `~/.glint/config.toml` (written by
+`glint install`; `keep_days`, `max_events`, `editor`, addresses), each overridable by an
+environment variable. The window's Docs (`?`) explain everything with examples per language.
+
 PHP gets it through `auto_prepend_file` (an existing prepend file keeps working), Python through a
 `.pth` file in the user site-packages of the `python3` on PATH, Node through `NODE_OPTIONS=--import`
 in your shell profile. `--only php,node` and `--dry-run` narrow it down. A project's own copy of the

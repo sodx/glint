@@ -367,6 +367,49 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .entry[data-color="blue"] .node { color: var(--num); border-color: color-mix(in oklch, var(--num) 45%, transparent); }
 .entry[data-color="purple"] .node { color: var(--kw); border-color: color-mix(in oklch, var(--kw) 45%, transparent); }
 .entry[data-color="gray"] .node { color: var(--faint); }
+
+/* ---------------- docs ---------------- */
+.docs-btn { width: 30px; height: 30px; border-radius: 8px; color: var(--muted); font: 600 14px var(--sans); border: 1px solid var(--line); background: var(--surface); }
+.docs-btn:hover { color: var(--text); border-color: var(--line-strong); }
+.docs { position: fixed; inset: 0; z-index: 25; background: var(--bg); overflow: hidden; }
+.docs[hidden] { display: none; }
+.docs-shell { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+.docs-nav { display: flex; flex-direction: column; gap: 2px; padding: 22px 14px; border-right: 1px solid var(--line); overflow-y: auto; }
+.docs-brand { display: flex; align-items: center; gap: 8px; font: 600 15px var(--sans); margin: 0 8px 14px; }
+.docs-brand .mark { width: 16px; height: 16px; color: var(--accent); fill: currentColor; }
+.docs-nav a { color: var(--muted); text-decoration: none; padding: 6px 8px; border-radius: 7px; font-size: 14px; }
+.docs-nav a:hover, .docs-nav a.on { color: var(--text); background: var(--hover); }
+.docs-close { margin-top: auto; align-self: flex-start; padding: 8px; }
+.docs-body { overflow-y: auto; padding: 34px clamp(18px, 5vw, 64px) 120px; scroll-behavior: smooth; }
+.docs-body section { max-width: 760px; margin: 0 0 44px; scroll-margin-top: 20px; }
+.docs-body h1 { font: 600 28px/1.2 var(--sans); letter-spacing: -.01em; margin: 0 0 10px; }
+.docs-body h2 { font: 600 20px/1.3 var(--sans); margin: 0 0 12px; }
+.docs-body h3 { font: 600 15px var(--sans); margin: 18px 0 8px; }
+.docs-body p, .docs-body li { font-size: 14.5px; line-height: 1.65; color: var(--text); }
+.docs-body .lead { font-size: 16px; color: var(--muted); }
+.docs-body .aside { color: var(--muted); font-size: 13.5px; }
+.docs-body ul { padding-left: 20px; }
+.docs-body code { font: 12.5px var(--mono); background: var(--code); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.docs-body pre { margin: 10px 0 14px; background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow-x: auto; position: relative; }
+.docs-body pre code { border: 0; background: none; padding: 0; font-size: 12.5px; line-height: 1.7; white-space: pre; }
+.docs-body pre .c { color: var(--faint); }
+.docs-body pre.cmd { padding-right: 46px; }
+.docs-body pre .cc { position: absolute; top: 7px; right: 7px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
+.docs-body pre .cc:hover { background: var(--hover); color: var(--text); }
+.docs-body table.ref { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 13.5px; }
+.docs-body table.ref td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
+.docs-body table.ref td:first-child { white-space: nowrap; padding-right: 18px; width: 1%; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 12px 0 4px; overflow-x: auto; }
+.tabs button { padding: 8px 12px; font: 500 13.5px var(--sans); color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--text); }
+.pane[hidden] { display: none; }
+@media (max-width: 720px) {
+  .docs-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .docs-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px; white-space: nowrap; }
+  .docs-brand { display: none; }
+  .docs-close { margin: 0 0 0 auto; position: sticky; right: 0; background: var(--bg); box-shadow: -12px 0 12px var(--bg); }
+}
 </style>
 </head>
 <body>
@@ -402,6 +445,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="menu" id="projMenu" role="menu"></div></div>
     <span class="spacer"></span>
     <span class="live" id="live" title="Connected to glintd"><svg class="mark" id="liveMark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="liveText">Live</span></span>
+    <button class="docs-btn" id="docsBtn" data-act="docs" aria-label="Docs (?)" title="Docs (?)">?</button>
     <button class="cmdk-btn" id="cmdkBtn" aria-label="Jump to a run or action (⌘K)"><svg class="i"><use href="#i-search"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
   </header>
 
@@ -415,9 +459,197 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <ol class="entries" id="entries"></ol>
 </div>
 
-<div class="keys" aria-hidden="true"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>[</kbd><kbd>]</kbd>runs</span></div>
+<div class="keys" aria-hidden="true"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span></div>
 <div class="palette" id="palette" role="dialog" aria-modal="true" aria-label="Command palette">
   <div class="box"><input id="pq" placeholder="Jump to a run, or type an action…" aria-controls="plist" autocomplete="off"><ul id="plist" role="listbox"></ul></div>
+</div>
+<div class="docs" id="docs" role="dialog" aria-modal="true" aria-labelledby="docsTitle" hidden>
+  <div class="docs-shell">
+    <nav class="docs-nav" aria-label="Documentation">
+      <div class="docs-brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="docsTitle">Glint docs</span></div>
+      <a href="#d-start">Start</a>
+      <a href="#d-code">From your code</a>
+      <a href="#d-nocode">With no code</a>
+      <a href="#d-tree">Call tree &amp; timing</a>
+      <a href="#d-expect">Checks: glint expect</a>
+      <a href="#d-agents">Coding agents</a>
+      <a href="#d-cli">Command line</a>
+      <a href="#d-app">Using this window</a>
+      <a href="#d-config">Settings &amp; data</a>
+      <a href="#d-help">When something is off</a>
+      <button class="link docs-close" data-act="docs-close">Close <kbd>esc</kbd></button>
+    </nav>
+    <article class="docs-body">
+
+<section id="d-start">
+<h1>Glint shows what your programs did</h1>
+<p class="lead">Values, logs, SQL, exceptions, timings and LLM calls from PHP, Python, Node and the browser land here, live, grouped by project and run. Your coding agent sees the same thing.</p>
+<h3>Install once</h3>
+<pre class="cmd"><code>cargo build --release -p glintd -p glint-cli &amp;&amp; target/release/glint install</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>That starts <code>glintd</code> at login, makes <code>glint()</code> a global in every PHP, Python and Node program, reports their uncaught errors, and tells the coding agents it finds (Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex) about Glint. Open a new terminal afterwards. Then check:</p>
+<pre class="cmd"><code>glint doctor</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p class="aside">Glint stays off in production: SDKs send nothing when <code>APP_ENV</code> or <code>NODE_ENV</code> is <code>production</code>, or <code>GLINT_ENABLED=0</code>. Everything stays on this machine.</p>
+</section>
+
+<section id="d-code">
+<h2>From your code</h2>
+<p>No import, no setup: after <code>glint install</code>, <code>glint()</code> exists everywhere. A project that vendors the SDK itself (from <code>sdks/php</code>, <code>sdks/python</code>, <code>sdks/js</code> in the Glint repository) keeps its own copy.</p>
+<div class="tabbed">
+  <div class="tabs" role="tablist"><button role="tab" data-tab="php">PHP</button><button role="tab" data-tab="python">Python</button><button role="tab" data-tab="node">Node</button><button role="tab" data-tab="browser">Browser</button><button role="tab" data-tab="other">Other languages</button></div>
+  <div class="pane" data-pane="php">
+<pre class="code"><code>glint($order);                                   <span class="c">// any value: arrays, objects, models</span>
+glint($order)-&gt;label('before save')-&gt;green();     <span class="c">// label, colour: gray green orange red blue purple</span>
+glint($a, $b, $c);                               <span class="c">// several at once</span>
+Glint\Glint::log('payment retried', ['attempt' =&gt; 2], 'warn');
+Glint\Glint::table($rows);
+glint($e);                                       <span class="c">// a Throwable is shown as an exception with its stack</span>
+$total = Glint\Glint::measure('pricing', fn () =&gt; price($cart));   <span class="c">// timing; what it sends nests under it</span>
+Glint\Glint::send('sql.query', ['sql' =&gt; $sql, 'bindings' =&gt; $b, 'duration_ms' =&gt; 3.2]);</code></pre>
+<p>Runs: each request (or CLI script) is one run, named by its first log line, e.g. <code>GET /checkout/8</code>.</p>
+  </div>
+  <div class="pane" data-pane="python" hidden>
+<pre class="code"><code>glint(order)                                     <span class="c"># any value: dicts, dataclasses, objects</span>
+glint(order).label("before save").green()
+glint.log("payment retried", {"attempt": 2}, level="warn")
+glint.table(rows)
+glint(err)                                       <span class="c"># an exception is shown with its traceback</span>
+total = glint.measure("pricing", lambda: price(cart))   <span class="c"># also takes async functions</span>
+glint.send("sql.query", {"sql": sql, "bindings": b, "duration_ms": 3.2})</code></pre>
+  </div>
+  <div class="pane" data-pane="node" hidden>
+<pre class="code"><code>glint(order);
+glint(order).label("before save").green();
+glint.log("payment retried", { attempt: 2 }, "warn");
+glint.table(rows);
+glint(err);                                      <span class="c">// an Error is shown with its stack</span>
+const total = await glint.measure("pricing", async () =&gt; price(cart));
+const answer = await glint.pause("check the discount before charging");   <span class="c">// waits for Continue in Glint</span>
+glint.send("sql.query", { sql, bindings, duration_ms: 3.2 });</code></pre>
+<p><code>glint.pause()</code> stops the program until someone presses <b>Continue</b> (here, or an agent through MCP) and returns the value given, e.g. <code>{"approve": true}</code>.</p>
+  </div>
+  <div class="pane" data-pane="browser" hidden>
+<p>Add one tag to the page while you develop (not to production builds):</p>
+<pre class="cmd"><code>&lt;script src="http://127.0.0.1:23600/v1/browser.js" data-project="shop"&gt;&lt;/script&gt;</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<pre class="code"><code>glint(cart);                                     <span class="c">// window.glint, same as everywhere</span>
+glint.log("checkout opened", { step: 2 });
+glint.exception(err);</code></pre>
+<p>It also reports, with no code, uncaught errors, unhandled promise rejections, <code>console.error</code>/<code>warn</code>, failed requests and resources that failed to load. Each page load is a run, <code>Page /path</code>. Only pages on <code>localhost</code>, <code>127.0.0.1</code>, <code>*.localhost</code> or <code>*.test</code> can send.</p>
+  </div>
+  <div class="pane" data-pane="other" hidden>
+<p>Any language can POST JSON:</p>
+<pre class="cmd"><code>curl -s localhost:23600/v1/events -d '{"kind":"core.value","payload":{"value":{"id":7}}}'</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<p>Or from a shell: <code>glint send '{"id":7}'</code>, and <code>your-command 2&gt;&amp;1 | glint pipe</code> to forward a program's output line by line (levels and stack traces are recognised).</p>
+<p><b>Ray</b> client libraries (<code>ray()</code> in PHP, JS, Python, Go, Ruby…) work unchanged: Glint listens on Ray's port 23517. <b>OpenTelemetry</b>: point an exporter at <code>http://127.0.0.1:4318</code>; GenAI spans become LLM calls with the transcript, tokens and cost.</p>
+  </div>
+</div>
+</section>
+
+<section id="d-nocode">
+<h2>With no code at all</h2>
+<ul>
+<li><b>PHP</b>: uncaught exceptions and fatal errors (out of memory, parse errors). PHP still prints its error and exits as before. Works for scripts, php-fpm, Valet, Herd and <code>php -S -t public</code>; not for a <code>php -S</code> router script (<code>artisan serve</code>), where PHP skips the prepend file.</li>
+<li><b>Python</b>: uncaught exceptions, in any thread. The traceback is still printed.</li>
+<li><b>Node</b>: uncaught exceptions and unhandled rejections. The process still crashes as it would.</li>
+<li><b>Browser</b>: with the tag above.</li>
+</ul>
+<p class="aside">A framework that catches exceptions itself to render an error page (Laravel, Express, Django) keeps them from being "uncaught": call <code>glint($e)</code> in its error handler.</p>
+</section>
+
+<section id="d-tree">
+<h2>Call tree &amp; timing</h2>
+<p>Everything sent inside <code>measure()</code> nests under it, inner measures too, across <code>await</code> in Node:</p>
+<pre class="code"><code>Glint\Glint::measure('checkout', function () use ($id) {
+    $order = Glint\Glint::measure('load order', fn () =&gt; load($id));   <span class="c">// its SQL nests here</span>
+    glint($order)-&gt;label('order');
+});</code></pre>
+<p>A run then reads as a tree: <code>checkout → load order → select …</code>. Click the arrow left of a node to fold it. The bars on the right are a small waterfall: where in the run each piece of work started and how long it took. OpenTelemetry spans nest the same way.</p>
+</section>
+
+<section id="d-expect">
+<h2>Checks: <code>glint expect</code></h2>
+<p>Markers become a test. Wait until events match each expectation, in order, and fail as soon as a program errors:</p>
+<pre class="cmd"><code>glint expect 'label:cart payload.value.total&gt;0' 'kind:sql.query text:"insert into orders"' 'label:"order saved"' -- ./checkout.sh 7</code><button class="cc" data-cc aria-label="Copy command"><svg class="i"><use href="#i-copy"/></svg></button></pre>
+<table class="ref">
+<tr><td><code>label:X</code></td><td>the event's label (set with <code>-&gt;label()</code>, also afterwards)</td></tr>
+<tr><td><code>kind:sql.query</code> · <code>kind:sql.*</code></td><td>the kind, or a prefix</td></tr>
+<tr><td><code>text:refund</code></td><td>the payload contains it (any case)</td></tr>
+<tr><td><code>payload.value.total&gt;0</code></td><td>a dot path compared: <code>= != &gt; &gt;= &lt; &lt;=</code>; <code>true</code>, <code>null</code>, numbers are JSON</td></tr>
+<tr><td><code>has:payload.value.email</code></td><td>present and not null</td></tr>
+<tr><td><code>count&gt;=2</code></td><td>how many matching events are needed</td></tr>
+</table>
+<p>Exit 0 pass, 1 fail, 2 could not check. Without <code>-- command</code> it also looks at the last 30 s and waits (<code>--timeout</code>) while you click through. <code>--unordered</code>, <code>--allow-errors</code>, <code>-p project</code>. Agents use the same check as the MCP tool <code>glint_expect</code>.</p>
+</section>
+
+<section id="d-agents">
+<h2>Coding agents</h2>
+<p><code>glint install</code> registers Glint's MCP server with the agents it finds. Claude Code also gets hooks, so its own session shows up here next to your program, and Glint can talk to it:</p>
+<ul>
+<li><b>At session start</b> it learns that Glint is recording this project, that <code>glint()</code> needs no import, and which failures happened in the last day.</li>
+<li><b>With each of your prompts</b> it gets the failures that are new since the last one. You say "it's broken", it already sees <code>TypeError … cart.js:11</code>.</li>
+<li><b>When it wants to finish</b> while programs of the project failed during its turn, it is sent back once to fix them or say why they are expected (<code>GLINT_STOP_GUARD=0</code> turns that off). Failures in code it edited afterwards don't count.</li>
+</ul>
+<table class="ref">
+<tr><td><code>glint_last_error</code></td><td>the newest failure with its stack and values: where to start</td></tr>
+<tr><td><code>glint_events</code> · <code>glint_event</code> · <code>glint_runs</code></td><td>look around: filter, one full event, recent runs</td></tr>
+<tr><td><code>glint_wait_for</code></td><td>edit → run → wait for the result, instead of reading terminal output</td></tr>
+<tr><td><code>glint_expect</code></td><td>prove a change works: markers arrive with the right values, nothing fails</td></tr>
+<tr><td><code>glint_pauses</code> · <code>glint_resume</code></td><td>answer a program stopped at <code>pause()</code></td></tr>
+<tr><td><code>glint_annotate</code> · <code>glint_show</code></td><td>leave a note on an event; put markdown or a diagram in front of you</td></tr>
+<tr><td><code>glint_llm_calls</code> · <code>glint_clear</code></td><td>LLM calls with tokens and cost; start a fresh view</td></tr>
+</table>
+<p>By hand: <code>claude mcp add --scope user --transport http glint http://127.0.0.1:23600/mcp</code>, and <code>glint hook --print-config</code> for the hooks.</p>
+</section>
+
+<section id="d-cli">
+<h2>Command line</h2>
+<table class="ref">
+<tr><td><code>glint send 42 '{"a":1}' hello</code></td><td>send values; <code>--kind core.log --level warn</code>, <code>--label</code></td></tr>
+<tr><td><code>npm run dev 2&gt;&amp;1 | glint pipe -l web</code></td><td>forward a program's output, line by line</td></tr>
+<tr><td><code>glint expect … -- cmd</code></td><td>a check from markers (above)</td></tr>
+<tr><td><code>glint install</code> · <code>--only php,node</code> · <code>--dry-run</code></td><td>set up this machine (service, php, python, node, agents)</td></tr>
+<tr><td><code>glint doctor</code></td><td>is glintd up, does <code>glint()</code> work in each language, which agents know</td></tr>
+<tr><td><code>glint uninstall</code></td><td>undo install; your data in <code>~/.glint</code> stays</td></tr>
+<tr><td><code>glint mcp</code> · <code>glint hook</code></td><td>MCP over stdio; the agent hook command</td></tr>
+<tr><td><code>glint conformance -- node my-sdk.mjs</code></td><td>check a new language SDK against the spec</td></tr>
+</table>
+</section>
+
+<section id="d-app">
+<h2>Using this window</h2>
+<p>The top line answers first: what failed and where, a program waiting for you, or all quiet. Below it, one run at a time; switch runs and projects with the menus at the top or <kbd>⌘K</kbd>.</p>
+<table class="ref">
+<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action, choose the editor ("Open files in …")</td></tr>
+<tr><td><kbd>E</kbd> · <kbd>C</kbd></td><td>show the failure · continue a paused program</td></tr>
+<tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
+<tr><td><kbd>j</kbd> <kbd>k</kbd> · <kbd>[</kbd> <kbd>]</kbd></td><td>move between events · between runs</td></tr>
+<tr><td><kbd>?</kbd></td><td>these docs</td></tr>
+</table>
+<p>Click an event to open it: values as foldable JSON, code around the failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app: <kbd>⌥⌘G</kbd> shows and hides the window from anywhere; the menu-bar spark turns red on a failure and amber when a program waits.</p>
+</section>
+
+<section id="d-config">
+<h2>Settings &amp; data</h2>
+<p>Everything lives in <code>~/.glint</code>: the database, <code>config.toml</code>, the SDK copies, <code>glintd.log</code>. Settings (environment variables win):</p>
+<pre class="code"><code>keep_days = 7          <span class="c"># older events are deleted        GLINT_KEEP_DAYS</span>
+max_events = 100000    <span class="c"># the oldest beyond this go       GLINT_MAX_EVENTS</span>
+editor = "cursor"      <span class="c"># vscode cursor windsurf zed phpstorm idea webstorm pycharm sublime   GLINT_EDITOR</span>
+addr = "127.0.0.1:23600"</code></pre>
+<p>Old events are removed every 10 minutes and the file shrinks with them, so the database stays small (a few hundred MB at most with the defaults). <span id="docsData"></span> Restart glintd after editing: <code>glint install --only service</code>.</p>
+</section>
+
+<section id="d-help">
+<h2>When something is off</h2>
+<table class="ref">
+<tr><td><code>glint()</code> is undefined</td><td>open a new terminal (Node reads it from your shell profile); <code>php -r</code> code never gets it, a script file does; run <code>glint doctor</code></td></tr>
+<tr><td>nothing arrives</td><td>is glintd up? <code>glint doctor</code>. Production mode turns SDKs off; so does <code>GLINT_ENABLED=0</code></td></tr>
+<tr><td>a port is taken</td><td>Ray's app owns 23517, a collector 4318: Glint starts without those. Change <code>addr</code> for the main port</td></tr>
+<tr><td>the wrong project</td><td>projects are named after the git repository; set <code>GLINT_PROJECT</code> or <code>data-project</code> to choose</td></tr>
+<tr><td>start over</td><td><code>glint uninstall</code>, then delete <code>~/.glint</code></td></tr>
+</table>
+</section>
+
+    </article>
+  </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
 
@@ -1018,6 +1250,8 @@ document.addEventListener("click", ev => {
   if (act === "copyexc") return copyException(b.dataset.id);
   if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
+  if (act === "docs") return openDocs();
+  if (act === "docs-close") return closeDocs();
   if (act === "jtoggle") {
     const j = b.parentElement, shut = j.classList.toggle("shut");
     const all = ev.altKey ? [j, ...j.querySelectorAll(".j")] : [j];
@@ -1045,6 +1279,28 @@ document.addEventListener("click", ev => {
 }, true);
 $("q").addEventListener("input", e => { S.q = e.target.value; render(); });
 
+
+/* ---------------- docs ---------------- */
+function openDocs(hash) {
+  const d = $("docs"); d.hidden = false; document.body.classList.add("docs-open");
+  const lang = store.get("lang", null); if (lang) d.querySelectorAll(`[data-tab="${lang}"]`).forEach(b => selectTab(b, false));
+  else d.querySelectorAll(".tabbed").forEach(t => selectTab(t.querySelector("[data-tab]"), false));
+  api("/v1/info").then(i => { const x = i.data; if (x) $("docsData").textContent = `Right now: ${x.events} events, ${(x.bytes / 1048576).toFixed(1)} MB, kept ${x.keep_days} days / at most ${x.max_events} events.`; }).catch(() => {});
+  if (hash) d.querySelector(hash)?.scrollIntoView();
+  d.querySelector(".docs-nav a")?.focus();
+}
+function closeDocs() { $("docs").hidden = true; document.body.classList.remove("docs-open"); }
+function selectTab(b, remember = true) {
+  if (!b) return;
+  const box = b.closest(".tabbed"), id = b.dataset.tab;
+  box.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  box.querySelectorAll("[data-pane]").forEach(p => (p.hidden = p.dataset.pane !== id));
+  if (remember) store.set("lang", id);
+}
+$("docs").addEventListener("click", ev => {
+  const t = ev.target.closest("[data-tab]"); if (t) return selectTab(t);
+  const a = ev.target.closest(".docs-nav a"); if (a) { ev.preventDefault(); $("docs").querySelector(a.getAttribute("href"))?.scrollIntoView(); }
+});
 /* ---------------- command palette ---------------- */
 let pSel = 0, pItems = [];
 function commands() {
@@ -1057,6 +1313,7 @@ function commands() {
   S.runs.slice(0, 30).forEach(r => c.push({ g: "Runs", label: runTitle(r.run) + (runTitle(r.run) !== r.run ? ` (${r.run})` : ""), hint: rel(r.last), ico: "run", run: () => goRun(r.run) }));
   S.projects.filter(p => p !== S.project).forEach(p => c.push({ g: "Projects", label: `Switch to ${p}`, ico: "run", run: () => goProject(p) }));
   c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: openSearch });
+  c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", hint: "?", ico: "run", run: () => openDocs() });
   if (S.fail) c.push({ g: "Actions", label: "Copy the last failure for your agent", ico: "copy", run: () => copyException(S.fail.id) });
   (S.editors.length ? S.editors : Object.keys(EDITORS)).forEach(id => c.push({ g: "Editor", label: `Open files in ${EDITORS[id] || id}${id === S.editor ? " ✓" : ""}`, ico: "run", run: () => { S.editor = id; store.set("editor", id); toast(`Files open in ${EDITORS[id] || id}`); } }));
   return c;
@@ -1091,12 +1348,14 @@ document.addEventListener("keydown", e => {
   const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("palette").classList.contains("open") ? closePalette() : openPalette(); return; }
   if (e.key === "Escape" && $("palette").classList.contains("open")) { closePalette(); return; }
+  if (!$("docs").hidden) { if (e.key === "Escape") closeDocs(); return; }
   if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
     if (e.key === "e" && S.fail && !S.ack.has(S.fail.id)) return showFailure();
     if (e.key === "c" && S.pauses[0]) return answer(S.pauses[0].id, "continue");
     if (e.key === "[") return stepRun(-1);
     if (e.key === "]") return stepRun(1);
     if (e.key === "/") { e.preventDefault(); return openSearch(); }
+    if (e.key === "?") { e.preventDefault(); return openDocs(); }
     if (e.key === "j" || e.key === "k") {
       const rows = [...document.querySelectorAll(".entry .row")]; if (!rows.length) return;
       const i = rows.indexOf(document.activeElement);

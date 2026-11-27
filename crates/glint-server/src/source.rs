@@ -14,6 +14,17 @@ use glint_protocol::Envelope;
 use serde_json::{Value, json};
 
 const CONTEXT: usize = 6;
+
+static DEFAULT_EDITOR: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
+/// The editor from glintd's configuration, used when a request names none.
+pub fn set_default_editor(editor: Option<String>) {
+    let _ = DEFAULT_EDITOR.set(editor.filter(|e| !e.is_empty()));
+}
+
+fn configured_editor() -> Option<String> {
+    DEFAULT_EDITOR.get().cloned().flatten().or_else(|| std::env::var("GLINT_EDITOR").ok())
+}
 const MAX_FILE: u64 = 2 * 1024 * 1024;
 
 #[derive(serde::Deserialize)]
@@ -79,7 +90,7 @@ pub async fn open(State(hub): State<Hub>, QueryParams(w): QueryParams<Where>) ->
         Ok(x) => x,
         Err((code, msg)) => return err(code, &msg),
     };
-    let editor = w.editor.clone().or_else(|| std::env::var("GLINT_EDITOR").ok()).or_else(|| installed().into_iter().next()).unwrap_or_else(|| "vscode".into());
+    let editor = w.editor.clone().or_else(configured_editor).or_else(|| installed().into_iter().next()).unwrap_or_else(|| "vscode".into());
     let Some(url) = editor_url(&editor, &path, line) else { return err(StatusCode::BAD_REQUEST, "unknown editor") };
     let opener = if cfg!(target_os = "macos") { "open" } else if cfg!(windows) { "explorer" } else { "xdg-open" };
     match Command::new(opener).arg(&url).spawn() {
@@ -91,7 +102,7 @@ pub async fn open(State(hub): State<Hub>, QueryParams(w): QueryParams<Where>) ->
 /// `GET /v1/editors` → the editors found here, the default first.
 pub async fn editors() -> Json<Value> {
     let mut found = installed();
-    if let Ok(e) = std::env::var("GLINT_EDITOR") {
+    if let Some(e) = configured_editor() {
         found.retain(|x| x != &e);
         found.insert(0, e);
     }

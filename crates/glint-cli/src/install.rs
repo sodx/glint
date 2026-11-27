@@ -141,6 +141,20 @@ fn run(cmd: &str, args: &[&str], home: &Path) -> Option<String> {
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
 
+const DEFAULT_CONFIG: &str = "# Glint's settings (read by glintd at start; restart it, or run `glint install --only service`).\n\
+# Each can also be set by an environment variable, which wins.\n\
+\n\
+# Events older than this many days are deleted (0 keeps everything).      GLINT_KEEP_DAYS\n\
+keep_days = 7\n\
+# At most this many events are kept; the oldest go first (0: no cap).       GLINT_MAX_EVENTS\n\
+max_events = 100000\n\
+# Where files open: vscode, cursor, windsurf, zed, phpstorm, idea, webstorm, pycharm, sublime.  GLINT_EDITOR\n\
+# editor = \"vscode\"\n\
+# addr = \"127.0.0.1:23600\"        GLINT_ADDR\n\
+# ray_addr = \"127.0.0.1:23517\"    GLINT_RAY_ADDR   (\"off\" to disable)\n\
+# otlp_addr = \"127.0.0.1:4318\"    GLINT_OTLP_ADDR  (\"off\" to disable)\n\
+# db = \"~/.glint/glint.db\"         GLINT_DB\n";
+
 fn install_service(a: &Args) -> Step {
     let bin = a.glint_dir().join("bin");
     let here = match std::env::current_exe() {
@@ -156,6 +170,12 @@ fn install_service(a: &Args) -> Step {
         if let Err(e) = fs::create_dir_all(&bin).and_then(|()| replace_file(&daemon, &target_daemon)).and_then(|()| replace_file(&here, &bin.join("glint"))) {
             return fail("service", format!("copying binaries to {}: {e}", bin.display()));
         }
+    }
+    let config = a.glint_dir().join("config.toml");
+    if !config.exists()
+        && let Err(e) = write(a, &config, DEFAULT_CONFIG)
+    {
+        return fail("service", e);
     }
     let log = a.glint_dir().join("glintd.log");
     if cfg!(target_os = "macos") {
@@ -427,7 +447,19 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
     steps.push(match info {
         Ok(r) => {
             let v: serde_json::Value = r.into_json().unwrap_or_default();
-            done("daemon", format!("glintd {} at {base_url} · adapters {}", v["version"].as_str().unwrap_or("?"), v["adapters"]))
+            let d = &v["data"];
+            let data = if d.is_object() {
+                format!(
+                    " · {} events, {:.1} MB, kept {} days / at most {} events",
+                    d["events"],
+                    d["bytes"].as_f64().unwrap_or(0.0) / 1_048_576.0,
+                    d["keep_days"],
+                    d["max_events"]
+                )
+            } else {
+                String::new()
+            };
+            done("daemon", format!("glintd {} at {base_url}{data}", v["version"].as_str().unwrap_or("?")))
         }
         Err(e) => fail("daemon", format!("not reachable at {base_url} ({e}); run `glint install` or start glintd")),
     });

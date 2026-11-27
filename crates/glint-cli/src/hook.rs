@@ -87,6 +87,12 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         }
     }
 
+    if event == "SessionStart"
+        && let Some(dir) = seen.as_ref().and_then(|f| f.parent())
+    {
+        prune_state(dir);
+    }
+
     let text = if event == "SessionStart" {
         let mut t = format!(
             "Glint (local debug desk, MCP server `glint`) is recording what programs in project `{project}` do: \
@@ -188,6 +194,18 @@ fn list(fails: &[&Envelope]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Session state files older than a week are left over from finished sessions.
+fn prune_state(dir: &std::path::Path) {
+    let week = std::time::Duration::from_secs(7 * 24 * 3600);
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            if e.metadata().and_then(|m| m.modified()).is_ok_and(|t| t.elapsed().is_ok_and(|age| age > week)) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
 }
 
 fn state_file(session: &str) -> Option<PathBuf> {

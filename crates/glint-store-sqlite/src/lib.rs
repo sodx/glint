@@ -46,6 +46,12 @@ impl SqliteStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         let writer = Connection::open(path).map_err(backend)?;
+        // Incremental auto-vacuum lets pruning give space back to the disk. It must be set before
+        // the first table exists; a database created without it is converted once (a VACUUM).
+        let vacuum_mode: i64 = writer.query_row("PRAGMA auto_vacuum", [], |r| r.get(0)).map_err(backend)?;
+        if vacuum_mode != 2 {
+            writer.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;").map_err(backend)?;
+        }
         writer
             .execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;")
             .map_err(backend)?;
@@ -68,6 +74,76 @@ impl SqliteStore {
         Ok(Self {
             writer: Mutex::new(conn),
             reader: None,
+        })
+    }
+
+    /// Deletes the oldest events so that none is older than `keep_days` and at most `max_events`
+    /// remain, with their search-index rows, in batches (writers are never held up for long).
+    /// Then gives the space back to the disk. Returns how many events were removed.
+    pub fn prune(&self, keep_days: Option<u32>, max_events: Option<u64>) -> Result<u64, StoreError> {
+        let mut boundary: i64 = 0; // events with seq <= boundary go
+        {
+            let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(days) = keep_days.filter(|d| *d > 0) {
+                let cutoff = (chrono::Utc::now() - chrono::Duration::days(i64::from(days))).to_rfc3339_opts(SecondsFormat::Micros, true);
+                // ts is close to insertion order; the newest old-enough event bounds the cut.
+                let b: Option<i64> = conn
+                    .query_row("SELECT max(seq) FROM events WHERE ts < ?1", [&cutoff], |r| r.get(0))
+                    .map_err(backend)?;
+                boundary = boundary.max(b.unwrap_or(0));
+            }
+            if let Some(max) = max_events.filter(|m| *m > 0) {
+                let b: Option<i64> = conn
+                    .query_row("SELECT seq FROM events ORDER BY seq DESC LIMIT 1 OFFSET ?1", [i64::try_from(max).unwrap_or(i64::MAX)], |r| r.get(0))
+                    .ok();
+                boundary = boundary.max(b.unwrap_or(0));
+            }
+        }
+        if boundary == 0 {
+            return Ok(0);
+        }
+        let mut removed = 0u64;
+        loop {
+            let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+            let tx = conn.unchecked_transaction().map_err(backend)?;
+            let ids: Vec<i64> = {
+                let mut st = tx.prepare_cached("SELECT seq FROM events WHERE seq <= ?1 ORDER BY seq LIMIT 2000").map_err(backend)?;
+                st.query_map([boundary], |r| r.get(0)).map_err(backend)?.collect::<Result<_, _>>().map_err(backend)?
+            };
+            if ids.is_empty() {
+                break;
+            }
+            {
+                let mut fts = tx.prepare_cached("DELETE FROM events_fts WHERE rowid = ?1").map_err(backend)?;
+                let mut ev = tx.prepare_cached("DELETE FROM events WHERE seq = ?1").map_err(backend)?;
+                for id in &ids {
+                    fts.execute([id]).map_err(backend)?;
+                    ev.execute([id]).map_err(backend)?;
+                }
+            }
+            tx.commit().map_err(backend)?;
+            removed += ids.len() as u64;
+        }
+        let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        // incremental_vacuum frees one page per step: it must be stepped to the end.
+        {
+            let mut st = conn.prepare("PRAGMA incremental_vacuum").map_err(backend)?;
+            let mut rows = st.query([]).map_err(backend)?;
+            while rows.next().map_err(backend)?.is_some() {}
+        }
+        let mut st = conn.prepare("PRAGMA wal_checkpoint(TRUNCATE)").map_err(backend)?;
+        let mut rows = st.query([]).map_err(backend)?;
+        while rows.next().map_err(backend)?.is_some() {}
+        Ok(removed)
+    }
+
+    /// How many events are stored, and how big the database file is.
+    pub fn stats(&self) -> Result<(u64, u64), StoreError> {
+        self.read(|c| {
+            let n: i64 = c.query_row("SELECT count(*) FROM events", [], |r| r.get(0)).map_err(backend)?;
+            let pages: i64 = c.query_row("PRAGMA page_count", [], |r| r.get(0)).map_err(backend)?;
+            let size: i64 = c.query_row("PRAGMA page_size", [], |r| r.get(0)).map_err(backend)?;
+            Ok((u64::try_from(n).unwrap_or(0), u64::try_from(pages * size).unwrap_or(0)))
         })
     }
 
@@ -403,5 +479,26 @@ mod tests {
         assert_eq!(s.query(&Query::default()).unwrap().len(), 1);
         drop(s);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prune_keeps_the_newest_and_the_search_index_in_step() {
+        let s = SqliteStore::open_in_memory().unwrap();
+        let mut n = glint_core::Normaliser::new();
+        let old = chrono::Utc::now() - chrono::Duration::days(30);
+        let mk = |i: usize, ts: chrono::DateTime<chrono::Utc>, n: &mut glint_core::Normaliser| {
+            let inc = glint_protocol::parse_body(format!(r#"{{"kind":"core.log","payload":{{"message":"needle {i}"}}}}"#).as_bytes(), glint_protocol::BodyFormat::Json).unwrap().remove(0).unwrap();
+            let mut e = n.normalise(inc, ts);
+            e.ts = ts;
+            e
+        };
+        let events: Vec<_> = (0..10).map(|i| mk(i, if i < 4 { old } else { chrono::Utc::now() }, &mut n)).collect();
+        s.insert(&events).unwrap();
+        assert_eq!(s.prune(Some(7), None).unwrap(), 4, "older than a week");
+        assert_eq!(s.prune(None, Some(5)).unwrap(), 1, "beyond the cap");
+        assert_eq!(s.stats().unwrap().0, 5);
+        let hits = s.query(&Query { q: Some("needle".into()), ..Query::default() }).unwrap();
+        assert_eq!(hits.len(), 5, "search sees only what is left");
+        assert_eq!(s.prune(Some(7), Some(5)).unwrap(), 0);
     }
 }

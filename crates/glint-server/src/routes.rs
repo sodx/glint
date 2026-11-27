@@ -51,6 +51,7 @@ pub struct AppState {
     pub stop: watch::Receiver<bool>,
     /// Adapters this daemon runs, for `/v1/info`.
     pub adapters: std::sync::Arc<Vec<String>>,
+    pub data: Option<crate::DataInfo>,
 }
 
 impl axum::extract::FromRef<AppState> for Hub {
@@ -118,6 +119,7 @@ async fn info(State(s): State<AppState>) -> Json<serde_json::Value> {
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": [PROTOCOL_VERSION],
         "adapters": *s.adapters,
+        "data": s.data.as_ref().map(|f| f()),
         "kinds": KNOWN_KINDS,
     }))
 }

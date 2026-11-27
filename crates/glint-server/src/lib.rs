@@ -25,16 +25,31 @@ pub use guard::Allowlist;
 pub const INDEX_HTML: &str = include_str!("../../../ui/index.html");
 
 /// What a server instance offers beyond the defaults.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Options {
     /// Adapters running in this daemon, reported by `/v1/info`.
     pub adapters: Vec<String>,
+    /// What `/v1/info` says about stored data: retention settings and current size.
+    pub data: Option<DataInfo>,
+    /// The editor files open in when the request names none (config `editor`, `GLINT_EDITOR`).
+    pub editor: Option<String>,
 }
+
+impl std::fmt::Debug for Options {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Options").field("adapters", &self.adapters).field("editor", &self.editor).finish_non_exhaustive()
+    }
+}
+
+/// Reports stored events and database size for `/v1/info`.
+pub type DataInfo = Arc<dyn Fn() -> serde_json::Value + Send + Sync>;
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             adapters: vec!["native".to_owned(), "hooks:claude-code".to_owned()],
+            data: None,
+            editor: None,
         }
     }
 }
@@ -42,11 +57,13 @@ impl Default for Options {
 /// Builds the router for a server reachable at `addr`. Live streams end when `stop`
 /// turns true.
 pub fn router(hub: Hub, addr: SocketAddr, stop: watch::Receiver<bool>, opts: Options) -> Router {
+    source::set_default_editor(opts.editor.clone());
     let state = routes::AppState {
         mcp: glint_mcp::McpServer::new(hub.clone()),
         hub,
         stop,
         adapters: Arc::new(opts.adapters),
+        data: opts.data,
     };
     routes::router(state).layer(axum::middleware::from_fn_with_state(Allowlist::for_addr(addr), guard::check))
 }
