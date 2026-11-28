@@ -580,7 +580,7 @@ export default { plugins: [glint()] };""", "js")}
 <tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action; it also finds what events say, in every project, and opens a match in its run</td></tr>
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure on top; answer the paused program on top</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
-<tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
+<tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code>. Words also match inside values: opening a match unfolds the value to it. A big value has a path field: type <code>orders[3].sku</code> to go there</td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events (the arrow keys do too), between runs</td></tr>
 <tr><td><kbd>o</kbd>, <kbd>⌘C</kbd></td><td>open the focused event's file in your editor; copy the event as text</td></tr>
 <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>fold or unfold what happened inside the focused event</td></tr>
