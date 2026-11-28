@@ -15,9 +15,7 @@ import json
 import os
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from types import FrameType
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -170,6 +168,21 @@ def _safe_message(err: BaseException) -> str:
         return "<unprintable>"
 
 
+_pause_warned = False
+
+
+def _warn_pause(url: str, err: BaseException) -> None:
+    """Once per process: a pause that could not be asked about carries on, but says why."""
+    global _pause_warned
+    if _pause_warned:
+        return
+    _pause_warned = True
+    try:
+        sys.stderr.write(f"glint: pause skipped, cannot ask {url}: {err}\n")
+    except Exception:
+        pass
+
+
 class _Glint:
     """The `glint` object: call it with values, or use its helper methods."""
 
@@ -247,11 +260,13 @@ class _Glint:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
-                with urllib.request.urlopen(url, timeout=30) as res:
+                # The sender's opener: no HTTP_PROXY for a local server.
+                with _transport._opener.open(url, timeout=30) as res:
                     if res.status == 204:
                         continue
                     answer = json.loads(res.read() or b"{}")
-            except Exception:
+            except Exception as e:
+                _warn_pause(url, e)
                 return None  # unknown pause (glintd restarted) or Glint went away: carry on
             if answer.get("action") == "stop":
                 raise GlintStop()

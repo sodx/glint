@@ -79,12 +79,25 @@ Or in code: `glint.configure(url=..., enabled=..., project=...)`.
 Calls never raise and never wait on the network. Events go into a bounded queue (10 000); a
 background thread posts them in batches of up to 500. If a post fails, the SDK stops trying for
 5 seconds and drops events meanwhile. The number dropped is reported in `meta.dropped` of the
-next delivered event. A single warning is written to stderr. At exit, the SDK waits up to 2 s
-to deliver what is queued; with Glint unreachable the program still exits immediately.
+next delivered event. A single warning is written to stderr. A post that gets no answer within
+1 s counts as failed. At exit, the SDK waits for what is queued only while batches keep getting
+delivered: it gives up after 0.3 s without progress (2 s at most), and does not wait at all when
+Glint was just found unreachable, so a program exits immediately with Glint down and within a few
+hundred milliseconds with Glint stalled. The global shim's report of an uncaught exception
+follows the same rule.
+
+A forked child (`os.fork`, `multiprocessing` with fork) starts with an empty queue and its own
+sender thread: it sends its own events and never waits for its parent's. `pause` talks to Glint
+directly, ignoring `HTTP_PROXY`, and writes one line to stderr when it cannot ask.
+
+The framework integrations read `logging` records through the log record factory rather than a
+handler, so an app that never configured logging still prints its warnings and a later
+`logging.basicConfig()` still works.
 
 ## Development
 
 ```bash
 cd <repo>
 glint conformance -- python3 sdks/python/conformance.py   # expects 20/20 passed
+python3 -s -m unittest discover sdks/python/tests         # never changes, slows or breaks the app
 ```

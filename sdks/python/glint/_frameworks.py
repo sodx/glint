@@ -34,7 +34,7 @@ def _glint():
 
 
 class _Req:
-    __slots__ = ("framework", "method", "path", "url", "root", "run", "t0", "queries", "sql_ms", "route", "view", "func", "tokens", "reported")
+    __slots__ = ("framework", "method", "path", "url", "root", "run", "t0", "queries", "sql_ms", "route", "view", "func", "tokens")
 
     def __init__(self, framework: str, method: str, path: str, url: str) -> None:
         self.framework = framework
@@ -50,11 +50,16 @@ class _Req:
         self.view: Optional[str] = None
         self.func: Any = None
         self.tokens: Tuple[Any, ...] = ()
-        self.reported: set = set()
 
 
 _REQ: "contextvars.ContextVar[Optional[_Req]]" = contextvars.ContextVar("glint_request", default=None)
-_reported_ids: List[int] = []  # exceptions reported outside a request, newest last
+
+# An exception is reported once: report() marks the exception object itself. Exceptions cannot be
+# weakly referenced, and a bare id() is reused as soon as one is freed, which used to drop a later,
+# different error. The few objects that refuse an attribute are kept alive in a short list instead,
+# so their ids cannot be reused while they are in it.
+_MARK = "_glint_reported"
+_unmarkable: List[BaseException] = []
 
 
 def _on() -> bool:
@@ -175,15 +180,10 @@ def report(exc: BaseException, extra: Optional[Dict[str, Any]] = None) -> None:
     """Sends exc once, with the request it happened in."""
     if not _on() or exc is None:
         return
-    req = _REQ.get()
-    seen = req.reported if req is not None else _reported_ids
-    if id(exc) in seen:
+    if _already_reported(exc):
         return
-    if req is not None:
-        req.reported.add(id(exc))
-    else:
-        _reported_ids.append(id(exc))
-        del _reported_ids[:-50]
+    _mark_reported(exc)
+    req = _REQ.get()
     try:
         g = _glint()
         payload = g._exception_payload(exc, None)
@@ -205,39 +205,74 @@ def report(exc: BaseException, extra: Optional[Dict[str, Any]] = None) -> None:
         pass
 
 
+def _mark_reported(exc: Any) -> None:
+    try:
+        # object.__setattr__: an exception class with its own __setattr__ (a frozen dataclass)
+        # is marked all the same, and nothing of the app's runs.
+        object.__setattr__(exc, _MARK, True)
+        return
+    except Exception:
+        pass
+    _unmarkable.append(exc)
+    del _unmarkable[:-20]
+
+
 def _already_reported(exc: Any) -> bool:
-    req = _REQ.get()
-    return id(exc) in (req.reported if req is not None else _reported_ids)
+    try:
+        if getattr(exc, "__dict__", {}).get(_MARK):
+            return True
+    except Exception:
+        pass
+    return any(e is exc for e in _unmarkable)
 
 
 # ---------------------------------------------------------------- logging
 
 
-class _Handler(logging.Handler):
-    """Log records of the app (WARNING and up from the frameworks' own loggers) as core.log."""
+# Log records of the app (INFO and up; WARNING and up from the frameworks' own loggers) become
+# core.log. Glint listens through the log record factory, not a handler: a handler on the root
+# logger would count as the app's own, so an app that never configured logging would stop printing
+# its warnings (logging.lastResort) and a later logging.basicConfig() would do nothing.
+_LEVELS = {logging.DEBUG: "debug", logging.INFO: "info", logging.WARNING: "warn", logging.ERROR: "error", logging.CRITICAL: "fatal"}
+_QUIET = ("django.server", "werkzeug", "uvicorn.access", "glint", "urllib3", "httpx", "httpcore", "asyncio")
+_FRAMEWORK_LOGGERS = ("django", "flask", "uvicorn", "fastapi", "starlette", "sqlalchemy")
+_in_capture = contextvars.ContextVar("glint_in_log_capture", default=False)
 
-    _LEVELS = {logging.DEBUG: "debug", logging.INFO: "info", logging.WARNING: "warn", logging.ERROR: "error", logging.CRITICAL: "fatal"}
-    _QUIET = ("django.server", "werkzeug", "uvicorn.access", "glint", "urllib3", "httpx", "httpcore", "asyncio")
 
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            name = record.name or ""
-            if name.startswith(self._QUIET):
-                return
-            if name.startswith(("django", "flask", "uvicorn", "fastapi", "starlette", "sqlalchemy")) and record.levelno < logging.WARNING:
-                return
-            exc = record.exc_info[1] if record.exc_info else None
-            if exc is not None:
-                if _already_reported(exc):
-                    return  # the framework logs what it reported: one event, not two
-                report(exc)
-                return
-            payload: Dict[str, Any] = {"message": record.getMessage(), "logger": name}
-            site = {"file": os.path.abspath(record.pathname), "line": record.lineno, "fn": record.funcName} if record.pathname else {}
-            level = self._LEVELS.get(record.levelno, "info")
-            _emit("core.log", payload, {"level": level, "label": name}, site)
-        except Exception:
-            pass
+def _capture(record: logging.LogRecord) -> None:
+    if _in_capture.get():
+        return
+    token = _in_capture.set(True)
+    try:
+        if not _on():
+            return
+        name = record.name or ""
+        levelno = record.levelno
+        if not isinstance(levelno, int) or levelno < logging.INFO or name.startswith(_QUIET):
+            return
+        if name.startswith(_FRAMEWORK_LOGGERS) and levelno < logging.WARNING:
+            return
+        exc = record.exc_info[1] if record.exc_info else None
+        if exc is not None:
+            report(exc)  # once: the framework logs what it already reported
+            return
+        payload: Dict[str, Any] = {"message": record.getMessage(), "logger": name}
+        site = {"file": os.path.abspath(record.pathname), "line": record.lineno, "fn": record.funcName} if record.pathname else {}
+        _emit("core.log", payload, {"level": _LEVELS.get(levelno, "info"), "label": name}, site)
+    except Exception:
+        pass
+    finally:
+        _in_capture.reset(token)
+
+
+def _record_factory(previous: Callable[..., logging.LogRecord]) -> Callable[..., logging.LogRecord]:
+    def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = previous(*args, **kwargs)
+        _capture(record)
+        return record
+
+    factory._glint = True  # type: ignore[attr-defined]
+    return factory
 
 
 _logging_attached = False
@@ -249,9 +284,9 @@ def _attach_logging() -> None:
         return
     _logging_attached = True
     try:
-        root = logging.getLogger()
-        if not any(isinstance(h, _Handler) for h in root.handlers):
-            root.addHandler(_Handler(logging.INFO))
+        current = logging.getLogRecordFactory()
+        if not getattr(current, "_glint", False):
+            logging.setLogRecordFactory(_record_factory(current))
     except Exception:
         pass
 
