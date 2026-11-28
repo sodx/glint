@@ -127,18 +127,28 @@ body.switching #entries, body.switching #runHead { opacity: .45; pointer-events:
 ol.entries { list-style: none; margin: 0 0 96px; padding: 0; }
 .entry { border-radius: 10px; }
 .entry + .entry { margin-top: 2px; }
-.row { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px; width: 100%; text-align: left; min-height: 40px; padding: 8px 10px; border-radius: 10px; }
+/* A row: node, summary, then what is quieter (read by, file:line), the duration and the time.
+   The summary keeps its width: the quiet part shrinks first (flex-shrink 1000), the duration never. */
+.row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; min-height: 40px; padding: 8px 10px; border-radius: 10px; }
+.row > .node, .row > .dot { flex: none; }
 .row:hover { background: var(--hover); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); justify-self: center; }
 .lv-warn .dot { background: var(--amber); } .lv-error .dot { background: var(--red); } .lv-pause .dot { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); } .lv-ok .dot { background: var(--green); }
-.sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sum { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Status words of every kind look alike: red for a failure, amber for waiting, quiet otherwise. */
 .sum .tag { color: var(--muted); margin-right: 6px; }
 .lv-error .sum .tag { color: var(--red); font-weight: 500; } .lv-warn .sum .tag, .lv-pause .sum .tag { color: var(--amber); font-weight: 500; }
 .sum .mono { font-size: 13.5px; }
 .sum .soft { color: var(--muted); }
-.right { color: var(--faint); font-size: 13px; white-space: nowrap; }
-.right .loc { font-family: var(--mono); font-size: 12.5px; margin-right: 12px; opacity: 0; transition: opacity .15s; }
+.right { flex: none; display: flex; align-items: center; justify-content: flex-end; color: var(--faint); font-size: 13px; white-space: nowrap; }
+.rmeta { flex: 0 1000 auto; display: flex; align-items: center; justify-content: flex-end; min-width: 0; overflow: hidden; color: var(--faint); font-size: 13px; white-space: nowrap; }
+.right:empty { display: none; }
+/* An open row wraps its summary, so the quiet part keeps its own width there. */
+.open > .row .rmeta { flex-shrink: 0; max-width: 50%; }
+.rmeta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rmeta .loc { font-family: var(--mono); font-size: 12.5px; opacity: 0; transition: opacity .15s; flex-shrink: 2; }
 .row:hover .loc, .row:focus-visible .loc, .open .loc { opacity: 1; }
+.right .when { flex: none; }
 .open > .row { background: var(--hover); align-items: start; }
 .open .sum { white-space: normal; overflow: visible; }
 .open .sum .in-pane { display: none; }
@@ -150,22 +160,27 @@ ol.entries { list-style: none; margin: 0 0 96px; padding: 0; }
 .detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s cubic-bezier(.16,1,.3,1); }
 .open .detail { grid-template-rows: 1fr; }
 .detail > div { overflow: hidden; }
-.pane { padding: 6px 10px 18px 32px; display: grid; gap: 12px; }
+.pane { padding: 6px 10px 18px 32px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .pane .msg { font-size: 15px; }
 .code { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font: 13px/1.6 var(--mono); overflow-x: auto; white-space: pre; }
 .kv { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--muted); font-size: 13px; }
 .kv b { color: var(--text); font-weight: 500; }
 .frames { list-style: none; margin: 0; padding: 0; font: 13px/1.5 var(--mono); }
-.frames li { display: flex; gap: 12px; padding: 3px 0; }
-.frames .fn { color: var(--text); min-width: 0; }
-.frames .fn { flex-shrink: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.frames .fpath { margin-left: auto; }
-.fpath, .origin-line .where { all: unset; display: inline-flex; min-width: 0; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; border-radius: 3px; white-space: nowrap; }
+/* A frame: function, then its path as one unit (folder faint and cut from the left, file plain),
+   then line:col in a right-aligned column. */
+.frames li { display: flex; align-items: center; gap: 12px; padding: 2px 0; }
+.frames .fn { color: var(--text); flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frames .fpath { flex: 1 1 0; justify-content: flex-end; padding: 5px 0; margin: -5px 0; }
+.fline { flex: none; min-width: 5ch; margin-left: 10px; text-align: right; color: var(--faint); font-variant-numeric: tabular-nums; }
+.fpath .pbase { color: var(--text); }
+.fpath, .origin-line .where { all: unset; display: inline-flex; min-width: 0; align-items: center; color: var(--muted); cursor: pointer; border-radius: 3px; white-space: nowrap; }
+.origin-line .where { padding: 6px 0; margin: -6px 0; }
 span.fpath, span.where { cursor: default; }
 .origin-line .where { color: var(--faint); }
 button.fpath:hover, .origin-line button.where:hover { color: var(--accent); }
 button.fpath:focus-visible, .origin-line button.where:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.pdir { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+/* The folder is cut from its left end (rtl box, the text itself marked ltr), so the file stays whole. */
+.pdir { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; direction: rtl; text-align: left; color: var(--faint); }
 .pbase { flex-shrink: 0; }
 .snippet.loading { display: none; }
 .snippet .file .fpath { font-size: 12px; max-width: 80%; }
@@ -320,16 +335,17 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
 .exit { color: var(--red); font-size: 12px; white-space: nowrap; }
 
 /* durations: a small waterfall, each bar placed where its work started in the run */
-.dur { display: inline-flex; align-items: center; gap: 8px; margin-right: 14px; font-size: 12.5px; color: var(--muted); }
-.dur i { display: block; width: 56px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.dur i { width: 72px; }
+.dur { flex: none; display: inline-flex; align-items: center; gap: 8px; margin-right: 14px; font-size: 12.5px; color: var(--muted); }
+.dur b { font-weight: 400; min-width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
+.dur i { display: block; width: 72px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .dur i::before { content: ""; display: block; height: 100%; width: var(--w); margin-left: min(var(--x, 0%), calc(100% - var(--w))); border-radius: 4px; background: var(--faint); }
 /* The call tree */
 .entry { position: relative; }
 .entry.child { margin-left: calc(var(--depth) * 20px); }
 .entry.child::before { content: ""; position: absolute; left: -9px; top: -2px; bottom: -2px; border-left: 1px solid var(--line); }
-.twig { position: absolute; left: -20px; top: 11px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; color: var(--faint); z-index: 2; }
-.entry:not(.child) > .twig { left: -18px; }
+/* A 28 px target around a 12 px chevron, centred where the chevron always sat. */
+.twig { position: absolute; left: -25px; top: 6px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--faint); z-index: 2; }
+.entry:not(.child) > .twig { left: -20px; }
 .twig:hover { color: var(--text); background: var(--surface); }
 .twig .i { width: 12px; height: 12px; transition: transform .12s; }
 .twig[aria-expanded="false"] .i { transform: rotate(-90deg); }
@@ -339,8 +355,8 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
 /* quick actions on hover */
 .entry { position: relative; }
 /* The row makes room for them while they show, so file:line and the time stay visible. */
-.qa { position: absolute; right: 6px; top: 5px; display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s; }
-.entry { --qa-w: 32px; } .entry.qa2 { --qa-w: 64px; }
+.qa { position: absolute; right: 6px; top: 5px; display: flex; gap: 4px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.entry { --qa-w: 66px; } .entry.qa2 { --qa-w: 100px; }
 .entry:hover > .qa, .entry:has(> .row:focus-visible) > .qa, .qa:focus-within { opacity: 1; pointer-events: auto; }
 .entry:hover > .row, .entry:has(> .row:focus-visible) > .row, .entry:has(> .qa:focus-within) > .row { padding-right: calc(14px + var(--qa-w)); }
 .qa button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
@@ -390,10 +406,12 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
   .say { flex-wrap: wrap; }
   .say .text { font-size: 16px; }
   .say .actions { width: 100%; padding-left: 28px; }
-  .right .when { display: none; } .right .loc { margin-right: 0; }
-  .row:not(:hover):not(:focus-visible) .right { display: none; }
-  .hit .row:not(:hover):not(:focus-visible) .right { display: block; } /* a search result names its run */
-  .open .right { display: block; }
+  /* Narrow: the time goes first, then the bar; the duration stays as a number. Read by and
+     file:line show on hover, focus or an open row. */
+  .entry:not(.hit) .right .when { display: none; }
+  .dur i { display: none; } .dur { margin-right: 0; }
+  .row:not(:hover):not(:focus-visible) .rmeta { display: none; }
+  .open .rmeta { display: flex !important; }
   .pane { padding-left: 10px; }
   .turn { grid-template-columns: 1fr; gap: 2px; }
 }
@@ -540,10 +558,21 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .set-actions { display: flex; gap: 8px; padding: 12px 0 8px; border-top: 1px solid var(--line); }
 .btn.danger { color: var(--red); }
 /* ---------------- agents ---------------- */
-.read-by { font-size: 11.5px; color: var(--faint); margin-right: 10px; }
+/* "read by" is a pill: a click opens the row on the list of who read it and when. */
+.read-by { font-size: 11.5px; color: var(--faint); margin-right: 10px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; cursor: pointer; }
 .read-by.mcp { color: var(--muted); }
+.read-by:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface); }
 .read-by.quiet { display: none; }
 .open > .row .read-by.quiet { display: inline; }
+.readers { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.readers ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.readers b { font-weight: 500; color: var(--text); }
+.readers .link { justify-self: start; font-size: 13px; padding: 6px 8px; margin-left: -8px; }
+/* Muted labels: a chip above the list says how many and gives them back. */
+.muted-chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 2px 0 10px; color: var(--muted); }
+.muted-chip .link { font-size: 13px; padding: 4px 8px; }
+.exc-head { justify-content: space-between; }
+.exc-class { font: 13px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .ag-ctl { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); margin: 0 0 16px; flex-wrap: wrap; }
 .ag-ctl select { font: 13.5px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 8px; }
 .ag-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 16px; margin: 0 0 8px; }
@@ -582,6 +611,10 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <symbol id="k-table" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M10 10v9"/></symbol>
   <symbol id="k-job" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></symbol>
   <symbol id="k-prompt" viewBox="0 0 24 24"><path d="M5 6h14v9H10l-4 3.5V15H5z"/></symbol>
+  <symbol id="k-session" viewBox="0 0 24 24"><rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 8V4.5M9.5 13v1M14.5 13v1"/></symbol>
+  <symbol id="k-step" viewBox="0 0 24 24"><path d="M5 19v-6a5 5 0 0 1 5-5h9M15 4l4 4-4 4"/></symbol>
+  <symbol id="k-perm" viewBox="0 0 24 24"><rect x="5.5" y="11" width="13" height="9" rx="2"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 4l16 16M10.6 6.1Q11.3 6 12 6c5 0 8.5 4 9.5 6-.5 1-1.3 2.2-2.4 3.2M6.6 6.6C4.6 7.9 3.1 9.8 2.5 12c1 2 4.5 6 9.5 6 1.6 0 3-.4 4.3-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M7 7l2 2M15 15l2 2M17 7l-2 2M9 15l-2 2"/></symbol>
 </svg>
 
@@ -614,7 +647,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   </main>
 </div>
 
-<footer class="keys" aria-label="Keyboard shortcuts"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>o</kbd>open in editor</span><span><kbd>⌘C</kbd>copy row</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span><span><kbd>,</kbd>settings</span><span><kbd>g</kbd>agents</span></footer>
+<footer class="keys" aria-label="Keyboard shortcuts"><span><kbd>⌘K</kbd>jump</span><span><kbd>/</kbd>search</span><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>o</kbd>open in editor</span><span><kbd>⌘C</kbd>copy row</span><span><kbd>m</kbd>mute</span><span><kbd>[</kbd><kbd>]</kbd>runs</span><span><kbd>?</kbd>docs</span><span><kbd>,</kbd>settings</span><span><kbd>g</kbd>agents</span></footer>
 <div class="palette" id="palette" role="dialog" aria-modal="true" aria-label="Command palette">
   <div class="box"><input id="pq" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-label="Jump to a run, or type an action" placeholder="Jump to a run, or type an action…" aria-controls="plist" autocomplete="off"><ul id="plist" role="listbox" aria-label="Runs and actions" tabindex="-1"></ul></div>
 </div>
@@ -969,6 +1002,7 @@ export default { plugins: [glint()] };</code></pre>
 <tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events (the arrow keys do too), between runs</td></tr>
 <tr><td><kbd>o</kbd>, <kbd>⌘C</kbd></td><td>open the focused event's file in your editor; copy the event as text</td></tr>
+<tr><td><kbd>m</kbd></td><td>mute events with the focused event's label in this run; the line above the list counts them and gives them back</td></tr>
 <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>fold or unfold what happened inside the focused event</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>
@@ -1093,7 +1127,8 @@ function pathParts(file, line, e) {
   if (cwd && p.startsWith(cwd.replace(/[\\/]$/, "") + "/")) p = p.slice(cwd.replace(/[\\/]$/, "").length + 1);
   else { const parts = p.split(/[\\/]/).filter(Boolean); if (parts.length > 4) p = "…/" + parts.slice(-4).join("/"); }
   const i = p.search(/[^\\/]*$/);
-  return `<span class="pdir">${esc(p.slice(0, i))}</span><span class="pbase">${esc(p.slice(i))}${line ? ":" + line : ""}</span>`;
+  // U+200E keeps the folder's slashes in place inside its right-to-left box (which cuts its left end).
+  return `${i ? `<span class="pdir">‎${esc(p.slice(0, i))}‎</span>` : ""}<span class="pbase">${esc(p.slice(i))}${line ? ":" + line : ""}</span>`;
 }
 /* Every call carries X-Glint: glintd serves reads and changes only to Glint's own clients. */
 async function api(path, opts = {}) { const r = await fetch(path, { ...opts, headers: { "x-glint": "1", ...opts.headers } }); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.json(); }
@@ -1132,7 +1167,7 @@ function runTitle(id) {
 const KIND_ICON = {
   "core.value": "value", "sql.query": "sql", "core.log": "log", "core.text": "log", "core.markdown": "log", "core.mermaid": "log",
   "core.html": "log", "core.json": "value", "core.exception": "exc", "core.trace": "exc", "llm.call": "llm",
-  "agent.tool_call": "tool", "agent.tool_result": "tool", "agent.step": "prompt", "agent.session": "prompt", "agent.permission": "prompt",
+  "agent.tool_call": "tool", "agent.tool_result": "tool", "agent.step": "step", "agent.session": "session", "agent.permission": "perm",
   "ctl.pause": "pause", "core.measure": "measure", "core.span": "measure", "core.table": "table",
   "x-wp.request": "job", "x-wp.error": "exc", "x-wp.mail": "log", "x-wp.http": "tool", "x-wp.rest": "tool",
   "http.request": "tool",
@@ -1207,14 +1242,18 @@ function summary(e) { return e._s || (e._s = summaryOf(e)); }
 function summaryOf(e) {
   const p = e.payload || {}, k = e.kind;
   const tag = t => ({ tag: t });
-  let lead = e.meta?.label || "", body = "", mono = false, t = null;
+  let lead = e.meta?.label || "", body = "", mono = false, t = null, find = null, preview = false;
+  // An object or array reads as a short key preview ("id 9913, user 4411, 3 more"); search still
+  // looks through its JSON, and the pane shows it in full.
+  const struct = v => { if (v && typeof v === "object") { body = keyPreview(v, lead); find = compact(v).slice(0, 2000); preview = true; } else { body = compact(v).slice(0, 2000); mono = true; } };
   switch (k) {
-    case "core.value": body = compact(p.value !== undefined ? p.value : p).slice(0, 2000); mono = true; if (!lead && p.type) lead = p.type; break;
+    case "core.value": struct(p.value !== undefined ? p.value : p); if (!lead && p.type) lead = p.type; break;
     case "core.log": body = p.message ?? compact(p); break;
     case "core.text": case "core.markdown": case "core.mermaid": body = String(p.content ?? "").split("\n")[0]; break;
     case "core.html": body = String(p.content ?? "").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "HTML"; if (!lead) lead = "html"; break;
-    case "core.json": body = compact(p.content ?? p); mono = true; break;
-    case "core.exception": t = p.class || "Exception"; body = p.message || ""; break;
+    case "core.json": struct(p.content ?? p); break;
+    // A namespaced class shows its last part (the pane names it in full), so it fits a narrow row.
+    case "core.exception": t = shortClass(p.class) || "Exception"; body = p.message || ""; find = `${p.class || ""} ${body}`; break;
     case "core.trace": body = `${(p.frames || []).length} frames`; break;
     case "core.table": body = `${(p.rows || []).length} rows`; break;
     case "core.measure": body = p.name || "measure"; if (p.memory_bytes) body += ` · ${(p.memory_bytes / 1048576).toFixed(1)} MiB`; break;
@@ -1239,13 +1278,13 @@ function summaryOf(e) {
       break;
     }
     case "agent.tool_call": {
-      lead = p.tool || lead; body = toolKey(p.args); mono = true;
-      if (e.result && e.result.payload?.ok === false) t = "Failed";
+      lead = p.tool || lead; body = toolKey(p.args); mono = true; find = `${body} ${compact(p.args)}`;
+      if ((e.result && e.result.payload?.ok === false) || p.error != null) t = "Failed";
       break;
     }
-    case "agent.tool_result": lead = p.tool || ""; body = p.ok === false ? "failed" : "ok"; if (p.ok === false) t = "Failed"; break;
-    case "agent.step": lead = p.status === "stopped" ? (p.output ? "reply" : "turn done") : p.status || "step"; body = p.input || p.output || ""; break;
-    case "agent.session": body = `Session ${p.status || ""}${p.reason ? " · " + p.reason : ""}`; break;
+    case "agent.tool_result": lead = p.tool || ""; body = p.ok === false ? "" : "ok"; if (p.ok === false) t = "Failed"; break;
+    case "agent.step": t = statusWord(p.status); lead = p.status === "stopped" ? (p.output ? "reply" : "turn done") : ""; body = p.input || p.output || (t ? "" : "step"); break;
+    case "agent.session": t = statusWord(p.status); if (t === "Running") t = null; body = `Session${t ? "" : " " + (p.status || "")}${p.reason ? " · " + p.reason : ""}`; break;
     case "agent.permission": t = "Waiting"; lead = p.tool || ""; body = toolKey(p.args); mono = true; break;
     case "core.span": lead = ""; body = p.name || "span"; if (p.status === "error") t = "Error"; break;
     case "ctl.pause": body = p.reason || "paused"; break;
@@ -1255,22 +1294,68 @@ function summaryOf(e) {
   if (!t) { const l = levelOf(e); if (l >= 4) t = "Error"; else if (l === 3) t = (e.meta?.label || "").toLowerCase() === "slow" ? "Slow" : "Warning"; }
   if (t && lead && lead.toLowerCase() === t.toLowerCase()) lead = "";
   if (k === "ctl.pause") t = e.resolved ? (e.resolved.action === "stop" ? "Stopped" : "Continued") : "Paused";
-  return { tag: t, lead, body: clip(body, 400), mono };
+  const lv = ERROR_TAGS.has(t) ? "error" : t === "Waiting" ? "pause" : null;
+  return { tag: t, lead, body: clip(body, 400), mono, find, preview, lv };
+}
+/* The words a status turns into. One treatment everywhere: failures red, waiting amber, the rest quiet
+   (ok, done, stopped say nothing). */
+const ERROR_TAGS = new Set(["Error", "Failed", "SQL error", "Mail failed", "WP_Error"]);
+function statusWord(st) {
+  st = String(st || "").toLowerCase();
+  return /^(error|failed|failure|crashed)$/.test(st) ? "Failed" : /^(waiting|paused|blocked)$/.test(st) ? "Waiting" : st === "running" ? "Running" : null;
+}
+const shortClass = c => String(c || "").split(/\\|::|\.(?=[A-Z_a-z][\w$]*$)/).pop();
+const oneLine = (s, n) => clip(String(s ?? "").replace(/\s+/g, " ").trim(), n);
+/* An object as a line: its first scalar fields ("id 9913, user 4411, currency EUR, 3 more"). A
+   single key holding an object is stepped into (and named, unless the label already says it). */
+function keyPreview(v, label) {
+  let pre = "";
+  for (let ks = Object.keys(v); !Array.isArray(v) && ks.length === 1 && v[ks[0]] && typeof v[ks[0]] === "object"; ks = Object.keys(v)) {
+    if (ks[0] !== label) pre += ks[0] + " · "; v = v[ks[0]];
+  }
+  const sc = x => x === null ? "null" : typeof x === "string" ? oneLine(x, 32) : String(x);
+  if (Array.isArray(v)) {
+    if (!v.length) return pre + "empty list";
+    const flat = v.every(isPrim);
+    return pre + plural(v.length, "item") + (flat ? ": " + oneLine(v.slice(0, 6).map(sc).join(", "), 60) : "");
+  }
+  const ks = Object.keys(v); if (!ks.length) return pre + "empty object";
+  const out = []; let len = 0;
+  for (const k of ks) {
+    const x = v[k]; if (!isPrim(x)) continue;
+    const s = `${k} ${sc(x)}`; if (out.length && (len + s.length > 60 || out.length === 4)) break;
+    out.push(s); len += s.length;
+  }
+  if (out.length < 2) for (const k of ks) { // nothing flat to show: name what it holds
+    const x = v[k]; if (isPrim(x) || out.length >= 3) continue;
+    out.push(`${k} ${Array.isArray(x) ? plural(x.length, "item") : plural(Object.keys(x).length, "key")}`);
+  }
+  const rest = ks.length - out.length;
+  return pre + out.join(", ") + (rest > 0 ? `, ${rest} more` : "");
 }
 function msgText(m) {
   if (!m) return "";
   const of = c => typeof c === "string" ? c : Array.isArray(c) ? c.map(x => typeof x === "string" ? x : x && (x.content ?? x.text) != null ? of(x.content ?? x.text) : "").filter(Boolean).join(" ") : c == null ? "" : JSON.stringify(c);
   return of(m.parts ?? m.content);
 }
+/* What a tool was asked, as a person would say it: the command, "pricing.py: old → new" for an
+   edit, "EU-SE in app" for a search, else the path, URL or query, else a key preview. */
 function toolKey(a) {
   if (!a || typeof a !== "object") return compact(a);
-  for (const k of ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"]) if (typeof a[k] === "string") return a[k];
-  return compact(a);
+  if (typeof a.command === "string") return a.command;
+  const file = [a.file_path, a.file, a.path, a.notebook_path].find(x => typeof x === "string");
+  const old = a.old_string ?? a.old, neu = a.new_string ?? a.new;
+  if (file && typeof old === "string" && typeof neu === "string") return `${base(file)}: ${oneLine(old, 40)} → ${oneLine(neu, 40)}`;
+  if (file && Array.isArray(a.edits)) return `${base(file)}: ${plural(a.edits.length, "edit")}`;
+  if (file && typeof a.content === "string") return `${base(file)}, ${plural(a.content.split("\n").length, "line")}`;
+  if (typeof a.pattern === "string") return a.pattern + (typeof a.path === "string" ? " in " + a.path : "");
+  for (const k of ["file_path", "path", "url", "query", "description", "prompt"]) if (typeof a[k] === "string") return a[k];
+  return keyPreview(a);
 }
 function rowLevel(e) {
   if (e.kind === "ctl.pause") return e.resolved ? "ok" : "pause";
-  if (e.kind === "agent.tool_call" && e.result?.payload?.ok === false) return "error";
   if (e.kind === "agent.permission") return "pause";
+  const s = summary(e); if (s.lv) return s.lv;
   return lvName(e) === "info" ? "info" : lvName(e);
 }
 
@@ -1336,7 +1421,8 @@ function tree(v) {
 function frameList(frames, e) {
   const app = frames.filter(f => !f.vendor), vendor = frames.length - app.length;
   const li = f => {
-    const i = frames.indexOf(f), where = f.file ? pathParts(f.file, f.line, e) : "?";
+    const i = frames.indexOf(f), at = f.line ? f.line + (f.col ? ":" + f.col : "") : "";
+    const where = (f.file ? pathParts(f.file, null, e) : "?") + `<span class="fline">${esc(at)}</span>`;
     return `<li><span class="fn">${esc((f.class ? f.class + "::" : "") + (f.fn || "{main}"))}</span>${isAbs(f.file) ? openBtn(e, i, where, "fpath") : `<span class="fpath">${where}</span>`}</li>`;
   };
   return `<ol class="frames">${(app.length ? app : frames).slice(0, 40).map(li).join("")}${app.length && vendor ? `<li class="vendor"><span>+ ${vendor} vendor frame${vendor > 1 ? "s" : ""}</span></li>` : ""}</ol>`;
@@ -1371,11 +1457,11 @@ function note(e) { return e.meta?.note ? `<div class="note"><svg class="i"><use 
 function redactedNote(e) { const n = Number(e.meta?.redacted) || 0; return n ? `<p class="redacted-note">${n === 1 ? "1 secret was" : n + " secrets were"} replaced with [redacted] before storing. <button class="link" data-act="docs" data-hash="#d-secrets">Why</button></p>` : ""; }
 /* Where it came from, kept quiet: file:line (opens the editor), function, time. Language, SDK,
    host and worktree are in the tooltip. */
-function originLine(e) {
+function originLine(e, noFile) {
   const o = e.origin || {};
-  const where = o.file ? pathParts(o.file, o.line, e) : "";
+  const where = o.file && !noFile ? pathParts(o.file, o.line, e) : "";
   const tip = [o.file && o.file + (o.line ? ":" + o.line : ""), o.lang, o.sdk, o.host, o.pid && "pid " + o.pid, o.branch && "branch " + o.branch, o.via && "via " + o.via].filter(Boolean).join(" · ");
-  const file = where ? (isAbs(o.file) ? openBtn(e, null, where + `<svg class="i" aria-hidden="true"><use href="#i-open"/></svg>`) : `<span class="where">${where}</span>`) : "";
+  const file = where ? (isAbs(o.file) ? openBtn(e, null, where + `<svg class="i" aria-hidden="true" style="margin-left:4px"><use href="#i-open"/></svg>`) : `<span class="where">${where}</span>`) : "";
   return `<div class="origin-line" title="${esc(tip)}">${file}${o.fn ? `<span>${esc(o.fn)}</span>` : ""}<span>${esc(clock(e.ts))}</span></div>`;
 }
 /* Text longer than LONG_TEXT shows its start and a button for the rest. */
@@ -1402,9 +1488,11 @@ function pane(e) {
       const frames = p.frames || [];
       const sent = frames.find(f => !f.vendor && f.snippet), first = frames.findIndex(f => !f.vendor && isAbs(f.file));
       const [stack, moreStack] = longText(e, "stack", p.stacktrace);
-      h = (sent ? snippet(sent) : first >= 0 ? srcSlot(e, first) : "") + (frames.length ? frameList(frames, e) : p.stacktrace ? `<div class="code">${esc(stack)}</div>${moreStack}` : "") + h;
+      // Copy for agent sits at the top, next to the full class name when the row shortened it.
+      const head = `<div class="pane-actions exc-head">${p.class && shortClass(p.class) !== p.class ? `<span class="exc-class">${esc(p.class)}</span>` : ""}<button class="btn" data-act="copyexc" data-id="${esc(e.id)}">Copy for agent</button></div>`;
+      h = head + (sent ? snippet(sent) : first >= 0 ? srcSlot(e, first) : "") + (frames.length ? frameList(frames, e) : p.stacktrace ? `<div class="code">${esc(stack)}</div>${moreStack}` : "") + h;
       let c = p.cause, n = 0; while (c && n++ < 5) { h += `<div class="kv"><span>caused by <b>${esc(c.class)}</b>: ${esc(c.message)}</span></div>`; c = c.cause; }
-      h += `<div class="pane-actions"><button class="btn" data-act="copyexc" data-id="${esc(e.id)}">Copy for agent</button></div>`; break;
+      break;
     }
     case "core.trace": h += frameList(p.frames || [], e); break;
     case "core.measure": h += `<div class="kv"><span><b>${p.duration_ms ?? "?"} ms</b></span>${p.memory_bytes ? `<span>${(p.memory_bytes / 1048576).toFixed(1)} MiB</span>` : ""}${p.since_last_ms != null && !p.new_timer ? `<span>+${p.since_last_ms} ms since last</span>` : ""}</div>`; break;
@@ -1440,7 +1528,8 @@ function pane(e) {
     }
     default: h += tree(p);
   }
-  return h + originLine(e);
+  // The stack already names where an exception happened: the line below keeps function and time.
+  return h + readers(e) + originLine(e, e.kind === "core.exception" && (p.frames || []).some(f => f.file));
 }
 
 /* ---------------- status: the answer ---------------- */
@@ -1542,7 +1631,7 @@ function matches(e, tokens) {
     if (key === "kind") return e.kind.includes(val);
     if (key === "level") return LEVELS[Math.max(0, levelOf(e))].startsWith(val) || rowLevel(e).startsWith(val);
     const s = summary(e);
-    return [s.tag, s.lead, s.body, loc(e), e.meta?.note].join(" ").toLowerCase().includes(val);
+    return [s.tag, s.lead, s.body, s.find, loc(e), e.meta?.note].join(" ").toLowerCase().includes(val);
   });
 }
 /* The list is drawn row by row: each row keeps its element while what it shows is unchanged (its
@@ -1552,12 +1641,13 @@ function rowHtml(e, t0, span, open) {
   const s = summary(e), lv = rowLevel(e), d = ms(e), l = loc(e);
   if (e.kind === "core.separator") return `<li class="entry sep" data-id="${esc(e.id)}"><hr></li>`;
   // An object or array is shown in full in the pane, so the open row keeps only its label.
-  const structured = s.mono && /^[\[{]/.test(String(s.body || ""));
-  const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
+  const structured = s.preview || (s.mono && /^[\[{]/.test(String(s.body || "")));
+  const body = s.mono || structured ? `<span class="${s.mono ? "mono" : ""}${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
   const twig = e.kidCount ? `<button class="twig" tabindex="-1" data-act="twig" data-id="${esc(e.id)}" aria-expanded="${!S.collapsed.has(e.id)}" aria-label="${S.collapsed.has(e.id) ? "Show" : "Hide"} ${e.kidCount} inside" title="${e.kidCount} inside"><svg class="i"><use href="#i-down"/></svg></button>` : "";
   const canOpen = isAbs(e.origin?.file);
-  return `<li class="entry${canOpen ? " qa2" : ""} lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
-      <button class="row" aria-expanded="${open}"${rowA11y(e, s, lv)}><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${readBy(e)}${d ? `<span class="dur" title="${durTitle(e, t0)}"><i style="${durStyle(e, t0, span)}"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span>${rowDesc(e)}</button>
+  const meta = readBy(e) + (l ? `<span class="loc">${esc(l)}</span>` : "");
+  return `<li class="entry${canOpen ? " qa2" : ""} lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser || isMuted(e) ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
+      <button class="row" aria-expanded="${open}"${rowA11y(e, s, lv)}><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span>${meta ? `<span class="rmeta">${meta}</span>` : ""}<span class="right">${d ? `<span class="dur" title="${durTitle(e, t0)}"><i style="${durStyle(e, t0, span)}"></i><b>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</b></span>` : ""}<span class="when">${clock(e.ts)}</span></span>${rowDesc(e)}</button>
       <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
 }
 // Timeline of the run, for the duration bars: each bar sits where its work started.
@@ -1572,6 +1662,13 @@ function entries() {
   if (S.scope !== "run" && S.q.trim()) return hitList();
   const tokens = S.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let list = S.entries.filter(e => !e.removed && (!tokens.length || matches(e, tokens)));
+  // Muted labels leave the list (or stay, dimmed, while shown); "what an agent read" keeps only that.
+  if (S.readBy && S.readBy.run !== S.run) S.readBy = null;
+  const rb = S.readBy, mk = S.mute[S.run];
+  let mutedN = 0;
+  if (rb) list = list.filter(e => readByAgent(e, rb.agent));
+  if (mk?.length) list = list.filter(e => !isMuted(e) || (mutedN++, S.showMuted === S.run));
+  const chip = mutedChip(mutedN) + (rb ? `<span>Showing what ${esc(agentName(rb.agent))} read in this run</span><button class="link" data-act="readby-clear">Show everything</button>` : "");
   // Live events grow the window instead of pushing its oldest row out one by one: dropping the
   // first row lays out every row again (~20 ms), so that happens once per LIVE_SLACK events.
   const cap = S.rowCap + (tokens.length ? 0 : S.liveExtra || 0);
@@ -1579,7 +1676,8 @@ function entries() {
   if (hiddenCount) list = list.slice(-cap);
   const searching = tokens.length > 0;
   if (searching) list.forEach(e => { e.depth = 0; e.kidCount = 0; }); else list = treeOrder(list);
-  if (!list.length) return setList(S.q ? `<li class="empty">Nothing in ${esc(runTitle(S.run))} matches “${esc(S.q)}”. <button class="link" data-act="clearq">Clear search</button> <button class="link" data-act="scope" data-scope="project">Search all of ${esc(S.project)}</button></li>` : `<li class="empty">This run has no events yet.</li>`);
+  if (!list.length) return setList(S.q ? `<li class="empty">Nothing in ${esc(runTitle(S.run))} matches “${esc(S.q)}”. <button class="link" data-act="clearq">Clear search</button> <button class="link" data-act="scope" data-scope="project">Search all of ${esc(S.project)}</button></li>`
+    : rb ? `<li class="empty">${esc(agentName(rb.agent))} has not read anything in this run.</li>` : mutedN ? `<li class="empty">Every event in this run is muted.</li>` : `<li class="empty">This run has no events yet.</li>`, chip);
   // The bars measure from the start of the loaded run. The span grows in steps of a quarter, so a
   // live event that ends a little later does not move every bar.
   let t0 = Infinity, t1 = -Infinity;
@@ -1590,7 +1688,7 @@ function entries() {
   const next = new Map(), want = [], build = [];
   for (const e of list) {
     const open = S.open.has(e.id);
-    const sig = `${e._v || 0}|${open}|${e.depth || 0}|${e.kidCount || 0}|${S.collapsed.has(e.id)}|${(S.reads.get(e.id) || []).length}|${S.editor}|${open ? paneKey : ""}`;
+    const sig = `${e._v || 0}|${open}|${mutedN && isMuted(e)}|${e.depth || 0}|${e.kidCount || 0}|${S.collapsed.has(e.id)}|${(S.reads.get(e.id) || []).length}|${S.editor}|${open ? paneKey : ""}`;
     let c = rowCache.get(e.id);
     if (!c || c.sig !== sig) { c = { sig, li: null, e }; build.push(c); }
     else if (geomMoved && ms(e)) { const i = c.li.querySelector(".dur"); if (i) { i.title = durTitle(e, t0); i.firstElementChild.setAttribute("style", durStyle(e, t0, span)); } }
@@ -1604,7 +1702,7 @@ function entries() {
   }
   const focused = document.activeElement, focusId = ol.contains(focused) ? focused.closest(".entry")?.dataset.id : null;
   // The cap line sits above the list (drawCap), so it never moves the rows.
-  drawCap(capLine(list.length, matched, hiddenCount, searching));
+  drawCap(chip + capLine(list.length, matched, hiddenCount, searching));
   // Put the wanted rows in order, moving only what is out of place; whatever is left goes.
   let cur = ol.firstChild;
   for (const li of want.map(c => c.li)) {
@@ -1615,7 +1713,7 @@ function entries() {
   // A row drawn again or moved loses focus with its element: give it back.
   if (focusId && !ol.contains(document.activeElement)) ol.querySelector(`.entry[data-id="${CSS.escape(focusId)}"] .row`)?.focus({ preventScroll: true });
   if (build.length) setTimeout(() => build.forEach(c => c.li.classList.remove("new")), 2500); // arrival flash once, not on every move
-  if (QA.dataset.id) placeQa(ol.querySelector(`.entry[data-id="${CSS.escape(QA.dataset.id)}"]`));
+  if (QA.dataset.id) placeQa(ol.querySelector(`.entry[data-id="${CSS.escape(QA.dataset.id)}"]`), true);
   fillSources();
 }
 /* Search beyond this run: glintd's full-text index over the project or every project
@@ -1688,16 +1786,77 @@ function rowDesc(e) {
 /* Quick actions (copy, open in editor): one set, moved to the row under the pointer or with
    keyboard focus. A set in every row cost as much layout as the rows themselves. */
 const QA = document.createElement("div"); QA.className = "qa";
-function placeQa(li) {
-  if (!li || li.classList.contains("sep") || QA.parentElement === li) return;
+function placeQa(li, again) {
+  if (!li || li.classList.contains("sep") || (QA.parentElement === li && !again)) return;
   const e = S.byId.get(li.dataset.id); if (!e) return;
   const l = loc(e);
   QA.dataset.id = e.id;
   // Not tab stops: a row is one stop, and its keys do the same (o opens, ⌘C copies).
-  QA.innerHTML = `<button data-qa="copy" tabindex="-1" aria-label="Copy as text" title="Copy (⌘C)"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" tabindex="-1" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")} (o)"><svg class="i"><use href="#i-open"/></svg></button>` : ""}`;
+  const muted = isMuted(e);
+  QA.innerHTML = `<button data-qa="mute" tabindex="-1" aria-label="${muted ? "Unmute" : "Mute"} this label in this run" title="${muted ? "Unmute" : "Mute"} this label in this run (m)"><svg class="i"><use href="#i-mute"/></svg></button><button data-qa="copy" tabindex="-1" aria-label="Copy as text" title="Copy (⌘C)"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" tabindex="-1" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")} (o)"><svg class="i"><use href="#i-open"/></svg></button>` : ""}`;
   li.querySelector(":scope > .row").after(QA);
 }
 ["mouseover", "focusin"].forEach(t => $("entries").addEventListener(t, ev => { if (!QA.contains(ev.target)) placeQa(ev.target.closest(".entry")); }));
+
+/* ---------------- mute ----------------
+   "Mute this label in this run" (m, or the row's mute button): events with the same label, or with
+   the same text when they have none (numbers ignored, so "cache miss key=42" mutes its siblings),
+   leave this run's list. A view setting, kept in this browser per run (localStorage glint.mute),
+   so nothing is written to the store: meta.hidden stays what the program sent. */
+S.mute = store.get("mute", {}); S.showMuted = null;
+function muteKey(e) {
+  if (e._mkv === e._v && e._mk) return e._mk;
+  const l = e.meta?.label, s = summary(e), text = [s.tag, s.lead, s.body].filter(Boolean).join(" ");
+  e._mkv = e._v; e._mk = l ? { key: "label:" + l, name: l } : { key: e.kind + ":" + text.replace(/\d+/g, "#").slice(0, 160), name: clip(text, 48) };
+  return e._mk;
+}
+// The list is drawn again only when S.ver moves (draw), so a view change says so.
+const listChanged = () => { S.ver = (S.ver || 0) + 1; };
+const isMuted = e => !!S.mute[S.run]?.includes(muteKey(e).key);
+function mutedChip(n) {
+  if (!n) return "";
+  const shown = S.showMuted === S.run;
+  return `<span class="muted-chip">${n.toLocaleString()} muted<button class="link" data-act="muted-show" aria-pressed="${shown}">${shown ? "Hide" : "Show"}</button><button class="link" data-act="unmute">Unmute</button></span>`;
+}
+function toggleMute(id) {
+  const e = S.byId.get(id); if (!e || !S.run) return;
+  const k = muteKey(e), l = (S.mute[S.run] || []).filter(x => x !== k.key), was = l.length !== (S.mute[S.run] || []).length;
+  if (!was) l.push(k.key);
+  if (l.length) S.mute[S.run] = l; else delete S.mute[S.run];
+  const runs = Object.keys(S.mute); if (runs.length > 200) delete S.mute[runs[0]]; // oldest first
+  store.set("mute", S.mute); listChanged();
+  // Focus goes to the next row still shown, so m can be pressed again further down.
+  const rows = [...document.querySelectorAll("#entries .entry[data-id]")], at = rows.findIndex(r => r.dataset.id === id);
+  const n = S.entries.filter(x => muteKey(x).key === k.key).length;
+  draw();
+  if (!was && S.showMuted !== S.run) {
+    const next = rows.slice(at + 1).concat(rows.slice(0, at).reverse()).find(r => r.isConnected && !isMuted(S.byId.get(r.dataset.id) || {}));
+    next?.querySelector(":scope > .row")?.focus();
+  }
+  toast(was ? `Unmuted “${k.name}”` : `Muted ${n === 1 ? "“" + k.name + "”" : `${n} events like “${k.name}”`} in this run. Unmute above the list.`);
+}
+function unmuteRun() { delete S.mute[S.run]; store.set("mute", S.mute); S.showMuted = null; listChanged(); draw(); toast("Unmuted everything in this run"); }
+
+/* ---------------- read by ----------------
+   Which agent read an event and when: the pill on the row opens it on that list, and from there
+   "Everything <agent> read in this run" filters the run (openReadBy). */
+const readByAgent = (e, agent) => [e.id, e.result?.id].some(id => id && (S.reads.get(id) || []).some(r => r.agent === agent));
+function readers(e) {
+  const l = [e.id, e.result?.id].flatMap(id => id ? S.reads.get(id) || [] : []).sort((a, b) => a.ts < b.ts ? -1 : 1);
+  if (!l.length) return "";
+  const agents = [...new Set(l.map(r => r.agent))];
+  return `<div class="readers" id="readers-${rowDescId(e)}"><ul>${l.map(r => `<li>${r.via === "mcp" ? "Read by" : "Told to"} <b>${esc(agentName(r.agent))}</b> at ${esc(clock(r.ts))}${r.via === "mcp" ? "" : " (a hook listed it)"}</li>`).join("")}</ul>${S.readBy ? "" : agents.map(a => `<button class="link" data-act="readby" data-agent="${esc(a)}">Everything ${esc(agentName(a))} read in this run</button>`).join("")}</div>`;
+}
+/* Opens a run showing only what an agent read in it (MCP) or was told about (hooks). The Agents
+   view can call it: openReadBy(run, agent, project?). The line above the list goes back to all. */
+async function openReadBy(run, agent, project) {
+  S.readBy = { run, agent }; listChanged();
+  if (project && project !== S.project) await goProject(project, run);
+  else if (S.run !== run) await goRun(run);
+  if (S.run !== run) return;
+  await loadReads(); draw();
+  $("entries").querySelector(".row")?.focus({ preventScroll: true });
+}
 /* "Showing the newest N of M events": what the run holds beyond what is drawn (more loaded rows
    than ROWS) or beyond what was fetched (more stored than EVENTS_PAGE). */
 function capLine(shown, matched, hidden, searching) {
@@ -2062,7 +2221,7 @@ function copyException(id) {
 }
 function copyRow(id) {
   const e = S.byId.get(id); if (!e) return;
-  const s = summary(e); copy([s.tag, s.lead, s.body].filter(Boolean).join(" ") + (loc(e) ? `  (${loc(e)})` : "")); toast("Copied");
+  const s = summary(e); copy([s.tag, s.lead, s.preview ? s.find : s.body].filter(Boolean).join(" ") + (loc(e) ? `  (${loc(e)})` : "")); toast("Copied");
 }
 /* Navigation dims what is on screen at once, shows a loading row if the answer takes a moment, and
    drops answers that arrive after the user moved on (S.gen). */
@@ -2143,7 +2302,19 @@ document.addEventListener("click", ev => {
   if (act === "jstr") { const v = LAZY.get(b.dataset.z); if (v != null) { b.previousElementSibling.textContent = '"' + v; b.remove(); } return; }
   if (b.hasAttribute("data-cc")) { const c = b.parentElement.cloneNode(true); c.querySelector(".cc").remove(); copy(c.textContent.trim()); return toast("Command copied"); }
   if (b.dataset.qa === "copy") return copyRow(b.closest(".entry").dataset.id);
+  if (b.dataset.qa === "mute") return toggleMute(b.closest(".entry").dataset.id);
+  if (act === "muted-show") { S.showMuted = S.showMuted === S.run ? null : S.run; listChanged(); return draw(); }
+  if (act === "unmute") return unmuteRun();
+  if (act === "readby") return openReadBy(S.run, b.dataset.agent);
+  if (act === "readby-clear") { S.readBy = null; listChanged(); return draw(); }
   if (b.classList.contains("row") && b.closest(".hit")) return openEvent(S.hitsById?.get(b.closest(".hit").dataset.hit));
+  if (b.classList.contains("row") && ev.target.closest(".read-by")) { // the pill: open on who read it
+    const id = b.closest(".entry").dataset.id; if (!S.byId.has(id)) return;
+    S.open.add(id); draw();
+    const li = document.querySelector(`#entries [data-id="${CSS.escape(id)}"]`);
+    li?.querySelector(".readers")?.scrollIntoView({ block: "nearest", behavior: motionOK ? "smooth" : "auto" }); li?.querySelector(".row")?.focus({ preventScroll: true });
+    return;
+  }
   if (b.classList.contains("row")) {
     const id = b.closest(".entry").dataset.id; if (!S.byId.has(id)) return;
     S.open.has(id) ? S.open.delete(id) : S.open.add(id); draw();
@@ -2502,6 +2673,7 @@ document.addEventListener("keydown", e => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && !String(getSelection())) { e.preventDefault(); return copyRow(id); }
     if (!e.metaKey && !e.ctrlKey) {
       if (e.key === "o" && ev && isAbs(ev.origin?.file)) { e.preventDefault(); return openInEditor(id); }
+      if (e.key === "m" && ev) { e.preventDefault(); return toggleMute(id); }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); return moveRow(e.key === "ArrowDown" ? 1 : -1); }
       if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && ev?.kidCount) {
         e.preventDefault();
