@@ -32,8 +32,13 @@ impl Allowlist {
             .filter(|h| !h.starts_with("host.docker.internal"))
             .map(|h| format!("http://{h}"))
             .collect();
-        // The Tauri shell (M4) serves the UI from these origins.
-        origins.extend(["tauri://localhost".to_owned(), "http://tauri.localhost".to_owned()]);
+        // The Tauri shell serves its own pages from `tauri://localhost` on macOS and Linux. Only
+        // Windows and Android use `http(s)://tauri.localhost`; elsewhere that name is just another
+        // host a local program could serve, so it gets no rights there.
+        origins.push("tauri://localhost".to_owned());
+        if cfg!(any(windows, target_os = "android")) {
+            origins.extend(["http://tauri.localhost".to_owned(), "https://tauri.localhost".to_owned()]);
+        }
         Self {
             hosts: Arc::new(hosts),
             origins: Arc::new(origins),
@@ -197,6 +202,15 @@ mod tests {
         assert!(!a.host_ok("evil.example:23600") && !a.host_ok("127.0.0.1:80"));
         assert!(a.origin_ok("http://localhost:23600") && a.origin_ok("tauri://localhost"));
         assert!(!a.origin_ok("https://evil.example") && !a.origin_ok("null"));
+    }
+
+    #[test]
+    fn tauri_localhost_only_where_tauri_uses_it() {
+        let a = Allowlist::for_addr("127.0.0.1:23600".parse().unwrap());
+        let windows_like = cfg!(any(windows, target_os = "android"));
+        assert_eq!(a.origin_ok("http://tauri.localhost"), windows_like);
+        assert_eq!(a.origin_ok("https://tauri.localhost"), windows_like);
+        assert!(a.origin_ok("tauri://localhost"));
     }
 
     #[test]
