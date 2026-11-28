@@ -101,6 +101,16 @@ kbd { font: 11px var(--mono); color: var(--faint); border: 1px solid var(--line-
 .search input { flex: 1; border: 0; outline: 0; background: none; font: inherit; color: var(--text); }
 .search input::placeholder { color: var(--faint); }
 .searching .search { display: flex; } .searching .run-switch { display: none; }
+.search select { border: 0; background: var(--hover); color: var(--muted); font: 13px var(--sans); border-radius: 6px; padding: 3px 6px; cursor: pointer; }
+.search select:hover { color: var(--text); }
+/* Moving to another project or run: what is on screen dims at once; a loading row follows if the
+   answer takes a moment (.loading). */
+body.switching #entries, body.switching #runHead { opacity: .45; pointer-events: none; transition: opacity .12s .05s; }
+.empty.loading { color: var(--faint); }
+.in-proj { color: var(--muted); font-weight: 400; }
+.in-proj b { font-weight: 500 !important; color: var(--text); }
+.hit-run { display: inline-block; vertical-align: bottom; max-width: 36ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; margin-right: 12px; }
+@media (max-width: 560px) { .hit-run { max-width: 22ch; } }
 
 .menu { position: absolute; top: 48px; left: -8px; z-index: 5; width: min(420px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; display: none; }
 .menu.open { display: block; }
@@ -196,7 +206,12 @@ ol.entries:has(.empty)::before { display: none; }
 .mark { width: 18px; height: 18px; flex: none; }
 .mark path { fill: currentColor; }
 .brand { display: flex; align-items: center; gap: 8px; }
-.proj { display: flex; align-items: center; gap: 2px; color: var(--muted); padding: 4px 6px 4px 8px; border-radius: 8px; margin-left: 2px; }
+.proj { display: flex; align-items: center; gap: 2px; color: var(--muted); padding: 4px 6px 4px 8px; border-radius: 8px; margin-left: 2px; max-width: 100%; min-width: 0; }
+/* A long project name stays on one line (the full name is the button's tooltip). */
+#projName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.run-switch { min-width: 0; max-width: 100%; }
+.run-switch .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.run-switch .meta { white-space: nowrap; }
 .proj:hover { background: var(--hover); color: var(--text); }
 .proj svg { color: var(--faint); width: 14px; height: 14px; }
 .live { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: 13px; margin-right: 4px; }
@@ -243,13 +258,14 @@ ol.entries::before { content: ""; position: absolute; left: 20.5px; top: 20px; b
 .snippet .kw { color: var(--kw); } .snippet .err { text-decoration: underline wavy var(--red); text-underline-offset: 4px; }
 
 /* keyboard hints */
-.keys { position: fixed; left: 16px; bottom: 16px; display: flex; gap: 14px; color: var(--faint); font-size: 12px; }
+/* Key hints: a solid strip of its own at the bottom (the list keeps room for it), for wide windows. */
+.keys { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; gap: 14px; padding: 7px 16px; color: var(--faint); font-size: 12px; background: var(--bg); border-top: 1px solid var(--line); }
 .keys kbd { margin-right: 4px; }
 @media (max-width: 900px) { .keys { display: none; } }
 @media (prefers-reduced-motion: reduce) { .glint { animation: none; } .detail { transition: none; } }
 
 /* project switcher, first run, offline */
-.proj-wrap { position: relative; }
+.proj-wrap { position: relative; min-width: 0; flex: 0 1 auto; }
 .run-switch .wt{font-family:var(--mono);font-size:.92em;color:var(--text)}
 .run-head[hidden] { display: none; }
 .onboard .code { position: relative; padding-right: 48px; }
@@ -373,6 +389,7 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
   .say .actions { width: 100%; padding-left: 28px; }
   .right .when { display: none; } .right .loc { margin-right: 0; }
   .row:not(:hover):not(:focus-visible) .right { display: none; }
+  .hit .row:not(:hover):not(:focus-visible) .right { display: block; } /* a search result names its run */
   .open .right { display: block; }
   .pane { padding-left: 10px; }
   .turn { grid-template-columns: 1fr; gap: 2px; }
@@ -401,6 +418,13 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 /* ---------------- docs ---------------- */
 .docs-btn { width: 30px; height: 30px; border-radius: 8px; color: var(--muted); font: 600 14px var(--sans); border: 1px solid var(--line); background: var(--surface); }
 .docs-btn:hover { color: var(--text); border-color: var(--line-strong); }
+.docs-btn .lbl { display: none; }
+/* Wide windows have room to name the header buttons. */
+@media (min-width: 1200px) {
+  .docs-btn { width: auto; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; font-weight: 500; font-size: 13px; }
+  .docs-btn .lbl { display: inline; }
+  .docs-btn .q { width: 16px; text-align: center; font-weight: 600; font-size: 14px; }
+}
 .docs { position: fixed; inset: 0; z-index: 25; background: var(--bg); overflow: hidden; }
 .docs[hidden] { display: none; }
 .docs-shell { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
@@ -438,7 +462,11 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   .docs-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .docs-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px; white-space: nowrap; }
   .docs-brand { display: none; }
-  .docs-close { margin: 0 0 0 auto; position: sticky; right: 0; background: var(--bg); box-shadow: -12px 0 12px var(--bg); }
+  /* The sections scroll sideways; Close keeps its own place at the right instead of covering them. */
+  .docs-shell { position: relative; }
+  .docs-nav { margin-right: 96px; border-bottom: 0; scrollbar-width: none; mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .docs-body { border-top: 1px solid var(--line); }
+  .docs-close { position: absolute; top: 9px; right: 8px; margin: 0; white-space: nowrap; }
 }
 
 
@@ -561,9 +589,9 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="menu" id="projMenu" role="menu" aria-label="Projects"></div></div>
     <span class="spacer"></span>
     <span class="live" id="live" title="Connected to glintd"><svg class="mark" id="liveMark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="liveText">Live</span></span>
-    <button class="docs-btn" id="agentsBtn" data-act="agents" aria-label="Agents (g)" title="What coding agents did with Glint (g)"><svg class="i"><use href="#k-prompt"/></svg></button>
-    <button class="docs-btn" id="settingsBtn" data-act="settings" aria-label="Settings (,)" title="Settings (,)"><svg class="i"><use href="#i-gear"/></svg></button>
-    <button class="docs-btn" id="docsBtn" data-act="docs" aria-label="Docs (?)" title="Docs (?)">?</button>
+    <button class="docs-btn" id="agentsBtn" data-act="agents" aria-label="Agents (g)" title="What coding agents did with Glint (g)"><svg class="i"><use href="#k-prompt"/></svg><span class="lbl" aria-hidden="true">Agents</span></button>
+    <button class="docs-btn" id="settingsBtn" data-act="settings" aria-label="Settings (,)" title="Settings (,)"><svg class="i"><use href="#i-gear"/></svg><span class="lbl" aria-hidden="true">Settings</span></button>
+    <button class="docs-btn" id="docsBtn" data-act="docs" aria-label="Docs (?)" title="Docs (?)"><span class="q" aria-hidden="true">?</span><span class="lbl" aria-hidden="true">Docs</span></button>
     <button class="cmdk-btn" id="cmdkBtn" aria-label="Jump to a run or action (⌘K)"><svg class="i"><use href="#i-search"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
   </header>
 
@@ -571,7 +599,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 
   <div class="run-head" id="runHead">
     <button class="run-switch" id="runSwitch" aria-haspopup="menu" aria-expanded="false" aria-controls="runMenu"></button>
-    <label class="search"><svg class="i" style="color:var(--faint)"><use href="#i-search"/></svg><input id="q" placeholder="Search this run — text, kind:sql, level:warn" aria-label="Search this run"><kbd>esc</kbd></label>
+    <label class="search"><svg class="i" style="color:var(--faint)"><use href="#i-search"/></svg><input id="q" placeholder="Search this run, text, kind:sql, level:warn" aria-label="Search this run"><select id="qScope" aria-label="Search in"><option value="run">This run</option><option value="project">This project</option><option value="all">Every project</option></select><kbd>esc</kbd></label>
     <span class="stale-note" id="staleNote"></span>
     <div class="menu" id="runMenu" role="menu" aria-label="Runs"></div>
   </div>
@@ -922,12 +950,12 @@ export default { plugins: [glint()] };</code></pre>
 </table>
 </section><section id="d-app">
 <h2>Using this window</h2>
-<p>The top line says what failed and where, which program waits for you, or that all is quiet. Below it is one run at a time. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>.</p>
+<p>The top line covers every project: it says what failed and where, which program waits for you, or that all is quiet everywhere. Below it is one run at a time, the newest by when its last event happened. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>; a project with a failure or a pause opens on that run.</p>
 <table class="ref">
-<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action</td></tr>
+<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action; it also finds what events say, in every project, and opens a match in its run</td></tr>
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
-<tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
+<tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>
@@ -999,6 +1027,7 @@ const LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
 /* What one window holds at once. Nothing is cut silently: past each limit the list says how many
    more there are and offers to load or show them. */
 const ROWS = 500, MORE_ROWS = 1000;         // rows drawn in a run; "Show earlier" adds MORE_ROWS
+const LIVE_SLACK = 200;                     // live rows drawn past ROWS before the oldest are let go
 const EVENTS_PAGE = 5000;                   // events fetched per run, and per "Load earlier"
 const RUNS_PAGE = 100;                      // runs listed per project, and per "Load more"
 const TABLE_ROWS = 200, LONG_TEXT = 20000;  // table rows and characters of text shown before "show more"
@@ -1008,14 +1037,18 @@ const store = {
 };
 
 const S = {
-  project: store.get("project", null), projects: [], allRuns: [], runs: [],
+  project: store.get("project", null), projects: [], runs: [], runInfo: new Map(),
   run: null, entries: [], byId: new Map(), pendingUpd: new Map(),
   open: new Set(), q: "", rowCap: ROWS, raw: [], moreEvents: false, runLimit: RUNS_PAGE, projectInfo: [],
   full: new Set(), tableRows: new Map(),
   fail: null, fails: [], seen: null, ack: new Set(store.get("ack", [])), pauses: [], answered: [],
   editor: null, editors: [],
   offline: false, offlineSince: null, offlineWhy: "", loaded: false,
+  gen: 0, switching: null, switchSlow: false, scope: "run", hits: null,
 };
+/* A newer navigation (project, run, search result) makes the answers to older requests stale: they
+   are dropped instead of drawing a project the user already left. */
+class Stale extends Error {}
 
 /* ---------------- helpers ---------------- */
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -1056,7 +1089,8 @@ let toastT;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1800); }
 const motionOK = !matchMedia("(prefers-reduced-motion: reduce)").matches;
 function vt(fn) { if (!document.startViewTransition || !motionOK || document.hidden) return fn(); const t = document.startViewTransition(fn); t.ready.catch(() => {}); t.finished.catch(() => {}); }
-function glint() { const m = $("liveMark"); m.classList.remove("glint"); void m.getBoundingClientRect(); m.classList.add("glint"); }
+// Restarts the spark without forcing a layout (a busy stream calls this for every event).
+function glint() { const m = $("liveMark"); if (!m.classList.contains("glint")) return m.classList.add("glint"); m.getAnimations().forEach(a => { a.currentTime = 0; a.play(); }); }
 
 /* A human name for a run id; runs carry no title of their own. */
 function runTitle(id) {
@@ -1065,14 +1099,14 @@ function runTitle(id) {
   // A run of a program is named by what it did first: its request line (`GET /checkout/8`), else
   // its script (`worker.py`), so runs of one language can be told apart.
   if (/^(js|python|php)-/.test(id)) {
-    const r = S.allRuns.find(x => x.run === id);
+    const r = S.runInfo.get(id);
     if (r?.head && /^[A-Z]+ \/\S*/.test(r.head)) return r.head.split(" ").slice(0, 2).join(" ");
     if (r?.file) return r.file.split(/[\\/]/).pop();
   }
   if ((m = id.match(/^claude-code:(.+)$/))) return "Agent session " + m[1].slice(0, 8);
   if ((m = id.match(/^otel-(.+)$/))) return "Trace " + m[1].slice(0, 8);
-  if (/^example-/.test(id)) { const r = S.allRuns.find(x => x.run === id); return (r?.head || "Example run") + " · example"; }
-  if (/^browser-/.test(id)) { const r = S.allRuns.find(x => x.run === id); return r?.head?.startsWith("/") ? "Page " + r.head : "Browser page"; }
+  if (/^example-/.test(id)) { const r = S.runInfo.get(id); return (r?.head || "Example run") + " · example"; }
+  if (/^browser-/.test(id)) { const r = S.runInfo.get(id); return r?.head?.startsWith("/") ? "Page " + r.head : "Browser page"; }
   if (/^pipe-/.test(id)) return "glint pipe";
   if (/^send-/.test(id)) return "glint send";
   if ((m = id.match(/^(js|python|php)-/))) return { js: "Node", python: "Python", php: "PHP" }[m[1]] + " process";
@@ -1130,7 +1164,7 @@ function treeOrder(list) {
 }
 
 function foldAll(list) {
-  S.entries = []; S.byId = new Map(); S.pendingUpd = new Map();
+  S.entries = []; S.byId = new Map(); S.pendingUpd = new Map(); rowCache.clear(); LAZY.clear();
   list.forEach(e => fold(e, false));
 }
 function fold(e, live) {
@@ -1140,8 +1174,8 @@ function fold(e, live) {
     if (t) applyUpdate(t, p); else S.pendingUpd.set(p.target, [...(S.pendingUpd.get(p.target) || []), p]);
     return;
   }
-  if (e.kind === "ctl.resume") { const t = S.byId.get(p.target); if (t) { t.resolved = p; t._s = null; } return; }
-  if (e.kind === "agent.tool_result" && e.parent && S.byId.has(e.parent)) { const c = S.byId.get(e.parent); c.result = e; c._s = null; return; }
+  if (e.kind === "ctl.resume") { const t = S.byId.get(p.target); if (t) { t.resolved = p; t._s = null; t._v = (t._v || 0) + 1; } return; }
+  if (e.kind === "agent.tool_result" && e.parent && S.byId.has(e.parent)) { const c = S.byId.get(e.parent); c.result = e; c._s = null; c._v = (c._v || 0) + 1; return; }
   if (e.kind === "core.clear") { S.entries = []; return; }
   if (live) e.isNew = true;
   S.byId.set(e.id, e); S.entries.push(e);
@@ -1151,7 +1185,7 @@ function applyUpdate(e, u) {
   e.meta = { ...(e.meta || {}), ...(u.meta || {}) };
   if (u.hidden != null) e.hiddenByUser = u.hidden;
   if (u.removed) e.removed = true;
-  e._s = null;
+  e._s = null; e._v = (e._v || 0) + 1; // the row is drawn again
 }
 
 /* What a row says, by kind: one line. Kept on the event, since a 1 MB value takes a while to
@@ -1421,26 +1455,33 @@ function downStatus() {
   const why = S.offlineWhy ? ` (${esc(S.offlineWhy)})` : "";
   return `<div class="say down">${icon("pause")}<div class="text"><b>Not recording.</b> <b class="verb">glintd stopped answering</b> <span class="ago" data-t="${new Date(since).toISOString()}">${rel(since)}</span><span class="sub">Nothing answers at <span class="mono">${esc(addr)}</span>${why}, so new events from your programs are lost and the list below shows what was there at ${esc(clock(since))}. ${how}</span></div>${action}</div>`;
 }
+/* What needs you, in every project: the newest failure not seen yet and the oldest waiting pause.
+   "All quiet" only when neither exists anywhere. */
+const unseenFail = () => S.fail && !S.ack.has(S.fail.id) ? S.fail : null;
+const inProj = p => p && p !== S.project ? ` <span class="in-proj">in <b>${esc(p)}</b></span>` : "";
+/* "Seen" after Show: a way back for a few minutes while you look elsewhere, not a line for the day. */
+const SEEN_MS = 3 * 60 * 1000;
+const seenLine = () => S.seen && S.seen !== unseenFail() && Date.now() - S.seenAt < SEEN_MS && S.run !== S.seen.run ? S.seen : null;
 function status() {
   const el = $("status"), out = [];
-  const fail = S.fail && !S.ack.has(S.fail.id) ? S.fail : null;
+  const fail = unseenFail();
   if (S.offline) { el.innerHTML = downStatus(); document.body.dataset.state = "down"; return; }
   if (!S.loaded) { el.innerHTML = ""; return; }
   if (fail) {
-    const l = loc(fail);
-    out.push(`<div class="say fail">${icon("x")}<div class="text"><b>${esc(runTitle(fail.run))}</b> <b class="verb">failed</b> <span class="ago" data-t="${esc(fail.ts)}">${rel(fail.ts)}</span><span class="sub">${esc(clip(failText(fail), 200))}${l ? ` · <span class="mono">${esc(l)}</span>` : ""}</span></div><div class="actions"><button class="btn primary" data-act="show" title="Show the failure (E)">Show<kbd>E</kbd></button></div></div>`);
+    const l = loc(fail), away = fail.project !== S.project;
+    out.push(`<div class="say fail">${icon("x")}<div class="text"><b>${esc(runTitle(fail.run))}</b> <b class="verb">failed</b>${inProj(fail.project)} <span class="ago" data-t="${esc(fail.ts)}">${rel(fail.ts)}</span><span class="sub">${esc(clip(failText(fail), 200))}${l ? ` · <span class="mono">${esc(l)}</span>` : ""}</span></div><div class="actions"><button class="btn primary" data-act="show" title="${away ? `Open ${esc(fail.project)} and show the failure` : "Show the failure"} (E)">Show<kbd>E</kbd></button></div></div>`);
   }
   const pz = S.pauses[0];
   if (pz) {
-    const more = S.pauses.length - 1;
-    out.push(`<div class="say pause">${icon("pause")}<div class="text"><b>${esc(runTitle(pz.run))}</b> <b class="verb">is waiting for you</b><span class="sub">${pz.reason ? "“" + esc(pz.reason) + "” · " : ""}${pz.file ? `<span class="mono">${esc(base(pz.file))}${pz.line ? ":" + pz.line : ""}</span>` : ""}${more ? ` · and ${more} more` : ""}</span></div><div class="actions"><button class="btn ${fail ? "" : "primary"}" data-act="continue" data-id="${esc(pz.id)}" title="Continue the program (C)">Continue<kbd>C</kbd></button><button class="link" data-act="stop" data-id="${esc(pz.id)}">Stop</button></div></div>`);
+    const more = S.pauses.length - 1, open = pz.run !== S.run ? `<button class="link" data-act="goto-pause" data-id="${esc(pz.id)}" title="Open the run that is waiting">Open</button>` : "";
+    out.push(`<div class="say pause">${icon("pause")}<div class="text"><b>${esc(runTitle(pz.run))}</b> <b class="verb">is waiting for you</b>${inProj(pz.project)}<span class="sub">${pz.reason ? "“" + esc(pz.reason) + "” · " : ""}${pz.file ? `<span class="mono">${esc(base(pz.file))}${pz.line ? ":" + pz.line : ""}</span>` : ""}${more ? ` · and ${more} more` : ""}</span></div><div class="actions"><button class="btn ${fail ? "" : "primary"}" data-act="continue" data-id="${esc(pz.id)}" title="Continue the program (C)">Continue<kbd>C</kbd></button>${open}<button class="link" data-act="stop" data-id="${esc(pz.id)}">Stop</button></div></div>`);
   }
   if (!fail && !pz) {
     const last = S.runs[0];
-    out.push(`<div class="say ok">${icon("check")}<div class="text">All quiet<span class="sub">${last ? `Last run ${esc(runTitle(last.run))} · ${last.events} event${last.events === 1 ? "" : "s"} · ${last.errors ? last.errors + " error" + (last.errors > 1 ? "s" : "") : "no errors"} · ${rel(last.last)}` : "No runs yet"}</span></div></div>`);
+    out.push(`<div class="say ok">${icon("check")}<div class="text">All quiet<span class="sub">${last ? `Last run in ${esc(S.project)}: ${esc(runTitle(last.run))} · ${last.events} event${last.events === 1 ? "" : "s"} · ${last.errors ? last.errors + " error" + (last.errors > 1 ? "s" : "") : "no errors"} · ${rel(last.last)}` : "No runs yet"}</span></div></div>`);
   }
-  const seen = S.seen || (S.fail && S.ack.has(S.fail.id) ? S.fail : null);
-  if (seen && seen !== fail) out.push(`<div class="say quiet">${icon("x")}<div class="text">${esc(runTitle(seen.run))} failed ${rel(seen.ts)} — seen. <button class="link" data-act="show" data-again="1" style="padding:2px 4px">Show again</button></div></div>`);
+  const seen = seenLine();
+  if (seen) out.push(`<div class="say quiet">${icon("x")}<div class="text">${esc(runTitle(seen.run))} failed ${rel(seen.ts)}${inProj(seen.project)}, seen. <button class="link" data-act="show" data-again="1" style="padding:2px 4px">Show again</button></div></div>`);
   S.answered.slice(-2).forEach(a => out.push(`<div class="say quiet">${icon("check")}<div class="text">${esc(a)}</div></div>`));
   el.innerHTML = out.join("");
   const state = fail ? "fail" : pz ? "pause" : "calm";
@@ -1473,7 +1514,7 @@ function runHead() {
 /* How many runs the project has in all (the server counts them; the list holds the newest). */
 function runTotal() { return Math.max(S.runs.length, S.projectInfo.find(p => p.project === S.project)?.runs || 0); }
 function projMenu() {
-  $("projName").textContent = S.project || "no project";
+  $("projName").textContent = S.project || "no project"; $("projBtn").title = S.project || "";
   const pm = $("projMenu"); // an open menu keeps its order under the pointer
   if (pm.classList.contains("open") && pm.children.length) return;
   $("projMenu").innerHTML = S.projectInfo.map(({ project: p, runs, failing, last }) =>
@@ -1491,35 +1532,125 @@ function matches(e, tokens) {
     return [s.tag, s.lead, s.body, loc(e), e.meta?.note].join(" ").toLowerCase().includes(val);
   });
 }
+/* The list is drawn row by row: each row keeps its element while what it shows is unchanged (its
+   signature), so a live event adds one row instead of drawing five hundred again. */
+let rowCache = new Map(), capEl = null, lastGeom = "";
+function rowHtml(e, t0, span, open) {
+  const s = summary(e), lv = rowLevel(e), d = ms(e), l = loc(e);
+  if (e.kind === "core.separator") return `<li class="entry sep" data-id="${esc(e.id)}"><hr></li>`;
+  // An object or array is shown in full in the pane, so the open row keeps only its label.
+  const structured = s.mono && /^[\[{]/.test(String(s.body || ""));
+  const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
+  const twig = e.kidCount ? `<button class="twig" data-act="twig" data-id="${esc(e.id)}" aria-expanded="${!S.collapsed.has(e.id)}" aria-label="${S.collapsed.has(e.id) ? "Show" : "Hide"} ${e.kidCount} inside" title="${e.kidCount} inside"><svg class="i"><use href="#i-down"/></svg></button>` : "";
+  const canOpen = isAbs(e.origin?.file);
+  return `<li class="entry${canOpen ? " qa2" : ""} lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
+      <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${readBy(e)}${d ? `<span class="dur" title="${durTitle(e, t0)}"><i style="${durStyle(e, t0, span)}"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
+      <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
+}
+// Timeline of the run, for the duration bars: each bar sits where its work started.
+const durStyle = (e, t0, span) => `--x:${((startOf(e) - t0) / span * 100).toFixed(1)}%;--w:${Math.max(3, ms(e) / span * 100).toFixed(1)}%`;
+const durTitle = (e, t0) => `${ms(e)} ms, started +${Math.round(startOf(e) - t0)} ms into the run`;
+function setList(html) { rowCache.clear(); capEl = null; $("entries").innerHTML = html; }
 function entries() {
   const ol = $("entries");
-  if (!S.runs.length) { if (S.loaded && !S.offline) onboarding(); else ol.innerHTML = ""; return; }
-  LAZY.clear();
+  if (S.switchSlow) return setList(`<li class="empty loading" role="status">Loading ${esc(S.switching)}…</li>`);
+  if (!S.runs.length) { if (S.loaded && !S.offline && !S.switching) onboarding(); else setList(""); return; }
+  if (S.scope !== "run" && S.q.trim()) return hitList();
   const tokens = S.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let list = S.entries.filter(e => !e.removed && (!tokens.length || matches(e, tokens)));
-  const matched = list.length, hiddenCount = Math.max(0, matched - S.rowCap);
-  if (hiddenCount) list = list.slice(-S.rowCap);
+  // Live events grow the window instead of pushing its oldest row out one by one: dropping the
+  // first row lays out every row again (~20 ms), so that happens once per LIVE_SLACK events.
+  const cap = S.rowCap + (tokens.length ? 0 : S.liveExtra || 0);
+  const matched = list.length, hiddenCount = Math.max(0, matched - cap);
+  if (hiddenCount) list = list.slice(-cap);
   const searching = tokens.length > 0;
   if (searching) list.forEach(e => { e.depth = 0; e.kidCount = 0; }); else list = treeOrder(list);
-  // Timeline of the run, for the duration bars: each bar sits where its work started.
-  const t0 = Math.min(...list.map(startOf)), t1 = Math.max(...list.map(e => startOf(e) + (ms(e) || 0)));
-  const span = Math.max(1, t1 - t0);
-  if (!list.length) { ol.innerHTML = S.q ? `<li class="empty">Nothing in ${esc(runTitle(S.run))} matches “${esc(S.q)}”. <button class="link" data-act="clearq">Clear search</button></li>` : `<li class="empty">This run has no events yet.</li>`; return; }
-  ol.innerHTML = capLine(list.length, matched, hiddenCount, tokens.length > 0) + list.map(e => {
-    const s = summary(e), lv = rowLevel(e), open = S.open.has(e.id), d = ms(e), l = loc(e);
-    if (e.kind === "core.separator") return `<li class="entry sep" data-id="${esc(e.id)}"><hr></li>`;
-    // An object or array is shown in full in the pane, so the open row keeps only its label.
-    const structured = s.mono && /^[\[{]/.test(String(s.body || ""));
-    const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
-    const twig = e.kidCount ? `<button class="twig" data-act="twig" data-id="${esc(e.id)}" aria-expanded="${!S.collapsed.has(e.id)}" aria-label="${S.collapsed.has(e.id) ? "Show" : "Hide"} ${e.kidCount} inside" title="${e.kidCount} inside"><svg class="i"><use href="#i-down"/></svg></button>` : "";
-    const canOpen = isAbs(e.origin?.file);
-    return `<li class="entry${canOpen ? " qa2" : ""} lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
-      <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${readBy(e)}${d ? `<span class="dur" title="${d} ms, started +${Math.round(startOf(e) - t0)} ms into the run"><i style="--x:${((startOf(e) - t0) / span * 100).toFixed(1)}%;--w:${Math.max(3, d / span * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
-      <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
-  }).join("");
-  S.entries.forEach(e => (e.isNew = false));
+  if (!list.length) return setList(S.q ? `<li class="empty">Nothing in ${esc(runTitle(S.run))} matches “${esc(S.q)}”. <button class="link" data-act="clearq">Clear search</button> <button class="link" data-act="scope" data-scope="project">Search all of ${esc(S.project)}</button></li>` : `<li class="empty">This run has no events yet.</li>`);
+  // The bars measure from the start of the loaded run. The span grows in steps of a quarter, so a
+  // live event that ends a little later does not move every bar.
+  let t0 = Infinity, t1 = -Infinity;
+  for (const e of S.entries) { const a = startOf(e); if (a < t0) t0 = a; const z = a + (ms(e) || 0); if (z > t1) t1 = z; }
+  const span = 1.25 ** Math.ceil(Math.log(Math.max(1, t1 - t0)) / Math.log(1.25)), geom = t0 + "|" + span, geomMoved = geom !== lastGeom; lastGeom = geom;
+  // What an open pane shows beyond its event: shown-in-full texts, table rows, pauses, the editor.
+  const paneKey = JSON.stringify([[...S.full], [...S.tableRows], S.pauses.map(p => p.id), S.editor]);
+  const next = new Map(), want = [], build = [];
+  for (const e of list) {
+    const open = S.open.has(e.id);
+    const sig = `${e._v || 0}|${open}|${e.depth || 0}|${e.kidCount || 0}|${S.collapsed.has(e.id)}|${(S.reads.get(e.id) || []).length}|${S.editor}|${open ? paneKey : ""}`;
+    let c = rowCache.get(e.id);
+    if (!c || c.sig !== sig) { c = { sig, li: null, e }; build.push(c); }
+    else if (geomMoved && ms(e)) { const i = c.li.querySelector(".dur"); if (i) { i.title = durTitle(e, t0); i.firstElementChild.setAttribute("style", durStyle(e, t0, span)); } }
+    next.set(e.id, c); want.push(c);
+  }
+  if (build.length) { // one parse for every new or changed row
+    const t = document.createElement("template");
+    t.innerHTML = build.map(c => rowHtml(c.e, t0, span, S.open.has(c.e.id))).join("");
+    const lis = t.content.children; build.forEach((c, i) => { c.li = lis[i]; });
+    build.forEach(c => { c.e.isNew = false; });
+  }
+  const focused = document.activeElement, focusId = ol.contains(focused) ? focused.closest(".entry")?.dataset.id : null;
+  const capHtml = capLine(list.length, matched, hiddenCount, searching);
+  if (!capHtml) capEl = null;
+  else if (!capEl || capEl.dataset.html !== capHtml) {
+    // Changed in place: a new first element would lay out every row below it again.
+    const t = document.createElement("template"); t.innerHTML = capHtml; const fresh = t.content.firstElementChild;
+    if (capEl) capEl.innerHTML = fresh.innerHTML; else capEl = fresh;
+    capEl.dataset.html = capHtml;
+  }
+  // Put the wanted rows in order, moving only what is out of place; whatever is left goes.
+  let cur = ol.firstChild;
+  for (const li of capEl ? [capEl, ...want.map(c => c.li)] : want.map(c => c.li)) {
+    if (cur === li) cur = cur.nextSibling; else ol.insertBefore(li, cur);
+  }
+  while (cur) { const n = cur.nextSibling; cur.remove(); cur = n; }
+  rowCache = next;
+  // A row drawn again or moved loses focus with its element: give it back.
+  if (focusId && !ol.contains(document.activeElement)) ol.querySelector(`.entry[data-id="${CSS.escape(focusId)}"] .row`)?.focus({ preventScroll: true });
+  if (build.length) setTimeout(() => build.forEach(c => c.li.classList.remove("new")), 2500); // arrival flash once, not on every move
   if (QA.dataset.id) placeQa(ol.querySelector(`.entry[data-id="${CSS.escape(QA.dataset.id)}"]`));
   fillSources();
+}
+/* Search beyond this run: glintd's full-text index over the project or every project
+   (GET /v1/events?q=). kind: and level: work as in the run. */
+const HITS = 200;
+function hitQuery() {
+  const q = new URLSearchParams(), words = [];
+  for (const t of S.q.trim().split(/\s+/).filter(Boolean)) {
+    const i = t.indexOf(":"), k = i > 0 ? t.slice(0, i).toLowerCase() : "", v = t.slice(i + 1);
+    if (k === "kind" && v) q.set("kind", v.endsWith("*") ? v : v + "*");
+    else if (k === "level" && v) q.set("level", v);
+    else words.push(t);
+  }
+  if (words.length) q.set("q", words.join(" "));
+  if (S.scope === "project" && S.project) q.set("project", S.project);
+  q.set("limit", HITS);
+  return q.toString();
+}
+let hitTimer = 0;
+function searchHits() {
+  clearTimeout(hitTimer);
+  if (S.scope === "run" || !S.q.trim()) { S.hits = null; return; }
+  const key = hitQuery();
+  if (S.hits?.key === key) return;
+  S.hits = { key, events: S.hits?.events || [], loading: true };
+  hitTimer = setTimeout(async () => {
+    let r;
+    try { r = { key, events: (await api("/v1/events?" + key)).events.reverse().filter(e => e.kind !== "core.update" && e.kind !== "ctl.resume") }; }
+    catch (err) { r = { key, events: [], error: err.message }; }
+    if (S.hits?.key !== key) return; // typed on since
+    S.hits = r; render();
+    knowRuns([...new Set(r.events.map(e => e.project))]).then(n => n && render());
+  }, 180);
+}
+function hitList() {
+  const h = S.hits || { events: [], loading: true }, where = S.scope === "project" ? esc(S.project) : "every project";
+  if (!h.events.length) return setList(`<li class="empty"${h.loading ? ' role="status"' : ""}>${h.loading ? `Searching ${where}…` : h.error ? `Search failed: ${esc(h.error)}` : `Nothing in ${where} matches “${esc(S.q)}”.`} ${h.loading ? "" : `<button class="link" data-act="clearq">Clear search</button>${S.scope === "project" ? ` <button class="link" data-act="scope" data-scope="all">Search every project</button>` : ""}`}</li>`);
+  S.hitsById = new Map(h.events.map(e => [e.id, e]));
+  setList(`<li class="cap" role="status">${h.events.length >= HITS ? `The newest ${HITS} matches` : `${h.events.length.toLocaleString()} match${h.events.length === 1 ? "" : "es"}`} in ${where}, newest first${h.loading ? " · searching…" : ""}</li>` + h.events.map(e => {
+    const s = summary(e), lv = rowLevel(e), body = s.mono ? `<span class="mono">${esc(s.body)}</span>` : esc(s.body);
+    const run = esc(runTitle(e.run)) + (e.project !== S.project ? ` · ${esc(e.project)}` : "");
+    return `<li class="entry hit lv-${lv}" data-hit="${esc(e.id)}"><button class="row" title="Open in its run"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}</span><span class="right"><span class="hit-run">${run}</span><span class="when">${rel(e.ts)}</span></span></button></li>`;
+  }).join(""));
 }
 /* Quick actions (copy, open in editor): one set, moved to the row under the pointer or with
    keyboard focus. A set in every row cost as much layout as the rows themselves. */
@@ -1557,9 +1688,13 @@ const SETUP_ROWS = [
   ["node", "glint() in Node"],
   ["agents", "Coding agents know about Glint"],
 ];
+/* The check runs every installer's status; if it hangs, say so after a while and offer to try again
+   instead of "Checking…" forever. A late answer still replaces the message. */
+const SETUP_WAIT = 10000;
 async function loadSetup() {
+  const late = setTimeout(() => { if (!S.setup || !S.setup.steps) { S.setup = { error: `The check did not answer within ${SETUP_WAIT / 1000} seconds. Check again, or set up this Mac anyway.` }; render(); drawSetMac(); } }, SETUP_WAIT);
   try { S.setup = await api("/v1/setup"); } catch (err) { S.setup = { error: err.message }; }
-  render();
+  clearTimeout(late); render(); drawSetMac();
 }
 async function runSetup() {
   S.setup = { ...(S.setup || {}), running: true }; render(); drawSetMac();
@@ -1674,11 +1809,11 @@ let raf = 0;
 function render() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; draw(); }); }
 function draw() {
   projMenu();
-  if (S.loaded && !S.runs.length && !S.offline) { $("runHead").hidden = true; onboarding(); chrome(); return; }
-  status(); runHead();
+  if (S.loaded && !S.runs.length && !S.offline && !S.switching) { $("runHead").hidden = true; onboarding(); chrome(); return; }
+  status(); runHead(); if (S.switchSlow) $("runHead").hidden = true;
   // The list is the costly part (a few hundred rows): draw it only when something it shows changed,
   // not for every event of another run.
-  const key = JSON.stringify([S.run, S.ver, S.entries.length, S.q, S.rowCap, [...S.open], [...S.collapsed], S.full.size, [...S.tableRows], S.loadingEarlier, S.moreEvents, S.pauses.map(p => p.id), S.editor, S.loaded]);
+  const key = JSON.stringify([S.run, S.ver, S.entries.length, S.q, S.rowCap, [...S.open], [...S.collapsed], S.full.size, [...S.tableRows], S.loadingEarlier, S.moreEvents, S.pauses.map(p => p.id), S.editor, S.loaded, S.switchSlow, S.scope, S.hits && [S.hits.key, S.hits.loading, S.hits.events.length], S.reads.size, S.runInfo.size]);
   if (key !== listKey || !$("entries").children.length) { listKey = key; entries(); }
   chrome();
 }
@@ -1711,17 +1846,41 @@ async function loadProjects() {
   S.projectInfo = list; S.projects = list.map(p => p.project);
   if (!S.projects.includes(S.project)) S.project = S.projects[0] || null;
 }
+const remember = runs => runs.forEach(r => S.runInfo.set(r.run, r));
 async function loadRuns() {
-  const { runs } = S.project ? await api(`/v1/runs?project=${encodeURIComponent(S.project)}&limit=${S.runLimit}`) : { runs: [] };
-  S.allRuns = S.runs = runs;
-  if (!S.runs.some(r => r.run === S.run)) S.run = S.runs[0]?.run || null;
+  const p = S.project, g = S.gen;
+  const { runs } = p ? await api(`/v1/runs?project=${encodeURIComponent(p)}&limit=${S.runLimit}`) : { runs: [] };
+  if (p !== S.project || g !== S.gen) throw new Stale();
+  remember(runs);
+  // The open run stays open when newer runs push it out of the list (or it was opened from search).
+  const keep = S.run && !runs.some(r => r.run === S.run) ? S.runs.find(r => r.run === S.run) : null;
+  S.runs = keep && keep.project === p ? [...runs, keep] : runs;
+  if (!S.runs.some(r => r.run === S.run) && S.run !== S.wantRun) S.run = S.runs[0]?.run || null;
+}
+/* Names for runs of other projects (the status line and search results talk about them). */
+const knownAt = new Map();
+async function knowRuns(projects) {
+  const want = projects.filter(p => p && p !== S.project && Date.now() - (knownAt.get(p) || 0) > 15000).slice(0, 6);
+  if (!want.length) return false;
+  want.forEach(p => knownAt.set(p, Date.now()));
+  await Promise.all(want.map(p => api(`/v1/runs?project=${encodeURIComponent(p)}&limit=200`).then(r => remember(r.runs)).catch(() => {})));
+  return true;
 }
 async function loadRun() {
-  if (S.loadedRun !== S.run) { S.rowCap = ROWS; S.full.clear(); S.tableRows.clear(); S.loadedRun = S.run; }
-  if (!S.run) { S.entries = []; S.raw = []; S.moreEvents = false; return; }
-  const { events } = await api(`/v1/events?run=${encodeURIComponent(S.run)}&limit=${EVENTS_PAGE}`);
+  const run = S.run, g = S.gen;
+  if (S.loadedRun !== run) { S.rowCap = ROWS; S.full.clear(); S.tableRows.clear(); S.loadedRun = run; }
+  S.liveExtra = 0;
+  if (!run) { S.entries = []; S.raw = []; S.moreEvents = false; rowCache.clear(); return; }
+  const { events } = await api(`/v1/events?run=${encodeURIComponent(run)}&limit=${EVENTS_PAGE}`);
+  if (run !== S.run || g !== S.gen) throw new Stale();
   S.raw = events; S.moreEvents = events.length >= EVENTS_PAGE;
   foldAll(events);
+  // A run opened from search may be older than the newest runs listed: list it too.
+  if (events.length && !S.runs.some(r => r.run === run) && events[0].project === S.project) {
+    const errors = events.filter(e => levelOf(e) >= 4).length, known = S.runInfo.get(run);
+    const r = known || { run, project: S.project, first: events[0].ts, last: events[events.length - 1].ts, events: events.length, errors, last_id: events[events.length - 1].id };
+    S.runInfo.set(run, r); S.runs = [...S.runs, r];
+  }
   loadReads();
 }
 /* The page of events before the oldest one loaded. */
@@ -1737,22 +1896,40 @@ async function loadEarlier() {
   } catch (err) { toast(`Could not load earlier events: ${err.message}`); }
   finally { S.loadingEarlier = false; render(); }
 }
+/* A live run keeps what the view can show plus a bounded history; older events stay in glintd
+   and come back with "Load earlier". */
+function trimBuffer() {
+  const max = Math.max(EVENTS_PAGE * 2, S.rowCap + EVENTS_PAGE);
+  if (S.raw.length <= max + 500) return;
+  const cut = S.raw.length - max, gone = new Set(S.raw.slice(0, cut).map(e => e.id));
+  S.raw = S.raw.slice(cut); S.moreEvents = true;
+  S.entries = S.entries.filter(e => !gone.has(e.id));
+  gone.forEach(id => { S.byId.delete(id); S.open.delete(id); S.pendingUpd.delete(id); });
+  S.ver = (S.ver || 0) + 1;
+}
+/* Failures and pauses of every project: the status line is about all of them. */
 async function loadStatus() {
-  const q = S.project ? `&project=${encodeURIComponent(S.project)}` : "";
-  const [{ events }, { pauses }] = await Promise.all([api(`/v1/events?level=error&limit=50${q}`), api("/v1/ctl")]);
+  const [{ events }, { pauses }] = await Promise.all([api(`/v1/events?level=error&limit=50`), api("/v1/ctl")]);
   S.fails = events.filter(e => e.kind !== "core.update" && e.kind !== "ctl.resume");
   pickFail();
-  S.pauses = pauses.filter(p => !S.project || p.project === S.project);
+  S.pauses = pauses;
+  knowRuns([S.fail?.project, S.pauses[0]?.project]).then(n => n && render());
 }
 /* The newest failure the user has not seen; if all are seen, the newest one (shown as "seen"). */
 // The status line is about the newest failure only. Once you have seen it, it calms down; older
 // failures stay in their runs instead of queueing up one after another.
 function pickFail() {
+  if (S.fails.length > 100) S.fails = S.fails.slice(-50);
   S.fail = S.fails[S.fails.length - 1] || null;
+}
+/* The run to open in a project: the one the status line is about there, else the newest. */
+function attentionRun(p) {
+  const f = unseenFail();
+  return (f?.project === p ? f.run : null) || S.pauses.find(x => x.project === p)?.run || null;
 }
 async function loadAll() {
   try { await loadProjects(); await loadRuns(); await Promise.all([loadRun(), loadStatus()]); S.loaded = true; setOnline(); }
-  catch (err) { goneOffline(err instanceof TypeError ? "" : err.message); console.warn("glint: load failed", err); }
+  catch (err) { if (err instanceof Stale) return; goneOffline(err instanceof TypeError ? "" : err.message); console.warn("glint: load failed", err); }
   render();
 }
 function goneOffline(why) {
@@ -1778,27 +1955,39 @@ function connect() {
 function onEvent(e) {
   const inProject = e.project === S.project || !S.project;
   if (!S.project) { loadAll(); return; }
-  if (inProject && e.run === S.run) { S.raw.push(e); fold(e, true); }
+  if (inProject && e.run === S.run && !S.switching) { S.raw.push(e); fold(e, true); trimBuffer(); S.liveExtra = (S.liveExtra || 0) >= LIVE_SLACK ? 0 : (S.liveExtra || 0) + 1; }
   // A project not in the menu yet: list projects again (at most every few seconds).
   if (e.project && !S.projects.includes(e.project) && !projTimer) projTimer = setTimeout(() => { projTimer = null; loadProjects().then(render).catch(() => {}); }, 2000);
-  if (e.kind === "ctl.pause" || e.kind === "ctl.resume") api("/v1/ctl").then(r => { S.pauses = r.pauses.filter(p => p.project === S.project); render(); }).catch(() => {});
-  if (inProject && levelOf(e) >= 4 && !["core.update", "ctl.resume"].includes(e.kind)) { S.fails.push(e); pickFail(); }
+  if (e.kind === "ctl.pause" || e.kind === "ctl.resume") api("/v1/ctl").then(r => { S.pauses = r.pauses; knowRuns([S.pauses[0]?.project]).then(n => n && render()); render(); }).catch(() => {});
+  // Failures of every project reach the status line.
+  if (levelOf(e) >= 4 && !["core.update", "ctl.resume"].includes(e.kind)) { S.fails.push(e); pickFail(); if (!inProject) knowRuns([e.project]).then(n => n && render()); }
   // The run list is refreshed at most once a second, however busy the stream (an agent's hooks
   // alone send several events a second).
-  if (!runsTimer) runsTimer = setTimeout(() => { runsTimer = null; const prev = S.run; loadRuns().then(() => prev !== S.run ? loadRun() : null).then(render).catch(() => {}); }, 1000);
+  if (inProject && !runsTimer) runsTimer = setTimeout(() => { runsTimer = null; const prev = S.run; loadRuns().then(() => prev !== S.run ? loadRun() : null).then(render).catch(() => {}); }, 1000);
   if (inProject && e.kind !== "core.update") glint();
   render();
 }
 
 /* ---------------- actions ---------------- */
 async function showFailure(which) {
-  const f = which || S.fail; if (!f) return;
-  S.ack.add(f.id); store.set("ack", [...S.ack].slice(-200)); S.seen = f;
-  S.run = f.run; S.q = ""; document.body.classList.remove("searching");
-  await loadRun();
-  const holder = S.byId.has(f.id) ? f.id : (S.entries.find(x => x.result?.id === f.id) || {}).id || f.id;
+  const f = which || unseenFail() || S.fail; if (!f) return;
+  S.ack.add(f.id); store.set("ack", [...S.ack].slice(-200)); S.seen = f; S.seenAt = Date.now();
+  return openEvent(f);
+}
+/* Opens an event where it happened: its project, its run, its row unfolded and in view. */
+async function openEvent(e) {
+  if (!e) return;
+  closeSearch(true);
+  if (e.project && e.project !== S.project) await goProject(e.project, e.run);
+  else if (S.run !== e.run) await goRun(e.run);
+  if (S.run !== e.run) return; // the user went elsewhere meanwhile
+  // A tool result is shown on its call's row; an event older than the page loaded is fetched.
+  const holderOf = () => S.byId.has(e.id) ? e.id : S.entries.find(x => x.result?.id === e.id)?.id;
+  for (let i = 0; !holderOf() && S.moreEvents && i < 4; i++) await loadEarlier();
+  const holder = holderOf() || e.id, at = S.entries.findIndex(x => x.id === holder);
+  if (at >= 0) S.rowCap = Math.max(S.rowCap, S.entries.length - at);
   S.open.add(holder); pickFail(); draw();
-  const li = document.querySelector(`[data-id="${CSS.escape(holder)}"]`);
+  const li = document.querySelector(`#entries [data-id="${CSS.escape(holder)}"]`);
   li?.scrollIntoView({ block: "center", behavior: motionOK ? "smooth" : "auto" }); li?.querySelector(".row").focus({ preventScroll: true });
 }
 async function answer(id, how) {
@@ -1821,11 +2010,38 @@ function copyException(id) {
   copy(`${p.class || "Error"}: ${p.message || ""}\n${frames}\nrun ${e.run} · project ${e.project} · glint event ${e.id}`);
   toast("Failure copied for your agent");
 }
-function goRun(id) { vt(async () => { S.run = id; S.q = ""; document.body.classList.remove("searching"); await loadRun(); draw(); }); }
+/* Navigation dims what is on screen at once, shows a loading row if the answer takes a moment, and
+   drops answers that arrive after the user moved on (S.gen). */
+function busy(label) {
+  const g = S.gen; S.switching = label; document.body.classList.add("switching");
+  setTimeout(() => { if (S.gen === g && S.switching) { S.switchSlow = true; draw(); } }, 150);
+  return g;
+}
+function done(g) { if (g !== S.gen) return false; S.switching = null; S.switchSlow = false; document.body.classList.remove("switching"); return true; }
+async function goRun(id) {
+  S.gen++; S.run = id; S.q = ""; S.hits = null; $("q").value = ""; document.body.classList.remove("searching");
+  const g = busy(runTitle(id));
+  try { await loadRun(); } catch (err) { if (err instanceof Stale) return; toast(`Could not load the run: ${err.message}`); }
+  if (done(g)) vt(draw);
+}
 function stepRun(d) { const o = S.runs.map(r => r.run), i = o.indexOf(S.run); if (o.length) goRun(o[(i + d + o.length) % o.length]); }
-function goProject(p) { vt(async () => { S.project = p; store.set("project", p); S.run = null; S.runLimit = RUNS_PAGE; await loadAll(); }); }
-function openSearch() { document.body.classList.add("searching"); $("q").focus(); }
-function closeSearch() { document.body.classList.remove("searching"); S.q = ""; $("q").value = ""; render(); }
+async function goProject(p, run) {
+  S.gen++; S.project = p; store.set("project", p); S.runLimit = RUNS_PAGE;
+  S.run = S.wantRun = run || attentionRun(p); S.q = ""; S.hits = null; document.body.classList.remove("searching"); $("q").value = "";
+  const g = busy(p); draw();
+  await loadAll();
+  if (g === S.gen) S.wantRun = null;
+  if (done(g)) draw();
+}
+const SCOPES = { run: "Search this run", project: "Search this project", all: "Search every project" };
+function setScope(sc) {
+  S.scope = SCOPES[sc] ? sc : "run"; $("qScope").value = S.scope;
+  $("q").placeholder = `${S.scope === "run" ? "Search this run" : S.scope === "project" ? `Search ${S.project || "this project"}` : "Search every project"}, text, kind:sql, level:warn`;
+  $("q").setAttribute("aria-label", SCOPES[S.scope]);
+  searchHits(); render();
+}
+function openSearch(sc) { document.body.classList.add("searching"); if (sc) setScope(sc); else setScope(S.scope); $("q").focus(); }
+function closeSearch(quiet) { document.body.classList.remove("searching"); S.q = ""; S.hits = null; $("q").value = ""; if (!quiet) render(); }
 
 document.addEventListener("click", ev => {
   const tab = ev.target.closest("[data-tab]");
@@ -1836,6 +2052,8 @@ document.addEventListener("click", ev => {
   const b = ev.target.closest("button"); if (!b) return;
   const act = b.dataset.act;
   if (act === "show") return showFailure(b.dataset.again ? S.seen : null);
+  if (act === "goto-pause") { const pz = S.pauses.find(p => p.id === b.dataset.id); if (!pz) return; return pz.project !== S.project ? goProject(pz.project, pz.run) : goRun(pz.run); }
+  if (act === "scope") return openSearch(b.dataset.scope);
   if (act === "continue") return answer(b.dataset.id, "continue");
   if (act === "stop") return answer(b.dataset.id, "stop");
   if (act === "copyexc") return copyException(b.dataset.id);
@@ -1871,6 +2089,7 @@ document.addEventListener("click", ev => {
   if (act === "jstr") { const v = LAZY.get(b.dataset.z); if (v != null) { b.previousElementSibling.textContent = '"' + v; b.remove(); } return; }
   if (b.hasAttribute("data-cc")) { const c = b.parentElement.cloneNode(true); c.querySelector(".cc").remove(); copy(c.textContent.trim()); return toast("Command copied"); }
   if (b.dataset.qa === "copy") { const e = S.byId.get(b.closest(".entry").dataset.id); const s = summary(e); copy([s.tag, s.lead, s.body].filter(Boolean).join(" ") + (loc(e) ? `  (${loc(e)})` : "")); return toast("Copied"); }
+  if (b.classList.contains("row") && b.closest(".hit")) return openEvent(S.hitsById?.get(b.closest(".hit").dataset.hit));
   if (b.classList.contains("row")) {
     const id = b.closest(".entry").dataset.id; if (!S.byId.has(id)) return;
     S.open.has(id) ? S.open.delete(id) : S.open.add(id); draw();
@@ -1933,10 +2152,11 @@ async function clearData() {
   const yes = await ask(`Delete all ${n.toLocaleString()} events?`,
     `Every run in every project goes, and about ${mb < 0.1 ? "0.1" : mb.toFixed(1)} MB of disk space is freed. This cannot be undone.`, `Delete ${n.toLocaleString()} events`);
   if (!yes) return;
-  try { const r = await api("/v1/data/clear", { method: "POST" }); toast(`Deleted ${r.removed.toLocaleString()} events`); loadAll(); openSettings(); }
+  try { const r = await api("/v1/data/clear", { method: "POST" }); toast(`Deleted ${r.removed.toLocaleString()} events`); S.run = null; S.runs = []; loadAll(); openSettings(); }
   catch (err) { toast(err.message); }
 }
-$("q").addEventListener("input", e => { S.q = e.target.value; render(); });
+$("q").addEventListener("input", e => { S.q = e.target.value; searchHits(); render(); });
+$("qScope").addEventListener("change", e => { setScope(e.target.value); $("q").focus(); });
 
 
 
@@ -2118,7 +2338,9 @@ function commands() {
   });
   S.runs.slice(0, 30).forEach(r => c.push({ g: "Runs", label: runTitle(r.run) + (runTitle(r.run) !== r.run ? ` (${r.run})` : ""), hint: rel(r.last), ico: "run", run: () => goRun(r.run) }));
   S.projects.filter(p => p !== S.project).forEach(p => c.push({ g: "Projects", label: `Switch to ${p}`, ico: "run", run: () => goProject(p) }));
-  c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: openSearch });
+  c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: () => openSearch("run") });
+  if (S.project) c.push({ g: "Actions", label: `Search all of ${S.project}`, ico: "search", run: () => openSearch("project") });
+  c.push({ g: "Actions", label: "Search every project", ico: "search", run: () => openSearch("all") });
   c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", hint: "?", ico: "run", run: () => openDocs() });
   c.push({ g: "Actions", label: "Settings: data, editor, agents", hint: ",", ico: "run", run: () => openSettings() });
   c.push({ g: "Actions", label: "Agents: what coding agents did with Glint", hint: "G", ico: "run", run: () => openAgents() });
@@ -2128,22 +2350,37 @@ function commands() {
   (S.editors.length ? S.editors : Object.keys(EDITORS)).forEach(id => c.push({ g: "Editor", label: `Open files in ${EDITORS[id] || id}${id === S.editor ? " ✓" : ""}`, ico: "run", run: () => api("/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ editor: id }) }).then(() => { S.editor = id; toast(`Files open in ${EDITORS[id] || id}`); }).catch(e => toast(e.message)) }));
   return c;
 }
+/* Typing in ⌘K also searches what events say, in every project; a match opens in its run. */
+let pHits = { q: "", events: [] }, pTimer = 0;
+function paletteHits(q) {
+  if (q.length < 2) return [];
+  if (pHits.q !== q) {
+    clearTimeout(pTimer);
+    pTimer = setTimeout(() => api(`/v1/events?q=${encodeURIComponent(q)}&limit=40`).then(r => {
+      const evs = r.events.reverse().filter(e => e.kind !== "core.update" && e.kind !== "ctl.resume").slice(0, 8);
+      pHits = { q, events: evs };
+      return knowRuns([...new Set(evs.map(e => e.project))]);
+    }).catch(() => { pHits = { q, events: [] }; }).finally(() => { if ($("palette").classList.contains("open") && $("pq").value.trim().toLowerCase() === q) drawPalette(); }), 160);
+    return [{ g: "Events", label: "Searching what events say…", ico: "search", wait: true }];
+  }
+  return pHits.events.map(e => { const s = summary(e); return { g: "Events", label: clip([s.tag, s.lead, s.body].filter(Boolean).join(" "), 90), hint: runTitle(e.run) + (e.project !== S.project ? " · " + e.project : ""), ico: "search", run: () => openEvent(e) }; });
+}
 function drawPalette() {
   const q = $("pq").value.trim().toLowerCase();
-  pItems = commands().filter(c => !q || q.split(/\s+/).every(w => c.label.toLowerCase().includes(w)));
+  pItems = commands().filter(c => !q || q.split(/\s+/).every(w => c.label.toLowerCase().includes(w))).concat(paletteHits(q));
   pSel = Math.min(pSel, Math.max(0, pItems.length - 1));
   let g = "", html = "";
   pItems.forEach((c, i) => {
     if (c.g !== g) { g = c.g; html += `<li class="grp" role="presentation">${esc(g)}</li>`; }
     html += `<li role="option" id="po${i}" data-i="${i}" aria-selected="${i === pSel}"><svg class="i"><use href="#i-${c.ico}"/></svg>${esc(c.label)}${c.hint ? `<span class="hint">${esc(c.hint)}</span>` : ""}</li>`;
   });
-  $("plist").innerHTML = html || `<li class="none">No run or action matches.</li>`;
+  $("plist").innerHTML = html || `<li class="none">No run, action or event matches.</li>`;
   $("pq").setAttribute("aria-activedescendant", "po" + pSel);
   $("po" + pSel)?.scrollIntoView({ block: "nearest" });
 }
 function openPalette() { $("palette").classList.add("open"); $("pq").value = ""; pSel = 0; drawPalette(); $("pq").focus(); }
 function closePalette() { $("palette").classList.remove("open"); }
-function runPalette(i) { const c = pItems[i]; if (!c) return; closePalette(); c.run(); }
+function runPalette(i) { const c = pItems[i]; if (!c || c.wait) return; closePalette(); c.run(); }
 $("pq").addEventListener("input", () => { pSel = 0; drawPalette(); });
 $("pq").addEventListener("keydown", e => {
   if (e.key === "ArrowDown") { e.preventDefault(); pSel = Math.min(pItems.length - 1, pSel + 1); drawPalette(); }
@@ -2156,7 +2393,7 @@ $("palette").addEventListener("mousedown", e => { if (e.target.id === "palette")
 /* ---------------- keyboard ---------------- */
 document.addEventListener("keydown", e => {
   if ($("confirm").open) return; // the dialog handles its own keys
-  const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName);
+  const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("palette").classList.contains("open") ? closePalette() : openPalette(); return; }
   if (e.key === "Escape" && $("palette").classList.contains("open")) { closePalette(); return; }
   if (!$("docs").hidden) { if (e.key === "Escape") closeDocs(); return; }
@@ -2184,6 +2421,7 @@ document.addEventListener("keydown", e => {
 // Agents read events without the stream saying so: look again every few seconds.
 setInterval(() => { if (!document.hidden && S.run) loadReads(); }, 4000);
 setInterval(() => document.querySelectorAll(".ago").forEach(a => (a.textContent = rel(a.dataset.t))), 1000);
+setInterval(() => { if (S.seen && Date.now() - S.seenAt > SEEN_MS && !S.offline && S.runs.length) { S.seen = null; status(); } }, 15000);
 loadAll().then(connect);
 // Which editors glintd found; the first is the default until you pick one (⌘K → "Open files in").
 // The editor is glintd's setting (Settings, or ⌘K → "Open files in …"), the same in every window.

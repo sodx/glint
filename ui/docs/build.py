@@ -572,12 +572,12 @@ export default { plugins: [glint()] };""", "js")}
 """))
     s.append(("d-app", "This window", """
 <h2>Using this window</h2>
-<p>The top line says what failed and where, which program waits for you, or that all is quiet. Below it is one run at a time. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>.</p>
+<p>The top line covers every project: it says what failed and where, which program waits for you, or that all is quiet everywhere. Below it is one run at a time, the newest by when its last event happened. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>; a project with a failure or a pause opens on that run.</p>
 <table class="ref">
-<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action</td></tr>
+<tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action; it also finds what events say, in every project, and opens a match in its run</td></tr>
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
-<tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
+<tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>

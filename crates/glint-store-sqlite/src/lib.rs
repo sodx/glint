@@ -367,7 +367,10 @@ impl Store for SqliteStore {
     }
 
     fn runs(&self, project: Option<&str>, limit: usize) -> Result<Vec<RunSummary>, StoreError> {
-        // Bookkeeping events (updates, resumes) don't make a run "active".
+        // Bookkeeping events (updates, resumes) don't make a run "active". Newest first by the
+        // time of the run's last event (ts is fixed-width RFC 3339, so text order is time order),
+        // not by when glintd received it: a late batch of an old run stays where it happened.
+        // Runs that end at the same instant keep ingest order.
         let sql = "SELECT g.run, g.project, g.first, g.last, g.n, g.errors, e.id,
                           json_extract(f.body, '$.origin.file'),
                           CASE WHEN f.kind = 'core.log' THEN json_extract(f.body, '$.payload.message') END
@@ -377,11 +380,11 @@ impl Store for SqliteStore {
                          FROM events
                          WHERE kind NOT IN ('core.update', 'ctl.resume') AND (?1 IS NULL OR project = ?1)
                          GROUP BY run
-                         ORDER BY last_seq DESC
+                         ORDER BY last DESC, last_seq DESC
                          LIMIT ?2) g
                    JOIN events e ON e.seq = g.last_seq
                    JOIN events f ON f.seq = g.first_seq
-                   ORDER BY g.last_seq DESC";
+                   ORDER BY g.last DESC, g.last_seq DESC";
         self.read(|conn| {
             let mut stmt = conn.prepare_cached(sql).map_err(backend)?;
             let rows = stmt
@@ -752,6 +755,25 @@ mod tests {
         assert_eq!(s.runs(Some("shop"), 10).unwrap().len(), 1);
         let all = s.query(&Query::default()).unwrap();
         assert_eq!(runs[0].last_id, all[2].id);
+    }
+
+    #[test]
+    fn runs_order_by_last_event_time_not_arrival() {
+        let s = SqliteStore::open_in_memory().unwrap();
+        // "late" arrives last but happened first; "a" and "b" end at the same instant.
+        s.insert(&events(
+            r#"[
+              {"kind":"core.log","payload":{"message":"x"},"run":"a","ts":"2026-01-02T10:00:00Z"},
+              {"kind":"core.log","payload":{"message":"x"},"run":"b","ts":"2026-01-02T10:00:00Z"},
+              {"kind":"core.log","payload":{"message":"x"},"run":"new","ts":"2026-01-02T11:00:00.5Z"},
+              {"kind":"core.log","payload":{"message":"x"},"run":"late","ts":"2026-01-01T09:00:00Z"}
+            ]"#,
+        ))
+        .unwrap();
+        let order = |n| s.runs(None, n).unwrap().into_iter().map(|r| r.run).collect::<Vec<_>>();
+        assert_eq!(order(10), ["new", "b", "a", "late"]);
+        // The limit keeps the newest by time, not the last to arrive.
+        assert_eq!(order(1), ["new"]);
     }
 
     #[test]
