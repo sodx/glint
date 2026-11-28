@@ -4,7 +4,7 @@
 //! Each envelope is stored whole as JSON (`body`) plus the columns filters need. Rows are
 //! ordered by `seq`, the insertion order, which is what "oldest first" means everywhere.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -72,25 +72,55 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
+    /// Opens (or creates) the database at `path`. A file that is not a SQLite database, or one
+    /// SQLite reports as damaged, gives [`StoreError::Corrupt`].
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        Self::open_inner(path.as_ref()).map_err(|e| match e {
+            rusqlite::Error::SqliteFailure(f, msg)
+                if matches!(f.code, rusqlite::ErrorCode::NotADatabase | rusqlite::ErrorCode::DatabaseCorrupt) =>
+            {
+                StoreError::Corrupt(msg.unwrap_or_else(|| f.to_string()))
+            }
+            other => backend(other),
+        })
+    }
+
+    /// [`open`](Self::open), and when the file is corrupt: move it (and its `-wal` / `-shm`
+    /// files) aside as `<name>.corrupt-<unix seconds>` and start with an empty database. Returns
+    /// where the damaged file went, so the caller can say so. A daemon that cannot open its
+    /// store would otherwise fail at every start, and a login service would restart it forever.
+    pub fn open_or_recover(path: impl AsRef<Path>) -> Result<(Self, Option<PathBuf>), StoreError> {
         let path = path.as_ref();
-        let writer = Connection::open(path).map_err(backend)?;
+        match Self::open(path) {
+            Err(StoreError::Corrupt(_)) => {
+                let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "glint.db".into());
+                let aside = path.with_file_name(format!("{name}.corrupt-{ts}"));
+                std::fs::rename(path, &aside).map_err(|e| StoreError::Backend(format!("moving {} aside: {e}", path.display())))?;
+                for ext in ["-wal", "-shm"] {
+                    let side = path.with_file_name(format!("{name}{ext}"));
+                    if side.exists() {
+                        let _ = std::fs::rename(&side, aside.with_file_name(format!("{name}.corrupt-{ts}{ext}")));
+                    }
+                }
+                Ok((Self::open(path)?, Some(aside)))
+            }
+            other => other.map(|s| (s, None)),
+        }
+    }
+
+    fn open_inner(path: &Path) -> Result<Self, rusqlite::Error> {
+        let writer = Connection::open(path)?;
         // Incremental auto-vacuum lets pruning give space back to the disk. It must be set before
         // the first table exists; a database created without it is converted once (a VACUUM).
-        let vacuum_mode: i64 = writer.query_row("PRAGMA auto_vacuum", [], |r| r.get(0)).map_err(backend)?;
+        let vacuum_mode: i64 = writer.query_row("PRAGMA auto_vacuum", [], |r| r.get(0))?;
         if vacuum_mode != 2 {
-            writer.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;").map_err(backend)?;
+            writer.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;")?;
         }
-        writer
-            .execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;")
-            .map_err(backend)?;
-        writer.execute_batch(SCHEMA).map_err(backend)?;
-        let reader = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(backend)?;
-        reader.execute_batch("PRAGMA busy_timeout = 5000;").map_err(backend)?;
+        writer.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;")?;
+        writer.execute_batch(SCHEMA)?;
+        let reader = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        reader.execute_batch("PRAGMA busy_timeout = 5000;")?;
         Ok(Self {
             writer: Mutex::new(writer),
             reader: Some(Mutex::new(reader)),
@@ -555,6 +585,26 @@ fn collect_strings(v: &Value, out: &mut String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_corrupt_file_is_moved_aside_and_a_fresh_store_opens() {
+        let dir = std::env::temp_dir().join(format!("glint-corrupt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("glint.db");
+        std::fs::write(&db, b"this is not a sqlite database, just some bytes that are long enough to look like a header").unwrap();
+        assert!(matches!(SqliteStore::open(&db), Err(StoreError::Corrupt(_))));
+        let (store, aside) = SqliteStore::open_or_recover(&db).unwrap();
+        let aside = aside.expect("moved aside");
+        assert!(aside.file_name().unwrap().to_string_lossy().starts_with("glint.db.corrupt-"));
+        assert!(std::fs::read(&aside).unwrap().starts_with(b"this is not"));
+        assert_eq!(store.stats().unwrap().0, 0);
+        drop(store);
+        // A healthy database is opened as it is.
+        let (_, again) = SqliteStore::open_or_recover(&db).unwrap();
+        assert!(again.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use glint_core::Normaliser;
     use glint_protocol::{BodyFormat, Level, parse_body};
 

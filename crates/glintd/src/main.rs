@@ -14,6 +14,13 @@
 //! | `editor` | `GLINT_EDITOR` | the first installed of vscode, cursor, phpstorm, zed, … |
 //!
 //! `RUST_LOG` sets the log filter (default `info`).
+//!
+//! Start-up never crash-loops a login service: the port is bound before the store is opened, and
+//! with `GLINT_WAIT_FOR_PORT=1` (set by the LaunchAgent and the systemd unit `glint install`
+//! writes) a taken port is waited for instead of being an error, so a glintd started by hand or
+//! by the app hands over to the service when it stops. A database file that is not a database or
+//! is damaged is moved aside as `glint.db.corrupt-<unix seconds>` and glintd starts empty.
+//! SIGTERM and Ctrl-C stop it gracefully.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
@@ -46,11 +53,17 @@ async fn main() -> Result<()> {
     }
     let db = glint_core::config::expand(&settings.db);
     trim_log();
+    // The port first: a second glintd must not touch the database the first one is using.
+    let listener = bind_main(addr).await?;
     if let Some(dir) = db.parent() {
         std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     }
 
-    let store = Arc::new(SqliteStore::open(&db).with_context(|| format!("opening {}", db.display()))?);
+    let (store, aside) = SqliteStore::open_or_recover(&db).with_context(|| format!("opening {}", db.display()))?;
+    if let Some(aside) = aside {
+        tracing::warn!(db = %db.display(), moved_to = %aside.display(), "the database was damaged or not a database; moved it aside and started with an empty one");
+    }
+    let store = Arc::new(store);
     let (hub, writer) = Hub::start(store.clone(), HubConfig::default());
     hub.set_redactor(redactor(&settings));
     if !settings.redact {
@@ -73,10 +86,6 @@ async fn main() -> Result<()> {
             tokio::time::sleep(Duration::from_secs(600)).await;
         }
     });
-    let listener = TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("binding {addr}; is another glintd running?"))?;
-
     let otlp_listener = optional_listener(&settings.otlp_addr, "otlp_addr (GLINT_OTLP_ADDR)", "OTLP receiver", "is an OpenTelemetry collector running?").await?;
 
     let mut adapters = vec!["native".to_owned()];
@@ -98,7 +107,7 @@ async fn main() -> Result<()> {
         }
     };
     tokio::spawn(async move {
-        let _ = tokio::signal::ctrl_c().await;
+        stop_signal().await;
         let _ = stop_tx.send(true);
     });
 
@@ -120,6 +129,72 @@ async fn main() -> Result<()> {
     }
     tracing::info!("stopped");
     Ok(())
+}
+
+/// Ctrl-C, or SIGTERM (launchd, systemd, `kill`, and `glint install` replacing this glintd).
+async fn stop_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        if let Ok(mut term) = signal(SignalKind::terminate()) {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = term.recv() => {}
+            }
+            return;
+        }
+    }
+    let _ = tokio::signal::ctrl_c().await;
+}
+
+/// Binds the main address. When it is taken: with `GLINT_WAIT_FOR_PORT=1` (a login service),
+/// wait for it to come free, so the service takes over from a glintd the app or a terminal
+/// started, without exiting and being restarted in a loop. Otherwise fail at once and say who
+/// holds the port.
+async fn bind_main(addr: SocketAddr) -> Result<TcpListener> {
+    let wait = std::env::var("GLINT_WAIT_FOR_PORT").is_ok_and(|v| !v.is_empty() && v != "0");
+    let mut logged = false;
+    loop {
+        match TcpListener::bind(addr).await {
+            Ok(l) => {
+                if logged {
+                    tracing::info!(%addr, "the port is free now; taking over");
+                }
+                return Ok(l);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+                let holder = holder(addr).await;
+                if !wait {
+                    anyhow::bail!("binding {addr}: the port is taken by {holder}");
+                }
+                if !logged {
+                    tracing::warn!(%addr, "the port is taken by {holder}; waiting for it to come free");
+                    logged = true;
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            Err(e) => return Err(e).with_context(|| format!("binding {addr}")),
+        }
+    }
+}
+
+/// Who answers on `addr`: "glintd <version> (pid N)" when it is a glintd, else "another program".
+async fn holder(addr: SocketAddr) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let ask = async {
+        let mut s = tokio::net::TcpStream::connect(addr).await.ok()?;
+        s.write_all(format!("GET /v1/info HTTP/1.0\r\nHost: {addr}\r\n\r\n").as_bytes()).await.ok()?;
+        let mut buf = Vec::new();
+        s.take(64 * 1024).read_to_end(&mut buf).await.ok()?;
+        let text = String::from_utf8_lossy(&buf);
+        let body = text.split_once("\r\n\r\n")?.1;
+        let v: serde_json::Value = serde_json::from_str(body).ok()?;
+        (v["name"] == "glint").then(|| {
+            let pid = v["pid"].as_u64().map(|p| format!(" (pid {p})")).unwrap_or_default();
+            format!("glintd {}{pid}", v["version"].as_str().unwrap_or("?"))
+        })
+    };
+    tokio::time::timeout(Duration::from_secs(2), ask).await.ok().flatten().unwrap_or_else(|| "another program".into())
 }
 
 /// The listener for containers and other machines. Its address may not exist yet when glintd

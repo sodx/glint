@@ -153,7 +153,7 @@ Renderers fetch `GET /v1/blobs/sha256:<hex>`.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/info` | server version, supported `v`, known kinds, enabled adapters |
+| `GET /v1/info` | server version, process id (`pid`), supported `v`, known kinds, enabled adapters |
 | `GET /v1/runs?project=&limit=` | recent runs, newest first: `{run, project, first, last, events, errors, last_id, file?, head?}` (`file`: the first event's calling file; `head`: its first log line) |
 | `GET /v1/source?event=&frame=` | the lines around an event's call site, or around `payload.frames[frame]`: `{file, line, start, lines}`. Only files an event names. |
 | `POST /v1/open?event=&frame=&editor=` | opens that place in the editor (vscode, cursor, windsurf, zed, phpstorm, idea, webstorm, pycharm, sublime; default `GLINT_EDITOR`, else the first installed) |

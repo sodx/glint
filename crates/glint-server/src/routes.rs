@@ -171,6 +171,8 @@ async fn info(State(s): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "name": "glint",
         "version": env!("CARGO_PKG_VERSION"),
+        // Lets `glint install` stop exactly this glintd before the login service takes the port.
+        "pid": std::process::id(),
         "protocol": [PROTOCOL_VERSION],
         "adapters": *s.adapters,
         "data": s.admin.as_ref().map(|a| a.settings()["data"].clone()),
