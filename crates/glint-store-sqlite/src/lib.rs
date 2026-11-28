@@ -134,6 +134,47 @@ impl SqliteStore {
         self.delete_upto(boundary)
     }
 
+    /// Bytes the database holds in use: its pages minus the free ones.
+    pub fn used_bytes(&self) -> Result<u64, StoreError> {
+        let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        let pages: i64 = conn.query_row("PRAGMA page_count", [], |r| r.get(0)).map_err(backend)?;
+        let free: i64 = conn.query_row("PRAGMA freelist_count", [], |r| r.get(0)).map_err(backend)?;
+        let size: i64 = conn.query_row("PRAGMA page_size", [], |r| r.get(0)).map_err(backend)?;
+        Ok(u64::try_from((pages - free) * size).unwrap_or(0))
+    }
+
+    /// Deletes the oldest events until the database holds at most `max_bytes` (0: no cap). It
+    /// goes down to 90% of the cap, so a busy program does not set it off after every write.
+    /// Returns how many events were removed.
+    pub fn prune_bytes(&self, max_bytes: u64) -> Result<u64, StoreError> {
+        if max_bytes == 0 {
+            return Ok(0);
+        }
+        let target = max_bytes - max_bytes / 10;
+        let mut removed = 0;
+        // Each round removes the share of events the excess suggests; the index and free pages
+        // make that a guess, so a few rounds close in on the target.
+        for _ in 0..8 {
+            let used = self.used_bytes()?;
+            if (used <= max_bytes && removed == 0) || used <= target {
+                break;
+            }
+            let boundary: Option<i64> = {
+                let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+                let n: i64 = conn.query_row("SELECT count(*) FROM events", [], |r| r.get(0)).map_err(backend)?;
+                if n == 0 {
+                    break;
+                }
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let k = ((n as f64) * (used - target) as f64 / used as f64).ceil() as i64;
+                conn.query_row("SELECT seq FROM events ORDER BY seq LIMIT 1 OFFSET ?1", [k.clamp(1, n) - 1], |r| r.get(0)).ok()
+            };
+            let Some(b) = boundary else { break };
+            removed += self.delete_upto(b)?;
+        }
+        Ok(removed)
+    }
+
     /// Deletes every event.
     pub fn clear(&self) -> Result<u64, StoreError> {
         self.delete_upto(i64::MAX)
@@ -698,6 +739,27 @@ mod tests {
 
         s.clear().unwrap();
         assert!(s.activity_since(since).unwrap().is_empty());
+    }
+
+    #[test]
+    fn prune_bytes_keeps_the_database_under_its_cap_and_the_newest_events() {
+        let s = SqliteStore::open_in_memory().unwrap();
+        let text = "lorem ipsum dolor sit amet ".repeat(400); // ~10 KB, indexed too
+        for i in 0..300 {
+            s.insert(&events(&format!(r#"{{"id":"e{i:03}","kind":"core.text","payload":{{"text":"{text}"}}}}"#))).unwrap();
+        }
+        let before = s.used_bytes().unwrap();
+        assert!(before > 4_000_000, "{before}");
+        assert_eq!(s.prune_bytes(0).unwrap(), 0, "0 means no cap");
+        assert_eq!(s.prune_bytes(before * 2).unwrap(), 0, "under the cap");
+        let cap = 2_000_000;
+        let removed = s.prune_bytes(cap).unwrap();
+        assert!(removed > 100 && removed < 300, "{removed}");
+        assert!(s.used_bytes().unwrap() <= cap, "{}", s.used_bytes().unwrap());
+        assert!(s.get("e299").unwrap().is_some(), "the newest stay");
+        assert!(s.get("e000").unwrap().is_none(), "the oldest go");
+        let fts: i64 = s.writer.lock().unwrap().query_row("SELECT count(*) FROM events_fts", [], |r| r.get(0)).unwrap();
+        assert_eq!(u64::try_from(fts).unwrap(), 300 - removed);
     }
 
     #[test]

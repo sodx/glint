@@ -585,7 +585,7 @@ export default { plugins: [glint()] };""", "js")}
     s.append(("d-config", "Settings and data", """
 <h2>Settings and data</h2>
 <p>Open Settings with <kbd>,</kbd> or the gear at the top. There you choose how long events are kept and how many, which editor files open in, and whether coding agents hear about failures. Changes apply right away and are saved to <code>~/.glint/config.toml</code>, which you can also edit by hand. An environment variable with the same name (<code>GLINT_KEEP_DAYS</code>, <code>GLINT_EDITOR</code>, …) wins over both, and Settings shows which ones are set that way.</p>
-<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them, so it stays at a few hundred MB at most. <span id="docsData"></span></p>
+<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them. The database also stays under 500 MB: glintd checks every 10 seconds and deletes the oldest events when it is crossed. <span id="docsData"></span></p>
 <p>Everything lives in <code>~/.glint</code>: the database, the settings, the SDK copies and <code>glintd.log</code>.</p>
 """))
     s.append(("d-secrets", "Secrets", """

@@ -47,6 +47,10 @@ Content-Type: application/json
 - Loopback servers only answer requests whose `Host` is `127.0.0.1:<port>`, `localhost:<port>` or
   `[::1]:<port>` (DNS-rebinding guard).
 - Max body: 16 MiB. Max envelope: 1 MiB. A larger envelope gets `413`; use blobs (§6) instead.
+  Events from other adapters (OTLP, agent hooks) larger than 1 MiB are stored with their longest
+  strings cut (`…[truncated N bytes]`) and `meta.truncated` set to the original size in bytes.
+- `429 Too Many Requests` with `Retry-After` means the writer queue is full. Clients drop those
+  events quietly (counting them in `meta.dropped`) and do not retry.
 
 ## 3. Envelope
 

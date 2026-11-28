@@ -189,8 +189,7 @@ async fn ingest(State(hub): State<Hub>, headers: HeaderMap, body: Bytes) -> Resp
     let ids: Vec<String> = events.iter().map(|e| e.id.clone()).collect();
     match hub.submit(events).await {
         Ok(()) => {}
-        Err(e @ SubmitError::Closed) => return error(StatusCode::SERVICE_UNAVAILABLE, e.to_string()),
-        Err(e @ SubmitError::NotStored(_)) => return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => return submit_error(&e),
     }
     (
         StatusCode::ACCEPTED,
@@ -281,7 +280,7 @@ async fn hook(State(hub): State<Hub>, Path(agent): Path<String>, body: Bytes) ->
     let n = events.len();
     match hub.submit(events).await {
         Ok(()) => Json(json!({ "accepted": n })).into_response(),
-        Err(e) => error(StatusCode::SERVICE_UNAVAILABLE, e.to_string()),
+        Err(e) => submit_error(&e),
     }
 }
 
@@ -410,6 +409,21 @@ async fn agent_activity(State(hub): State<Hub>, body: Bytes) -> Response {
     let n = parsed.len();
     hub.record_activity(parsed).await;
     Json(json!({ "accepted": n })).into_response()
+}
+
+/// Why events were not taken. A full writer queue is `429` with `Retry-After`: clients drop
+/// those events quietly (`docs/PROTOCOL.md` §2).
+pub(crate) fn submit_error(e: &SubmitError) -> Response {
+    let status = match e {
+        SubmitError::Busy => StatusCode::TOO_MANY_REQUESTS,
+        SubmitError::Closed => StatusCode::SERVICE_UNAVAILABLE,
+        SubmitError::NotStored(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    let mut r = error(status, e.to_string());
+    if matches!(e, SubmitError::Busy) {
+        r.headers_mut().insert(header::RETRY_AFTER, header::HeaderValue::from_static("1"));
+    }
+    r
 }
 
 pub(crate) fn error(status: StatusCode, message: String) -> Response {

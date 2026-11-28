@@ -562,6 +562,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <p class="set-stat" id="setData">…</p>
       <div class="set-row"><label for="s-keep_days">Keep events for</label><div class="set-ctl"><input type="number" id="s-keep_days" data-key="keep_days" min="0" max="3650" step="1"><span>days</span></div><p class="set-help">Older ones are deleted every 10 minutes. 0 keeps everything.</p></div>
       <div class="set-row"><label for="s-max_events">Keep at most</label><div class="set-ctl"><input type="number" id="s-max_events" data-key="max_events" min="0" step="1000"><span>events</span></div><p class="set-help">The oldest go first. 0 means no limit. 100,000 events take a few hundred MB at most.</p></div>
+      <div class="set-row"><label for="s-max_db_bytes">Database size at most</label><div class="set-ctl"><input type="number" id="s-max_db_bytes" data-key="max_db_bytes" data-scale="1048576" min="0" step="50"><span>MB</span></div><p class="set-help">Checked every 10 seconds; the oldest events go first. 0 means no limit.</p></div>
       <div class="set-actions"><button class="btn" data-act="data-prune">Clean up now</button><button class="btn danger" data-act="data-clear">Delete all events…</button></div>
     </section>
 
@@ -902,7 +903,7 @@ export default { plugins: [glint()] };</code></pre>
 </section><section id="d-config">
 <h2>Settings and data</h2>
 <p>Open Settings with <kbd>,</kbd> or the gear at the top. There you choose how long events are kept and how many, which editor files open in, and whether coding agents hear about failures. Changes apply right away and are saved to <code>~/.glint/config.toml</code>, which you can also edit by hand. An environment variable with the same name (<code>GLINT_KEEP_DAYS</code>, <code>GLINT_EDITOR</code>, …) wins over both, and Settings shows which ones are set that way.</p>
-<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them, so it stays at a few hundred MB at most. <span id="docsData"></span></p>
+<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them. The database also stays under 500 MB: glintd checks every 10 seconds and deletes the oldest events when it is crossed. <span id="docsData"></span></p>
 <p>Everything lives in <code>~/.glint</code>: the database, the settings, the SDK copies and <code>glintd.log</code>.</p>
 </section><section id="d-secrets">
 <h2>Secrets</h2>
@@ -1803,14 +1804,14 @@ function drawSettings() {
   ed.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
   document.querySelectorAll("#settings [data-key]").forEach(el => {
     const k = el.dataset.key, v = st[k];
-    if (el.type === "checkbox") el.checked = !!v; else if (el.dataset.list) el.value = (v || []).join(el.dataset.list === "," ? ", " : "\n"); else el.value = v ?? "";
+    if (el.type === "checkbox") el.checked = !!v; else if (el.dataset.scale) el.value = Math.round((v || 0) / el.dataset.scale); else if (el.dataset.list) el.value = (v || []).join(el.dataset.list === "," ? ", " : "\n"); else el.value = v ?? "";
     const locked = i.from_env.includes(k); el.disabled = locked;
     const row = el.closest(".set-row"); row.querySelector(".locked")?.remove();
     if (locked) row.insertAdjacentHTML("beforeend", `<p class="locked">Set by ${esc(i.env_names[k])} in glintd's environment</p>`);
   });
 }
 async function saveSetting(el) {
-  const k = el.dataset.key, v = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.dataset.list ? el.value.split(el.dataset.list).map(x => x.trim()).filter(Boolean) : el.value.trim();
+  const k = el.dataset.key, v = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) * (Number(el.dataset.scale) || 1) : el.dataset.list ? el.value.split(el.dataset.list).map(x => x.trim()).filter(Boolean) : el.value.trim();
   const saved = $("setSaved"); saved.classList.remove("err");
   try {
     setInfo = await api("/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ [k]: v }) });

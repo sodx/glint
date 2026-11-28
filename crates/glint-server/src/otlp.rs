@@ -41,7 +41,7 @@ async fn receive(hub: Hub, headers: &HeaderMap, body: &[u8], decode: Decoder) ->
     };
     let events = hub.normalise(incoming);
     if let Err(e) = hub.submit(events).await {
-        return (StatusCode::SERVICE_UNAVAILABLE, e.to_string()).into_response();
+        return crate::routes::submit_error(&e);
     }
     // An empty Export*ServiceResponse: zero bytes in protobuf, `{}` in JSON.
     if json {

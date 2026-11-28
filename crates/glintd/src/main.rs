@@ -60,17 +60,24 @@ async fn main() -> Result<()> {
     glint_server::set_default_editor(Some(settings.editor.clone()));
 
     // Retention: shortly after start, then every 10 minutes, with the settings of the moment.
+    // The size cap is checked every 10 s, so a program writing fast cannot fill the disk between
+    // two rounds.
     let pruner = admin.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(20)).await;
+        let mut last_full: Option<std::time::Instant> = None;
         loop {
+            let full = last_full.is_none_or(|t| t.elapsed() >= Duration::from_secs(600));
             let a = pruner.clone();
-            match tokio::task::spawn_blocking(move || a.prune()).await {
+            match tokio::task::spawn_blocking(move || if full { a.prune() } else { a.prune_size() }).await {
                 Ok(Ok(n)) if n > 0 => tracing::info!(removed = n, "pruned old events"),
                 Ok(Err(e)) => tracing::warn!(%e, "pruning failed"),
                 _ => {}
             }
-            tokio::time::sleep(Duration::from_secs(600)).await;
+            if full {
+                last_full = Some(std::time::Instant::now());
+            }
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
     });
     let listener = TcpListener::bind(addr)
@@ -215,7 +222,13 @@ impl Admin {
 
     fn prune(&self) -> Result<u64, String> {
         let s = self.current();
-        self.store.prune(Some(s.keep_days), Some(s.max_events)).map_err(|e| e.to_string())
+        let n = self.store.prune(Some(s.keep_days), Some(s.max_events)).map_err(|e| e.to_string())?;
+        Ok(n + self.prune_size()?)
+    }
+
+    /// Keeps the database under `max_db_bytes`.
+    fn prune_size(&self) -> Result<u64, String> {
+        self.store.prune_bytes(self.current().max_db_bytes).map_err(|e| e.to_string())
     }
 }
 

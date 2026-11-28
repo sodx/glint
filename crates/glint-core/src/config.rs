@@ -16,6 +16,8 @@ pub struct Settings {
     pub keep_days: u32,
     /// At most this many events are kept, the oldest go first; 0 means no cap.
     pub max_events: u64,
+    /// The database is kept under this many bytes, the oldest events go first; 0 means no cap.
+    pub max_db_bytes: u64,
     /// Where files open; empty: the first installed editor.
     pub editor: String,
     /// Coding agents hear about new failures with each prompt.
@@ -43,6 +45,7 @@ impl Default for Settings {
         Self {
             keep_days: 7,
             max_events: 100_000,
+            max_db_bytes: 500 * MB,
             editor: String::new(),
             agent_context: true,
             stop_guard: true,
@@ -62,6 +65,7 @@ impl Default for Settings {
 pub const KEYS: &[(&str, &str, bool)] = &[
     ("keep_days", "GLINT_KEEP_DAYS", false),
     ("max_events", "GLINT_MAX_EVENTS", false),
+    ("max_db_bytes", "GLINT_MAX_DB_BYTES", false),
     ("editor", "GLINT_EDITOR", false),
     ("agent_context", "GLINT_AGENT_CONTEXT", false),
     ("stop_guard", "GLINT_STOP_GUARD", false),
@@ -74,6 +78,23 @@ pub const KEYS: &[(&str, &str, bool)] = &[
     ("remote_addr", "GLINT_REMOTE_ADDR", true),
     ("db", "GLINT_DB", true),
 ];
+
+const MB: u64 = 1024 * 1024;
+
+/// A size: plain bytes, or with a unit (`500MB`, `2 GB`, `800k`; powers of 1024).
+fn parse_bytes(v: &str) -> Option<u64> {
+    let v = v.trim().to_ascii_lowercase();
+    let digits = v.find(|c: char| !c.is_ascii_digit()).unwrap_or(v.len());
+    let n: u64 = v[..digits].parse().ok()?;
+    let mult = match v[digits..].trim().trim_end_matches('b').trim_end_matches('i') {
+        "" => 1,
+        "k" => 1024,
+        "m" => MB,
+        "g" => 1024 * MB,
+        _ => return None,
+    };
+    n.checked_mul(mult)
+}
 
 pub fn home() -> Option<PathBuf> {
     std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from)
@@ -225,6 +246,7 @@ impl Settings {
         match key {
             "keep_days" => self.keep_days = v.trim().parse().unwrap_or(self.keep_days),
             "max_events" => self.max_events = v.trim().parse().unwrap_or(self.max_events),
+            "max_db_bytes" => self.max_db_bytes = parse_bytes(v).unwrap_or(self.max_db_bytes),
             "editor" => self.editor = v.trim().to_owned(),
             "agent_context" => self.agent_context = truthy(v).unwrap_or(self.agent_context),
             "stop_guard" => self.stop_guard = truthy(v).unwrap_or(self.stop_guard),
@@ -246,6 +268,9 @@ impl Settings {
         }
         if self.max_events != 0 && self.max_events < 1000 {
             return Err("max_events: at least 1000, or 0 for no cap".into());
+        }
+        if self.max_db_bytes != 0 && self.max_db_bytes < 10 * MB {
+            return Err("max_db_bytes: at least 10 MB, or 0 for no cap".into());
         }
         for (k, a) in [("addr", &self.addr), ("otlp_addr", &self.otlp_addr), ("remote_addr", &self.remote_addr)] {
             if !(k != "addr" && a == "off") && a.parse::<std::net::SocketAddr>().is_err() {
@@ -271,6 +296,9 @@ impl Settings {
              keep_days = {}\n\
              # At most this many events are kept; the oldest go first (0: no cap).         GLINT_MAX_EVENTS\n\
              max_events = {}\n\
+             # The database stays under this many bytes; the oldest events go first.     GLINT_MAX_DB_BYTES\n\
+             # Units work too: \"500MB\", \"2GB\". 0: no cap.\n\
+             max_db_bytes = {}\n\
              # Where files open: vscode, cursor, windsurf, zed, phpstorm, idea, webstorm, pycharm,\n\
              # sublime. Empty: the first one installed.                                    GLINT_EDITOR\n\
              editor = \"{}\"\n\
@@ -295,7 +323,7 @@ impl Settings {
              # bridge address (172.17.0.1:23600) rather than 0.0.0.0.             GLINT_REMOTE_ADDR\n\
              remote_addr = \"{}\"\n\
              db = \"{}\"         # GLINT_DB\n",
-            self.keep_days, self.max_events, self.editor, self.agent_context, self.stop_guard, self.redact,
+            self.keep_days, self.max_events, self.max_db_bytes, self.editor, self.agent_context, self.stop_guard, self.redact,
             toml_list(&self.redact_keys), toml_list(&self.redact_patterns), toml_list(&self.redact_allow), self.addr, self.otlp_addr, self.remote_addr, self.db
         )
     }
@@ -340,6 +368,23 @@ mod tests {
         s.max_events = 0;
         s.redact_patterns = vec!["(".into()];
         assert!(s.validate().is_err());
+    }
+
+    #[test]
+    fn database_size_cap() {
+        assert_eq!(Settings::default().max_db_bytes, 500 * MB);
+        let mut s = Settings::default();
+        for (text, bytes) in [("2GB", 2048 * MB), ("300 MB", 300 * MB), ("300MiB", 300 * MB), ("20000000", 20_000_000), ("0", 0), ("800k", 800 * 1024)] {
+            s.set("max_db_bytes", text);
+            assert_eq!(s.max_db_bytes, bytes, "{text}");
+        }
+        s.set("max_db_bytes", "lots");
+        assert_eq!(s.max_db_bytes, 800 * 1024, "unparsable text leaves it");
+        assert!(s.validate().is_err(), "under 10 MB");
+        s.max_db_bytes = 0;
+        s.validate().unwrap();
+        s.max_db_bytes = 123 * MB;
+        assert_eq!(parse(&s.to_file()).get("max_db_bytes").map(String::as_str), Some("128974848"));
     }
 
     #[test]
