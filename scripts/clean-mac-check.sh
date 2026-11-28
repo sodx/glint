@@ -7,8 +7,9 @@
 #   - glint() from PHP, Python and Node reaches glintd;
 #   - Claude Code has the MCP server and the hooks;
 #   - an agent is found when only its app (Windsurf.app) or only its command (gemini) exists;
+#   - Glint.app opens at login (a LaunchAgent that names this copy of the app);
 #   - glint report writes a readable file;
-#   - glint uninstall removes what install wrote.
+#   - glint uninstall removes what install wrote, and a running Glint.app quits (--launch-app).
 #
 #   scripts/clean-mac-check.sh                    # sandbox: a fresh HOME in a temp folder
 #   scripts/clean-mac-check.sh --app Glint.app    # a bundle or .dmg (default: newest in target/release)
@@ -183,8 +184,10 @@ wait_up() { for _ in $(seq 1 "$1"); do up && return 0; sleep 1; done; return 1; 
 if up; then echo "something already answers at $url; stop it first" >&2; exit 2; fi
 if [ "$launch_app" = 1 ]; then
   # The app clears the flag on its bundle and starts the bundled glintd.
-  env -i "${base_env[@]}" "$app/Contents/MacOS/Glint" > "$out/app.log" 2>&1 &
-  pids="$pids $!"
+  # Its own identifier, so it runs beside a Glint already open on this Mac instead of handing over.
+  env -i "${base_env[@]}" GLINT_APP_ID=local.glint.app.check "$app/Contents/MacOS/Glint" > "$out/app.log" 2>&1 &
+  app_pid=$!
+  pids="$pids $app_pid"
   if wait_up 40; then pass "Glint.app started glintd"; else fail "Glint.app did not start glintd (app.log follows)"; tail -30 "$out/app.log"; fi
 else
   # What the app does when nothing answers: run the bundled glintd, logging to ~/.glint/glintd.log.
@@ -227,9 +230,15 @@ if [ "$(cat "$out/status")" = 200 ]; then
       *) fail "$name: $detail" ;;
     esac
   done < "$out/setup-steps.txt"
-  for want in service php python node claude; do
+  for want in service login php python node claude; do
     grep -q "^ok $want " "$out/setup-steps.txt" || fail "setup did not report $want as ok"
   done
+  login_plist="$home/Library/LaunchAgents/local.glint.app.login.plist"
+  if plutil -lint "$login_plist" >/dev/null 2>&1 && grep -qF "<string>$app</string>" "$login_plist"; then
+    pass "the login item opens $app"
+  else
+    fail "no valid login item for $app: $(cat "$login_plist" 2>&1 | head -5)"
+  fi
   grep -q "^ok agents Windsurf" "$out/setup-steps.txt" && pass "Windsurf found by its app alone" || fail "Windsurf (only Windsurf.app) was not set up"
   grep -q "^ok agents Gemini CLI" "$out/setup-steps.txt" && pass "Gemini CLI found by its command alone" || fail "Gemini CLI (only the gemini command) was not set up"
 else
@@ -247,7 +256,7 @@ while read -r status name detail; do
     *) fail "$name: $detail" ;;
   esac
 done < "$out/doctor-after.txt"
-for want in daemon service php python node agents; do
+for want in daemon service login php python node agents; do
   grep -q "^ok $want " "$out/doctor-after.txt" || fail "doctor does not report $want as ok"
 done
 
@@ -307,6 +316,12 @@ step "glint uninstall"
 in_shell "\"\$HOME/.glint/bin/glint\" uninstall" > "$out/uninstall.txt"
 sed 's/^/        /' "$out/uninstall.txt"
 [ ! -e "$home/Library/LaunchAgents/local.glint.glintd.plist" ] && pass "LaunchAgent removed" || fail "LaunchAgent still there"
+[ ! -e "$home/Library/LaunchAgents/local.glint.app.login.plist" ] && pass "login item removed" || fail "login item still there"
+[ -e "$home/.glint/uninstalled" ] && pass "uninstall left the marker a running Glint.app quits on" || fail "no ~/.glint/uninstalled"
+if [ -n "${app_pid:-}" ]; then
+  for _ in $(seq 1 15); do kill -0 "$app_pid" 2>/dev/null || break; sleep 1; done
+  kill -0 "$app_pid" 2>/dev/null && fail "Glint.app still runs after glint uninstall" || pass "Glint.app quit after glint uninstall"
+fi
 ini_dir=$(in_shell "php --ini" | sed -n 's/^Scan for additional .ini files in: //p' | cut -d: -f1)
 [ -n "$ini_dir" ] && [ ! -e "$ini_dir/99-glint.ini" ] && pass "PHP: no 99-glint.ini in $ini_dir" || fail "PHP: 99-glint.ini still in ${ini_dir:-?}"
 site=$(in_shell "python3 -c 'import site; print(site.getusersitepackages())'" | tail -1)

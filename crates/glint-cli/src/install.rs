@@ -3,6 +3,11 @@
 //!
 //! - **service**: copies `glintd` and `glint` to `~/.glint/bin` and starts glintd at login
 //!   (launchd on macOS, a systemd user unit on Linux).
+//! - **login** (macOS, when Glint.app is installed): a LaunchAgent that opens Glint.app at login,
+//!   so the menu-bar spark and its notifications are back after a restart. It is only loaded at
+//!   the next login (never now: that would open a second copy). "Open at login" in the spark's
+//!   menu turns it off and on; turned off, `glint install` leaves it off (`~/.glint/app-state.json`)
+//!   unless `--only login` asks for it.
 //! - **php** (8.0 or newer): `auto_prepend_file` in PHP's ini scan directory points at a small
 //!   stub next to the ini file, which includes `~/.glint/sdk/php/autoload.php` only when it exists
 //!   and PHP is 8.0+, so a deleted `~/.glint` or an older PHP never stops a script. An existing
@@ -31,6 +36,7 @@ use std::process::Command;
 pub(crate) const MARK_BEGIN: &str = "# >>> glint >>>";
 pub(crate) const MARK_END: &str = "# <<< glint <<<";
 const SERVICE_LABEL: &str = "local.glint.glintd";
+const LOGIN_LABEL: &str = "local.glint.app.login";
 
 /// Leave launchd and systemd alone (see the module docs).
 fn skip_service_start() -> bool {
@@ -54,6 +60,7 @@ pub(crate) const PHP: &[(&str, &str)] = sdk_files![
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Service,
+    Login,
     Php,
     Python,
     Node,
@@ -61,15 +68,16 @@ pub enum Target {
 }
 
 impl Target {
-    pub const ALL: [Target; 5] = [Target::Service, Target::Php, Target::Python, Target::Node, Target::Agents];
+    pub const ALL: [Target; 6] = [Target::Service, Target::Login, Target::Php, Target::Python, Target::Node, Target::Agents];
     pub fn parse(s: &str) -> Result<Target, String> {
         match s {
             "service" => Ok(Target::Service),
+            "login" => Ok(Target::Login),
             "php" => Ok(Target::Php),
             "python" => Ok(Target::Python),
             "node" | "js" => Ok(Target::Node),
             "agents" | "mcp" => Ok(Target::Agents),
-            other => Err(format!("unknown target `{other}` (service, php, python, node, agents)")),
+            other => Err(format!("unknown target `{other}` (service, login, php, python, node, agents)")),
         }
     }
 }
@@ -135,7 +143,7 @@ fn manifest_path(a: &Args) -> PathBuf {
 }
 
 fn target_name(t: &str) -> Option<&'static str> {
-    ["service", "php", "python", "node"].into_iter().find(|n| *n == t)
+    ["service", "login", "php", "python", "node"].into_iter().find(|n| *n == t)
 }
 
 /// `~/.glint/installed.json`, or nothing when it is missing or unreadable.
@@ -227,6 +235,7 @@ pub fn install(a: &Args) -> Vec<Step> {
         .iter()
         .flat_map(|t| match t {
             Target::Service => vec![install_service(a, &mut wrote)],
+            Target::Login => vec![install_login(a, &mut wrote)],
             Target::Php => vec![install_php(a, &mut wrote)],
             Target::Python => vec![install_python(a, &mut wrote)],
             Target::Node => vec![install_node(a, &mut wrote)],
@@ -301,6 +310,10 @@ fn install_service(a: &Args, wrote: &mut Vec<Written>) -> Step {
         return fail("service", format!("glintd not found next to {}: build or install it first (cargo install --path crates/glintd)", here.display()));
     }
     let target_daemon = bin.join("glintd");
+    if !a.dry_run {
+        // Set up again after an uninstall: the app may start glintd again (see `UNINSTALLED`).
+        let _ = fs::remove_file(a.glint_dir().join(UNINSTALLED));
+    }
     if !a.dry_run
         && let Err(e) = fs::create_dir_all(&bin).and_then(|()| replace_file(&daemon, &target_daemon)).and_then(|()| replace_file(&here, &bin.join("glint"))) {
             return fail("service", format!("copying binaries to {}: {e}", bin.display()));
@@ -427,6 +440,101 @@ fn plist_body(daemon: &Path, log: &Path) -> String {
         x(log),
         x(log)
     )
+}
+
+// ------------------------------------------------------------------ open Glint.app at login
+
+/// Written by `glint uninstall` (service) before it stops glintd: the desktop app sees it, does
+/// not start glintd again, and quits. Setting up the service again removes it.
+pub(crate) const UNINSTALLED: &str = "uninstalled";
+
+fn login_plist_path(home: &Path) -> PathBuf {
+    home.join("Library/LaunchAgents").join(format!("{LOGIN_LABEL}.plist"))
+}
+
+/// Glint.app: the one the app names (GLINT_APP, when it runs this command itself), the one around
+/// the glintd running this setup (GLINT_DAEMON) or around this binary, else the usual places.
+pub(crate) fn app_bundle(home: &Path) -> Option<PathBuf> {
+    let around = |p: PathBuf| p.ancestors().find(|a| a.extension().is_some_and(|x| x == "app")).map(Path::to_path_buf);
+    let named = std::env::var_os("GLINT_APP").map(PathBuf::from);
+    let daemon = std::env::var_os("GLINT_DAEMON").map(PathBuf::from).and_then(around);
+    let here = std::env::current_exe().ok().and_then(around);
+    named.into_iter().chain(daemon).chain(here).chain([PathBuf::from("/Applications/Glint.app"), home.join("Applications/Glint.app")]).find(|b| is_app(b))
+}
+
+fn is_app(bundle: &Path) -> bool {
+    bundle.join("Contents/MacOS/Glint").is_file()
+}
+
+/// "Open at login" was turned off in the spark's menu (`~/.glint/app-state.json`, the app's file).
+fn login_turned_off(a: &Args) -> bool {
+    let state: serde_json::Value = fs::read_to_string(a.glint_dir().join("app-state.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    state["open_at_login"] == false
+}
+
+/// `open -a`, not the executable itself: Launch Services starts it like a click in Finder, and
+/// `--login` tells the app to start with its window closed. AssociatedBundleIdentifiers makes
+/// System Settings > Login Items show it as Glint.
+fn login_plist_body(bundle: &Path) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Written by `glint install`; removed by `glint uninstall`. Opens Glint.app at login. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>{LOGIN_LABEL}</string>
+  <key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-a</string><string>{}</string><string>--args</string><string>--login</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>AssociatedBundleIdentifiers</key><array><string>local.glint.app</string></array>
+</dict></plist>
+"#,
+        xml_escape(&bundle.display().to_string())
+    )
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// The Glint.app a login item opens.
+fn login_target(plist: &str) -> Option<PathBuf> {
+    let rest = plist.split_once("<string>-a</string><string>")?.1;
+    let path = rest.split_once("</string>")?.0;
+    Some(PathBuf::from(path.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")))
+}
+
+const LOGIN_OFF: &str = "off: turned off with Open at login in the menu bar";
+const NO_APP: &str = "Glint.app is not installed; only the menu bar app opens at login";
+
+fn install_login(a: &Args, wrote: &mut Vec<Written>) -> Step {
+    if !cfg!(target_os = "macos") {
+        return skip("login", "only the Mac app opens at login".into());
+    }
+    let Some(bundle) = app_bundle(&a.home) else { return skip("login", NO_APP.into()) };
+    if a.targets != [Target::Login] && login_turned_off(a) {
+        return skip("login", LOGIN_OFF.into());
+    }
+    let plist = login_plist_path(&a.home);
+    if let Err(e) = write(a, &plist, &login_plist_body(&bundle)) {
+        return fail("login", e);
+    }
+    wrote.push(file("login", &plist));
+    done("login", format!("Glint opens at login ({})", bundle.display()))
+}
+
+fn doctor_login(a: &Args) -> Step {
+    if !cfg!(target_os = "macos") {
+        return skip("login", "only the Mac app opens at login".into());
+    }
+    match fs::read_to_string(login_plist_path(&a.home)) {
+        Ok(body) => match login_target(&body) {
+            Some(b) if is_app(&b) => done("login", "Glint opens at login".into()),
+            Some(b) => fail("login", format!("set to open {}, which is gone: set up this Mac again", b.display())),
+            None => fail("login", format!("{} is not one Glint wrote: set up this Mac again", login_plist_path(&a.home).display())),
+        },
+        Err(_) if login_turned_off(a) => skip("login", LOGIN_OFF.into()),
+        Err(_) if app_bundle(&a.home).is_none() => skip("login", NO_APP.into()),
+        Err(_) => fail("login", "Glint does not open at login yet: run `glint install --only login`".into()),
+    }
 }
 
 fn launchd_target(home: &Path) -> String {
@@ -868,6 +976,10 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
         match t {
             Target::Service => {
                 let mut removed = Vec::new();
+                // First, so a running Glint.app does not start glintd again once it stops.
+                if !a.dry_run {
+                    let _ = write(a, &a.glint_dir().join(UNINSTALLED), "Written by `glint uninstall`; Glint.app quits when it sees this.\n");
+                }
                 if cfg!(target_os = "macos") {
                     if !a.dry_run && !skip_service_start() {
                         let target = launchd_target(&a.home);
@@ -886,6 +998,13 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
                     }
                 }
                 steps.push(if removed.is_empty() { skip("service", "not installed".into()) } else { done("service", format!("stopped and removed {}", removed.join(", "))) });
+            }
+            Target::Login => {
+                let mut files: Vec<PathBuf> = recorded(a, "login").into_iter().map(|w| w.path).collect();
+                files.push(login_plist_path(&a.home));
+                files.dedup();
+                let removed: Vec<String> = files.into_iter().filter(|p| ours(p) && rm(p)).map(|p| p.display().to_string()).collect();
+                steps.push(if removed.is_empty() { skip("login", "not set up".into()) } else { done("login", format!("Glint no longer opens at login (removed {})", removed.join(", "))) });
             }
             Target::Php => {
                 let removed: Vec<String> = php_files_to_remove(a).into_iter().filter(|p| rm(p)).map(|p| p.display().to_string()).collect();
@@ -927,6 +1046,7 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
         }
         let name = match t {
             Target::Service => "service",
+            Target::Login => "login",
             Target::Php => "php",
             Target::Python => "python",
             Target::Node => "node",
@@ -1019,6 +1139,7 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
         out.ok().map(|o| String::from_utf8_lossy(&o.stdout).trim() == "yes")
     };
     steps.push(doctor_service(a, answering_pid));
+    steps.push(doctor_login(a));
     // `php -r` skips auto_prepend_file; a script on stdin does not.
     const PHP_CHECK: &str = "<?php echo function_exists('glint') ? 'yes' : 'no';";
     const PY_CHECK: &[&str] = &["-c", "import builtins; print('yes' if hasattr(builtins, 'glint') else 'no')"];
@@ -1226,6 +1347,16 @@ mod tests {
         assert!(body.contains("<key>ThrottleInterval</key><integer>10</integer>"));
         assert!(body.contains("<key>GLINT_WAIT_FOR_PORT</key><string>1</string>"));
         assert!(body.contains("/Users/a&amp;b/.glint/bin/glintd"));
+    }
+
+    #[test]
+    fn the_login_item_opens_the_app_it_names_with_its_window_closed() {
+        let body = login_plist_body(Path::new("/Users/a&b/Applications/Glint.app"));
+        assert!(body.contains("<string>/usr/bin/open</string><string>-a</string><string>/Users/a&amp;b/Applications/Glint.app</string><string>--args</string><string>--login</string>"));
+        assert!(body.contains("<key>RunAtLoad</key><true/>") && !body.contains("KeepAlive"));
+        assert!(body.contains("glint install"), "uninstall recognises its own file by this");
+        assert_eq!(login_target(&body), Some(PathBuf::from("/Users/a&b/Applications/Glint.app")));
+        assert_eq!(login_target("<plist/>"), None);
     }
 
     #[test]

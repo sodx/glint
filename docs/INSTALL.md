@@ -32,12 +32,14 @@ Cursor and others) reads the same events. Everything stays on your machine.
    way; the command above fixes it.
 
 3. A small spark appears in the menu bar and the Glint window opens. Allow notifications when
-   macOS asks. Glint uses them to tell you when a program fails or waits for you.
+   macOS asks. Glint uses them to tell you when a program fails or waits for you. Click the spark
+   to open its menu; **Open Glint** (or ⌥⌘G from anywhere) brings the window back.
 
-4. The Glint window shows what is set up on this Mac. Click **Set up this Mac** there (or
-   right-click the spark and choose **Set up this Mac…**). After a few seconds the list shows a
-   check mark next to each part that is ready. Open a new terminal window afterwards, so your
-   shell picks up the changes. **Show me an example** fills the window with a sample run, so you can
+4. The Glint window shows what is set up on this Mac. Click **Set up this Mac** there (or click
+   the spark and choose **Set up this Mac…**, which opens the same list). After a few seconds the
+   list shows a check mark next to each part that is ready. Open a new terminal window afterwards,
+   so your shell picks up the changes. From then on Glint opens at login, with its window closed,
+   so the spark is back after a restart; **Open at login** in the spark's menu turns that off. **Show me an example** fills the window with a sample run, so you can
    see what Glint looks like before you send anything yourself.
 
    The same from Terminal:
@@ -53,7 +55,7 @@ glint doctor
 ```
 
 `glint doctor` says whether Glint is running and answering, whether the login service runs it,
-whether `glint()` works in PHP, Python and Node, which other PHP and Python versions (Homebrew
+whether Glint.app opens at login, whether `glint()` works in PHP, Python and Node, which other PHP and Python versions (Homebrew
 versions, pyenv versions, a virtual environment) do not have `glint()` yet and how to add it, and
 which coding agents know about Glint. Then send something:
 
@@ -70,8 +72,8 @@ Code that runs in Docker, a dev container or on a machine you reach over SSH nee
 run `glint docker` in the project folder and add what it prints to your compose file (see
 "Docker and remote machines" in the README).
 
-Glint updates itself: when a new version is out, the menu-bar menu shows **Update to x.y.z…** and
-the window shows a banner; one click installs it, glintd and the `glint` command included, and
+Glint updates itself: when a new version is out, the spark's menu shows **Update to x.y.z…** and
+the window shows a banner with **Update and restart**; one click installs it, glintd and the `glint` command included, and
 restarts Glint. The version you have is in the window title and in About Glint.
 
 ## What setup changes on your Mac
@@ -82,6 +84,9 @@ removes them again, even if the PHP or Python they belong to is no longer on you
 - `~/Library/LaunchAgents/local.glint.glintd.plist`, so the Glint service starts when you log in.
   If glintd stops with an error, macOS starts it again after 10 seconds; it never restarts in a
   tight loop. A Glint service that finds another glintd on its port waits for that one to stop.
+- `~/Library/LaunchAgents/local.glint.app.login.plist`, so Glint.app opens at login with its
+  window closed (it shows in System Settings > General > Login Items as Glint). Turning off
+  **Open at login** in the spark's menu removes it, and setting up again leaves it off.
 - `~/.glint/` with the service, the command line tool, the SDKs, the settings and the event
   database. If the database file is damaged, glintd moves it aside as `glint.db.corrupt-<time>`
   and starts with an empty one.
@@ -107,37 +112,48 @@ and a Node program never waits more than a quarter of a second at exit.
 
 ## Uninstall
 
+Click the spark and choose **Uninstall Glint…**. After you confirm, Glint removes what setup
+added, stops recording and quits. Then move the app to the Trash, and delete `~/.glint` if you
+also want the stored events and settings gone.
+
+From Terminal, quit Glint first (click the spark, then **Quit Glint**), then run:
+
 ```bash
 glint uninstall
 ```
 
-It removes the `99-glint.ini` of every PHP on the Mac (Homebrew versions, Herd, the system's),
-not only the one on your PATH. Then quit Glint from its menu, move the app to the Trash, and
-delete `~/.glint` if you also want the stored events and settings gone.
+A Glint that is still running quits by itself when it sees the uninstall, instead of starting the
+service again. Either way, uninstall removes the `99-glint.ini` of every PHP on the Mac (Homebrew
+versions, Herd, the system's), not only the one on your PATH.
+
+Quit stops recording only when there is no login service (before setup, or after uninstall): then
+the glintd that Glint started stops with it. After setup, glintd keeps recording while the window
+is closed and after Quit.
 
 ## When something is off
 
 | What you see | What to do |
 |---|---|
 | macOS won't open the app | Follow step 2: Privacy & Security, Open Anyway, or the `xattr` command. |
-| No spark in the menu bar | On a MacBook with a notch, menu bar icons can hide behind it. Quit an app with a long menu, or look for the Glint icon in the Dock instead: it shows a badge on failures. |
+| No spark in the menu bar | On a MacBook with a notch, menu bar icons can hide behind it. Quit an app with a long menu, or look for the Glint icon in the Dock instead: it shows a badge on failures. After a restart, Glint opens by itself only once this Mac is set up and **Open at login** is on. |
 | No notifications | System Settings > Notifications > Glint, and allow them. |
 | `glint()` is undefined | Open a new terminal window. Run `glint doctor`, which says what is missing. Code run with `php -r` never gets it; a PHP file does. |
 | `glint()` is undefined in one PHP or Python version, or in a virtual environment | Run `glint doctor`. Its coverage line names each one and the command that adds `glint()` there. |
 | Node says `--import` is not allowed or unknown | That Node is older than 18.19. Setup leaves NODE_OPTIONS alone for it; if you switched Node versions afterwards, update Node or remove the glint lines from your shell profile. |
-| The menu says glintd is not running | The reason follows. Glint starts its own copy when the login service does not answer; `~/.glint/glintd.log` has the details. |
+| The menu says "Not recording" | Open Glint: the window says why and can start it again. Glint starts its own copy when the login service does not answer; the reason is in `~/.glint/glintd.log` and in the diagnostics report. |
 | `glint: command not found` | Open a new terminal window, or run `/Applications/Glint.app/Contents/Resources/bin/glint`. |
 | Claude Code says it has no Glint server | Glint was not set up yet, or the session started before setup. Click **Set up this Mac** in the Glint window, then start a new Claude Code session. An agent you install later gets Glint the next time you click it. |
 | Setup reported a problem | Read `~/.glint/setup.log`. PHP's configuration folder may need `sudo` on some setups; run the install command from step 4 in Terminal to see the details. |
 
 ## Sending diagnostics
 
-When something still does not work, click Save diagnostics report in the Glint window (Settings > This
-Mac, or the first-run card when a step failed), or run `glint report` in Terminal. Glint writes
+When something still does not work, click the spark and choose **Save diagnostics report…**. It
+works even when Glint is not recording. The same report is in the Glint window (Settings > This
+Mac, or the first-run card when a step failed), and `glint report` writes it from Terminal. Glint writes
 one text file to your Downloads folder and shows it in Finder. Nothing is sent anywhere: send the
 file yourself to whoever helps you.
 
 The file has the versions of the app, glintd, the `glint` tool and macOS, what `glint doctor`
-finds, the last `~/.glint/setup.log`, the end of glintd's log, `~/.glint/config.toml` with
+finds (opening at login included), the last `~/.glint/setup.log`, the end of glintd's log, `~/.glint/config.toml` with
 secrets removed, whether Glint.app still carries the download quarantine flag, your login
 shell and its PATH, and the coding agents Glint found.

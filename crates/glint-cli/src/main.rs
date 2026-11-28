@@ -250,7 +250,7 @@ struct Common {
 
 #[derive(Args)]
 struct Setup {
-    /// Only these parts: service, php, python, node, agents (comma-separated).
+    /// Only these parts: service, login, php, python, node, agents (comma-separated).
     #[arg(long, value_delimiter = ',', value_parser = install::Target::parse)]
     only: Vec<install::Target>,
     /// Show what would be done without changing anything.

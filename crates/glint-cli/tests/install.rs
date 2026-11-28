@@ -138,3 +138,40 @@ fn zsh_profile_follows_zdotdir_inside_home() {
     assert!(!outside.join(".zshrc").exists());
     let _ = std::fs::remove_dir_all(&outside);
 }
+
+/// Glint.app opens at login: install writes the LaunchAgent for the app it is given, records it,
+/// leaves it off once "Open at login" was turned off (unless asked by name), and uninstall removes it.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_login_item_follows_the_menu_switch_and_is_removed_by_uninstall() {
+    let s = Sandbox::new("login");
+    let app = s.path("Applications/Glint.app");
+    std::fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+    std::fs::write(app.join("Contents/MacOS/Glint"), "").unwrap();
+    let plist = s.path("Library/LaunchAgents/local.glint.app.login.plist");
+    let run = |args: &[&str]| {
+        let out = s.cmd(env!("CARGO_BIN_EXE_glint")).env("GLINT_APP", &app).args(args).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+
+    let out = run(&["install", "--only", "login"]);
+    assert!(out.contains("✓  login") && plist.exists(), "{out}");
+    assert!(std::fs::read_to_string(&plist).unwrap().contains(&app.display().to_string()));
+    assert_eq!(recorded(&manifest(&s), "login"), vec![plist.display().to_string()]);
+    assert!(run(&["doctor"]).contains("✓  login"), "doctor sees the login item");
+
+    // Turned off in the menu: the app removes it and says so in app-state.json.
+    std::fs::write(s.path(".glint/app-state.json"), r#"{"open_at_login": false}"#).unwrap();
+    let out = run(&["uninstall", "--only", "login"]);
+    assert!(out.contains("✓  login") && !plist.exists(), "{out}");
+    assert!(run(&["doctor"]).contains("–  login"), "turned off is not a failure");
+    assert!(run(&["install", "--only", "login,php", "--php-ini-dir", &s.path("php-conf.d").display().to_string()]).contains("–  login"));
+    assert!(!plist.exists(), "setting up again keeps it off");
+    run(&["install", "--only", "login"]);
+    assert!(plist.exists(), "asked for by name, it is on again");
+
+    // A full uninstall removes it and leaves the marker that tells a running Glint.app to quit.
+    let out = run(&["uninstall"]);
+    assert!(!plist.exists(), "{out}");
+    assert!(s.path(".glint/uninstalled").exists());
+}
