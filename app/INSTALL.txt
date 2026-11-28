@@ -10,18 +10,24 @@ This build runs on Macs with Apple silicon (M1 or newer) and macOS 11 or later.
    (Or run this once in Terminal:  xattr -dr com.apple.quarantine /Applications/Glint.app )
 
 3. A small spark appears in the menu bar and the Glint window opens. Allow notifications
-   when macOS asks: that is how Glint tells you when something fails.
+   when macOS asks: that is how Glint tells you when something fails. Click the spark for
+   its menu; "Open Glint" (or Option-Command-G) brings the window back.
 
-4. The Glint window lists what is set up. Click "Set up this Mac" there (or right-click the
-   spark and choose "Set up this Mac..."). In a few seconds each part gets a check mark.
-   Open a new terminal window and start a new Claude Code session afterwards. "Show me an example" shows a sample run.
+4. The Glint window lists what is set up. Click "Set up this Mac" there (or click the spark
+   and choose "Set up this Mac..."). In a few seconds each part gets a check mark.
+   Open a new terminal window and start a new Claude Code session afterwards. From then on
+   Glint opens at login, so the spark is back after a restart ("Open at login" in the menu
+   turns that off). "Show me an example" shows a sample run.
 
 5. Try it:   echo '<?php glint("hello from PHP");' > /tmp/hi.php && php /tmp/hi.php
              python3 -c 'glint("hello from Python")'
              node -e 'glint("hello from Node")'
 
-6. Something not working? Click "Send diagnostics" in the Glint window (Settings > This Mac).
-   It saves a report to Downloads and shows it in Finder; send that file to whoever gave you
-   Glint. Nothing is sent by itself.
+6. Something not working? Click the spark and choose "Save diagnostics report...". It saves
+   a report to Downloads and shows it in Finder; send that file to whoever gave you Glint.
+   Nothing is sent by itself. "Glint help" in the same menu opens the full guide.
+
+7. To remove Glint, click the spark and choose "Uninstall Glint...", then move the app to
+   the Trash. Your events stay in ~/.glint until you delete that folder.
 
 The full guide: https://github.com/sodx/glint/blob/main/docs/INSTALL.md

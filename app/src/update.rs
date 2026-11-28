@@ -29,7 +29,13 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 
-/// The menu item that reads "Check for Updates…" or "Update to x.y.z…", and the update found.
+/// What the notification about a new version says: the menu item and the window button by the
+/// names they carry.
+pub(crate) fn ready_text(version: &str) -> String {
+    format!("Click the spark in the menu bar and choose \"Update to {version}…\", or click \"Update and restart\" in the Glint window. Glint restarts in a few seconds.")
+}
+
+/// The menu item that reads "Check for updates…" or "Update to x.y.z…", and the update found.
 pub struct Updates {
     item: MenuItem<Wry>,
     found: Mutex<Option<Update>>,
@@ -100,7 +106,7 @@ fn check(app: &AppHandle, asked: bool) {
             let fresh = st.found.lock().ok().is_some_and(|f| f.as_ref().map(|f| &f.version) != Some(&u.version));
             let _ = st.item.set_text(format!("Update to {}…", u.version));
             if fresh || asked {
-                notify(app, &format!("Glint {} is ready", u.version), "Choose \"Update\" in the menu-bar spark or the window to install it; Glint restarts in a few seconds.");
+                notify(app, &format!("Glint {} is ready", u.version), &ready_text(&u.version));
             }
             if let Ok(mut f) = st.found.lock() {
                 *f = Some(u.clone());
@@ -189,7 +195,7 @@ pub fn older(have: &str, than: &str) -> bool {
 }
 
 /// The Glint.app this binary runs from.
-fn own_bundle() -> Option<PathBuf> {
+pub(crate) fn own_bundle() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     exe.ancestors().find(|a| a.extension().is_some_and(|x| x == "app")).map(Path::to_path_buf)
 }

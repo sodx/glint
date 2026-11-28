@@ -1551,6 +1551,7 @@ function capLine(shown, matched, hidden, searching) {
 S.setup = null; // null: not asked yet; {steps} | {error}; .running while setting up
 const SETUP_ROWS = [
   ["service", "Records in the background from login"],
+  ["login", "Glint opens at login"],
   ["php", "glint() in PHP"],
   ["python", "glint() in Python"],
   ["node", "glint() in Node"],
@@ -1569,9 +1570,15 @@ async function runSetup() {
     try { S.setup = { ...(await api("/v1/setup")), justRan: true }; } catch { S.setup = { steps: r.steps, justRan: true }; }
     toast(failed ? `${failed} step(s) need a look; see ~/.glint/setup.log` : "This Mac is set up");
     drawSetMac();
-  } catch (err) { S.setup = { ...(S.setup || {}), running: false, error: err.message }; }
+    appSays(`setup-done?failed=${failed}`);
+  } catch (err) { S.setup = { ...(S.setup || {}), running: false, error: err.message }; appSays("setup-done?error=1"); }
   render();
 }
+/* Hooks for the desktop app (app/src/main.rs). Its menu's "Set up this Mac…" opens This Mac in
+   Settings and runs the same setup as the button; the result goes back to the app, which posts a
+   notification when the window is not in front. */
+function appSays(what) { if (window.glintApp) location.href = "glint-app://" + what; }
+window.glintSetup = () => { if (S.setup?.running) return openSettings(); if (S.setup) delete S.setup.error; runSetup(); openSettings(); };
 // Settings always offer "Send diagnostics"; the first-run card only when something failed.
 async function sendReport() {
   S.reporting = true; render(); drawSetMac();
@@ -1589,6 +1596,7 @@ function setupCard(inSettings) {
     const x = by[k], state = !x ? "unknown" : x.status;
     const mark = state === "ok" ? icon("check") : state === "fail" ? `<span class="ob-dot"></span>` : `<span class="ob-dash">–</span>`;
     const note = !x ? "" : state === "ok" ? "" : k === "agents" && state === "skip" ? "none found" : k === "service" && state === "fail" ? "not yet: for now Glint records only while the app runs"
+      : k === "login" && state === "fail" && !/gone/.test(x.detail) ? "not yet: after a restart, open Glint to get the menu bar spark back"
       : state === "skip" ? x.detail : x.detail.replace(/ — run `.*`.*$/, "").replace(/run `glint install.*`/, "");
     return `<li class="ob-row ob-${state}">${mark}<span>${esc(label)}${note ? `<span class="ob-muted"> · ${esc(note)}</span>` : ""}</span></li>`;
   }).join("");
