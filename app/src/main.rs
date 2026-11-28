@@ -41,7 +41,7 @@ fn base_url() -> String {
 }
 
 fn get(path: &str) -> Option<Value> {
-    ureq::get(&format!("{}{path}", base_url())).timeout(Duration::from_millis(1500)).call().ok()?.into_json().ok()
+    ureq::get(&format!("{}{path}", base_url())).set("X-Glint", "1").timeout(Duration::from_millis(1500)).call().ok()?.into_json().ok()
 }
 
 // ------------------------------------------------------------------ glintd

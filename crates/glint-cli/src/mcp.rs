@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 pub fn run(base: &str) -> Result<(), String> {
     let url = format!("{}/mcp", base.trim_end_matches('/'));
     // glint_wait_for may hold a request for up to 120 s.
-    let agent = ureq::AgentBuilder::new()
+    let agent = crate::client::builder()
         .timeout_connect(Duration::from_secs(1))
         .timeout(Duration::from_secs(150))
         .build();

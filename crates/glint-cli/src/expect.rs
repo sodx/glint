@@ -28,7 +28,7 @@ pub struct Args {
 /// Ok(true) PASS, Ok(false) FAIL, Err: could not check.
 pub fn run(base: &str, a: &Args) -> Result<bool, String> {
     let base = base.trim_end_matches('/');
-    let http = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(1)).build();
+    let http = crate::client::builder().timeout_connect(Duration::from_secs(1)).build();
     let project = if a.all_projects {
         None
     } else {

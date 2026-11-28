@@ -458,7 +458,7 @@ fn wait_for(tenths: u32, mut ok: impl FnMut() -> bool) -> bool {
 
 /// `GET /v1/info` of whatever answers at `url`, when it is a glintd.
 fn daemon_info(url: &str) -> Option<serde_json::Value> {
-    let r = ureq::get(&format!("{}/v1/info", url.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(1)).call().ok()?;
+    let r = crate::client::builder().build().get(&format!("{}/v1/info", url.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(1)).call().ok()?;
     let v: serde_json::Value = r.into_json().ok()?;
     (v["name"] == "glint").then_some(v)
 }
@@ -985,7 +985,7 @@ fn php_files_to_remove(a: &Args) -> Vec<PathBuf> {
 
 pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
     let mut steps = Vec::new();
-    let info = ureq::get(&format!("{}/v1/info", base_url.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(1)).call();
+    let info = crate::client::builder().build().get(&format!("{}/v1/info", base_url.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(1)).call();
     let mut answering_pid = None;
     steps.push(match info {
         Ok(r) => {

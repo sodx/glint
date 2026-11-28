@@ -47,7 +47,8 @@ def free_port(preferred: int) -> int:
 
 def get(url: str, timeout: float = 30) -> Tuple[int, str]:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        # glintd wants X-Glint on reads; the apps under test ignore it.
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"x-glint": "1"}), timeout=timeout) as r:
             return r.status, r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")

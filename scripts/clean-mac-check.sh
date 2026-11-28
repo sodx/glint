@@ -178,7 +178,7 @@ done
 
 step "Start Glint"
 mkdir -p "$home/.glint"
-up() { curl -fsS -m 2 "$url/v1/info" >/dev/null 2>&1; }
+up() { curl -H "X-Glint: 1" -fsS -m 2 "$url/v1/info" >/dev/null 2>&1; }
 wait_up() { for _ in $(seq 1 "$1"); do up && return 0; sleep 1; done; return 1; }
 if up; then echo "something already answers at $url; stop it first" >&2; exit 2; fi
 if [ "$launch_app" = 1 ]; then
@@ -211,12 +211,12 @@ d=json.load(sys.stdin)
 for s in d.get("steps",[]): print(s["status"], s["name"], s["detail"].replace("\n"," "))' < "$1"; }
 
 step "Before setup: GET /v1/setup"
-curl -sS -m 60 "$url/v1/setup" -o "$out/setup-before.json" -w '%{http_code}\n' > "$out/status" 2>&1
+curl -H "X-Glint: 1" -sS -m 60 "$url/v1/setup" -o "$out/setup-before.json" -w '%{http_code}\n' > "$out/status" 2>&1
 [ "$(cat "$out/status")" = 200 ] && pass "GET /v1/setup answers" || { fail "GET /v1/setup: HTTP $(cat "$out/status"): $(cat "$out/setup-before.json")"; }
 steps_of "$out/setup-before.json" 2>/dev/null | sed 's/^/        /'
 
 step "Set up this Mac: POST /v1/setup"
-curl -sS -m 300 -X POST "$url/v1/setup" -o "$out/setup.json" -w '%{http_code}\n' > "$out/status" 2>&1
+curl -H "X-Glint: 1" -sS -m 300 -X POST "$url/v1/setup" -o "$out/setup.json" -w '%{http_code}\n' > "$out/status" 2>&1
 if [ "$(cat "$out/status")" = 200 ]; then
   pass "POST /v1/setup answers"
   steps_of "$out/setup.json" > "$out/setup-steps.txt"
@@ -238,7 +238,7 @@ fi
 cp "$home/.glint/setup.log" "$out/setup.log" 2>/dev/null && pass "~/.glint/setup.log written" || fail "no ~/.glint/setup.log"
 
 step "After setup: GET /v1/setup (doctor)"
-curl -sS -m 60 "$url/v1/setup" -o "$out/setup-after.json"
+curl -H "X-Glint: 1" -sS -m 60 "$url/v1/setup" -o "$out/setup-after.json"
 steps_of "$out/setup-after.json" > "$out/doctor-after.txt" 2>&1
 while read -r status name detail; do
   case "$status" in
@@ -257,7 +257,7 @@ step "glint() from each language reaches glintd"
 mark="cm$$x$RANDOM"
 lands() {
   for _ in $(seq 1 20); do
-    curl -fsS -m 2 "$url/v1/events?q=$1&limit=5" 2>/dev/null | grep -q "$1" && return 0
+    curl -H "X-Glint: 1" -fsS -m 2 "$url/v1/events?q=$1&limit=5" 2>/dev/null | grep -q "$1" && return 0
     sleep 0.5
   done
   return 1
@@ -297,7 +297,7 @@ else
 fi
 if [ "$ci" = 1 ]; then
   # The window's button; it also shows the file in Finder, which is harmless on a runner.
-  curl -sS -m 120 -X POST "$url/v1/report" -o "$out/report.json"
+  curl -H "X-Glint: 1" -sS -m 120 -X POST "$url/v1/report" -o "$out/report.json"
   grep -q '"complete":true' "$out/report.json" && pass "POST /v1/report: $(cat "$out/report.json")" || fail "POST /v1/report: $(cat "$out/report.json")"
 fi
 

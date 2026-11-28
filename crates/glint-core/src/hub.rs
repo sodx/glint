@@ -67,6 +67,9 @@ pub enum ResumeError {
 pub enum SubmitError {
     #[error("the event writer has stopped")]
     Closed,
+    /// The writer's queue is full: the events were not taken. Clients drop them (HTTP 429).
+    #[error("glint is busy storing events; these were dropped")]
+    Busy,
     #[error("events were not stored: {0}")]
     NotStored(String),
 }
@@ -114,11 +117,12 @@ impl Hub {
             .map(PauseInfo::from_event)
             .collect();
         let (done, stored) = oneshot::channel();
-        self.inner
-            .tx
-            .send(Job { events, done })
-            .await
-            .map_err(|_| SubmitError::Closed)?;
+        // A full queue answers at once instead of holding every request's body in memory until
+        // the writer catches up.
+        self.inner.tx.try_send(Job { events, done }).map_err(|e| match e {
+            mpsc::error::TrySendError::Full(_) => SubmitError::Busy,
+            mpsc::error::TrySendError::Closed(_) => SubmitError::Closed,
+        })?;
         stored
             .await
             .map_err(|_| SubmitError::Closed)?
@@ -243,7 +247,13 @@ async fn write_loop(
         let (events, waiters): (Vec<Vec<Envelope>>, Vec<_>) = jobs.into_iter().map(|j| (j.events, j.done)).unzip();
         let batch: Vec<Envelope> = events.into_iter().flatten().collect();
         let s = store.clone();
-        let result = tokio::task::spawn_blocking(move || s.insert(&batch).map(|()| batch))
+        let result = tokio::task::spawn_blocking(move || {
+            let mut batch = batch;
+            for e in &mut batch {
+                fit(e, MAX_STORED_EVENT_BYTES);
+            }
+            s.insert(&batch).map(|()| batch)
+        })
             .await
             .unwrap_or_else(|e| Err(StoreError::Backend(format!("store writer panicked: {e}"))));
         match result {
@@ -265,6 +275,75 @@ async fn write_loop(
             }
         }
     }
+}
+
+/// Most bytes one event takes in the store (its JSON). The native API refuses larger envelopes;
+/// other adapters (OTLP, agent hooks) can produce them, and they are cut down here.
+pub const MAX_STORED_EVENT_BYTES: usize = glint_protocol::MAX_ENVELOPE_BYTES;
+
+/// A cheap lower bound of a value's JSON size, so most events skip serialising twice.
+fn rough_size(v: &Value) -> usize {
+    match v {
+        Value::String(s) => s.len() + 2,
+        Value::Array(a) => a.iter().map(rough_size).sum::<usize>() + a.len() + 1,
+        Value::Object(m) => m.iter().map(|(k, v)| k.len() + 3 + rough_size(v)).sum::<usize>() + 1,
+        _ => 4,
+    }
+}
+
+/// Cuts every string in `v` longer than `max` bytes, saying how much went.
+fn cut_strings(v: &mut Value, max: usize) {
+    match v {
+        Value::String(s) if s.len() > max => {
+            let mut end = max;
+            while !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            let gone = s.len() - end;
+            s.truncate(end);
+            s.push_str(&format!("…[truncated {gone} bytes]"));
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| cut_strings(x, max)),
+        Value::Object(m) => m.values_mut().for_each(|x| cut_strings(x, max)),
+        _ => {}
+    }
+}
+
+/// Makes an event fit in `max` bytes of JSON: cuts its longest strings, and when that is not
+/// enough (a huge array of small values), keeps the start of the payload as a preview. Sets
+/// `meta.truncated` to the original size. Returns whether it changed anything.
+pub fn fit(e: &mut Envelope, max: usize) -> bool {
+    let rough = rough_size(&e.payload) + e.meta.extra.iter().map(|(k, v)| k.len() + rough_size(v)).sum::<usize>();
+    // JSON escaping can at most sextuple a string (`\u0001`), so anything under max/6 fits.
+    if rough < max / 6 {
+        return false;
+    }
+    let size = |e: &Envelope| serde_json::to_vec(e).map_or(usize::MAX, |b| b.len());
+    let original = size(e);
+    if original <= max {
+        return false;
+    }
+    let mut cut = max / 4;
+    while cut >= 64 {
+        cut_strings(&mut e.payload, cut);
+        for v in e.meta.extra.values_mut() {
+            cut_strings(v, cut);
+        }
+        if size(e) <= max {
+            e.meta.extra.insert("truncated".into(), json!(original));
+            return true;
+        }
+        cut /= 4;
+    }
+    let text = serde_json::to_string(&e.payload).unwrap_or_default();
+    let mut end = text.len().min(4096);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    e.payload = json!({ "$truncated": true, "bytes": original, "preview": &text[..end] });
+    e.meta.extra.retain(|_, v| rough_size(v) < 1024);
+    e.meta.extra.insert("truncated".into(), json!(original));
+    true
 }
 
 #[cfg(test)]
@@ -329,5 +408,87 @@ mod tests {
         assert!(hub.get(first.id.clone()).await.unwrap().is_some());
         assert_eq!(sub.recv().await.unwrap().payload, 2);
         assert_eq!(hub.query(Query::default()).await.unwrap().len(), 2);
+    }
+
+    /// Holds every write until the test lets go.
+    struct GatedStore(Arc<Mutex<()>>, MemStore);
+
+    impl Store for GatedStore {
+        fn insert(&self, events: &[Envelope]) -> Result<(), StoreError> {
+            let _open = self.0.lock().unwrap();
+            self.1.insert(events)
+        }
+        fn query(&self, q: &Query) -> Result<Vec<Envelope>, StoreError> {
+            self.1.query(q)
+        }
+        fn get(&self, id: &str) -> Result<Option<Envelope>, StoreError> {
+            self.1.get(id)
+        }
+        fn runs(&self, p: Option<&str>, l: usize) -> Result<Vec<RunSummary>, StoreError> {
+            self.1.runs(p, l)
+        }
+    }
+
+    fn one(hub: &Hub, n: i64) -> Vec<Envelope> {
+        let inc = parse_body(format!(r#"{{"kind":"core.value","payload":{n}}}"#).as_bytes(), BodyFormat::Json).unwrap().into_iter().map(Result::unwrap).collect();
+        hub.normalise(inc)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[allow(clippy::await_holding_lock)] // the held gate is the point: it stalls the writer thread
+    async fn a_full_queue_answers_busy_instead_of_waiting() {
+        let gate = Arc::new(Mutex::new(()));
+        let held = gate.lock().unwrap();
+        let cfg = HubConfig { queue: 1, batch_max: 1, ..HubConfig::default() };
+        let (hub, _w) = Hub::start(Arc::new(GatedStore(gate.clone(), MemStore::default())), cfg);
+        // The writer takes the first job and waits on the gate; the second fills the queue.
+        let first = tokio::spawn({
+            let (h, e) = (hub.clone(), one(&hub, 1));
+            async move { h.submit(e).await }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let second = tokio::spawn({
+            let (h, e) = (hub.clone(), one(&hub, 2));
+            async move { h.submit(e).await }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(matches!(hub.submit(one(&hub, 3)).await, Err(SubmitError::Busy)));
+        drop(held);
+        first.await.unwrap().unwrap();
+        second.await.unwrap().unwrap();
+        assert_eq!(hub.query(Query::default()).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn oversized_events_are_cut_before_they_are_stored() {
+        let store = Arc::new(MemStore::default());
+        let (hub, _w) = Hub::start(store.clone(), HubConfig::default());
+        let big = "x".repeat(3 * MAX_STORED_EVENT_BYTES);
+        let mut events = one(&hub, 0);
+        events[0].payload = json!({ "prompt": big, "small": "kept" });
+        hub.submit(events).await.unwrap();
+        let got = hub.query(Query::default()).await.unwrap().remove(0);
+        assert!(serde_json::to_vec(&got).unwrap().len() <= MAX_STORED_EVENT_BYTES);
+        assert_eq!(got.payload["small"], "kept");
+        let prompt = got.payload["prompt"].as_str().unwrap();
+        assert!(prompt.starts_with("xxxx") && prompt.contains("…[truncated "), "{}", &prompt[prompt.len() - 40..]);
+        assert!(got.meta.extra["truncated"].as_u64().unwrap() > 3 * MAX_STORED_EVENT_BYTES as u64);
+    }
+
+    #[test]
+    fn fit_falls_back_to_a_preview_and_leaves_small_events_alone() {
+        let hub_less = |payload: Value| Envelope { payload, ..serde_json::from_value(json!({"v":1,"id":"a","ts":"2026-01-01T00:00:00Z","run":"r","project":"p","kind":"core.json","payload":null})).unwrap() };
+        let mut small = hub_less(json!({"a": "b"}));
+        assert!(!fit(&mut small, 1000));
+        assert!(small.meta.extra.get("truncated").is_none());
+        // Many small numbers: cutting strings cannot help.
+        let mut many = hub_less(json!((0..5000).collect::<Vec<_>>()));
+        assert!(fit(&mut many, 4000));
+        assert_eq!(many.payload["$truncated"], true);
+        assert!(serde_json::to_vec(&many).unwrap().len() <= 4000 + 4096);
+        // Multi-byte text is cut on a character boundary.
+        let mut text = hub_less(json!("é".repeat(5000)));
+        assert!(fit(&mut text, 4000));
+        assert!(text.payload.as_str().unwrap().contains("…[truncated "));
     }
 }

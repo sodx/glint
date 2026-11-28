@@ -18,7 +18,7 @@ pub fn run(base: &str, a: &Args) -> Result<(), String> {
         url.push_str("&project=");
         url.push_str(&enc(p));
     }
-    let http = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(1)).timeout(Duration::from_secs(30)).build();
+    let http = crate::client::builder().timeout_connect(Duration::from_secs(1)).timeout(Duration::from_secs(30)).build();
     let res = http.get(&url).call().map_err(|e| format!("could not reach glintd at {base}: {e}"))?;
     let body: serde_json::Value = res.into_json().map_err(|e| e.to_string())?;
     if a.json {

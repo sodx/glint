@@ -1,7 +1,10 @@
 # Data, settings and other inputs
 
 glintd keeps 7 days and at most 100,000 events by default. Every 10 minutes it deletes older events
-and the database file shrinks with them. The Settings view (`,`) changes how long events are kept,
+and the database file shrinks with them. The database also stays under 500 MB (`max_db_bytes`,
+`GLINT_MAX_DB_BYTES`, units such as `2GB` work); glintd checks that every 10 seconds and deletes the
+oldest events when it is crossed. One event takes at most 1 MB: larger ones (from OpenTelemetry or
+agent hooks) are stored with their longest strings cut and marked `meta.truncated`. The Settings view (`,`) changes how long events are kept,
 which editor files open in, and whether agents hear about failures. It saves to
 `~/.glint/config.toml`, which you can also edit by hand; an environment variable of the same name
 wins over both.

@@ -32,8 +32,13 @@ impl Allowlist {
             .filter(|h| !h.starts_with("host.docker.internal"))
             .map(|h| format!("http://{h}"))
             .collect();
-        // The Tauri shell (M4) serves the UI from these origins.
-        origins.extend(["tauri://localhost".to_owned(), "http://tauri.localhost".to_owned()]);
+        // The Tauri shell serves its own pages from `tauri://localhost` on macOS and Linux. Only
+        // Windows and Android use `http(s)://tauri.localhost`; elsewhere that name is just another
+        // host a local program could serve, so it gets no rights there.
+        origins.push("tauri://localhost".to_owned());
+        if cfg!(any(windows, target_os = "android")) {
+            origins.extend(["http://tauri.localhost".to_owned(), "https://tauri.localhost".to_owned()]);
+        }
         Self {
             hosts: Arc::new(hosts),
             origins: Arc::new(origins),
@@ -78,6 +83,54 @@ pub async fn ingest_only(req: Request, next: Next) -> Response {
     }
 }
 
+/// The header Glint's own clients send (the window, the CLI, the desktop app): `X-Glint: 1`. A web
+/// page cannot add it to a request to another origin without a CORS preflight, which this server
+/// refuses, so a request that carries it was not forged by a page.
+pub const HEADER: &str = "x-glint";
+
+/// Routes anyone on this machine may call without `X-Glint`: sending events (also OTLP on its own
+/// port), waiting for one's own pause (its id is known only to the program), the browser script,
+/// the window's page, and `/mcp`. Coding agents call `/mcp` with no way to add a header, and a
+/// browser always sends `Origin` with a POST (Fetch standard), so a page cannot reach it unseen.
+fn open_route(method: &axum::http::Method, path: &str) -> bool {
+    use axum::http::Method;
+    let own_pause = path.strip_prefix("/v1/ctl/").is_some_and(|id| !id.is_empty() && !id.contains('/'));
+    match *method {
+        Method::POST => matches!(path, "/v1/events" | "/v1/traces" | "/v1/logs" | "/mcp"),
+        Method::GET | Method::HEAD => own_pause || matches!(path, "/" | "/v1/browser.js" | "/mcp"),
+        Method::DELETE => path == "/mcp",
+        _ => false,
+    }
+}
+
+/// What the guard decides for a request without an `Origin` header.
+#[derive(Debug, PartialEq, Eq)]
+enum NoOrigin {
+    Serve,
+    /// A browser says another site made it (`Sec-Fetch-Site: cross-site` or `same-site`): an
+    /// `<img>`, `<script>` or `<link>` on someone's page.
+    Foreign,
+    /// No sign of who sent it, and no `X-Glint` header.
+    NoHeader,
+}
+
+fn without_origin(method: &axum::http::Method, path: &str, headers: &axum::http::HeaderMap) -> NoOrigin {
+    if open_route(method, path) {
+        return NoOrigin::Serve;
+    }
+    // A dev page on localhost:5173 is same-site with 127.0.0.1:23600's `localhost` name, so
+    // same-site counts as foreign too. Only same-origin (the window itself) and none (typed in
+    // the address bar) pass, and they still need the header below.
+    let site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()).unwrap_or("");
+    if site.eq_ignore_ascii_case("cross-site") || site.eq_ignore_ascii_case("same-site") {
+        return NoOrigin::Foreign;
+    }
+    if headers.contains_key(HEADER) {
+        return NoOrigin::Serve;
+    }
+    NoOrigin::NoHeader
+}
+
 pub async fn check(State(allow): State<Allowlist>, req: Request, next: Next) -> Response {
     let host = req.headers().get(header::HOST).and_then(|v| v.to_str().ok());
     if !host.is_some_and(|h| allow.host_ok(h)) {
@@ -91,7 +144,13 @@ pub async fn check(State(allow): State<Allowlist>, req: Request, next: Next) -> 
         return r;
     }
     let Some(origin) = req.headers().get(header::ORIGIN).and_then(|o| o.to_str().ok()).map(str::to_owned) else {
-        return next.run(req).await;
+        // No Origin: a program (curl, an SDK, the CLI, an agent), the window's own GETs, or a
+        // page's `<img src>`. Programs that read or change anything send `X-Glint: 1`.
+        return match without_origin(req.method(), req.uri().path(), req.headers()) {
+            NoOrigin::Serve => next.run(req).await,
+            NoOrigin::Foreign => (StatusCode::FORBIDDEN, "glint: request from another site refused").into_response(),
+            NoOrigin::NoHeader => (StatusCode::FORBIDDEN, "glint: send the header `X-Glint: 1` with requests other than sending events (docs/PROTOCOL.md §1)").into_response(),
+        };
     };
     if allow.origin_ok(&origin) {
         return next.run(req).await;
@@ -143,6 +202,51 @@ mod tests {
         assert!(!a.host_ok("evil.example:23600") && !a.host_ok("127.0.0.1:80"));
         assert!(a.origin_ok("http://localhost:23600") && a.origin_ok("tauri://localhost"));
         assert!(!a.origin_ok("https://evil.example") && !a.origin_ok("null"));
+    }
+
+    #[test]
+    fn tauri_localhost_only_where_tauri_uses_it() {
+        let a = Allowlist::for_addr("127.0.0.1:23600".parse().unwrap());
+        let windows_like = cfg!(any(windows, target_os = "android"));
+        assert_eq!(a.origin_ok("http://tauri.localhost"), windows_like);
+        assert_eq!(a.origin_ok("https://tauri.localhost"), windows_like);
+        assert!(a.origin_ok("tauri://localhost"));
+    }
+
+    #[test]
+    fn requests_without_origin_need_the_header() {
+        use axum::http::{HeaderMap, HeaderValue, Method};
+        let none = HeaderMap::new();
+        let mut glint = HeaderMap::new();
+        glint.insert(HEADER, HeaderValue::from_static("1"));
+        let mut img = HeaderMap::new();
+        img.insert("sec-fetch-site", HeaderValue::from_static("cross-site"));
+        let mut img_same_site = HeaderMap::new();
+        img_same_site.insert("sec-fetch-site", HeaderValue::from_static("same-site"));
+        let mut forged = img.clone();
+        forged.insert(HEADER, HeaderValue::from_static("1"));
+
+        // Open to every program: events, the own pause, the page, the browser script, MCP, OTLP.
+        for (m, p) in [
+            (Method::POST, "/v1/events"), (Method::GET, "/v1/ctl/p-42"), (Method::GET, "/"), (Method::POST, "/mcp"),
+            (Method::POST, "/v1/traces"), (Method::POST, "/v1/logs"), (Method::GET, "/v1/browser.js"),
+        ] {
+            assert_eq!(without_origin(&m, p, &none), NoOrigin::Serve, "{m} {p}");
+            assert_eq!(without_origin(&m, p, &img), NoOrigin::Serve, "{m} {p}");
+        }
+        // Everything else: the header, and never from another site.
+        for (m, p) in [
+            (Method::GET, "/v1/setup"), (Method::POST, "/v1/setup"), (Method::GET, "/v1/events"), (Method::GET, "/v1/info"),
+            (Method::GET, "/v1/settings"), (Method::PUT, "/v1/settings"), (Method::POST, "/v1/data/clear"), (Method::GET, "/v1/source"),
+            (Method::POST, "/v1/open"), (Method::POST, "/v1/ctl/p-42/resume"), (Method::GET, "/v1/ctl"), (Method::GET, "/v1/stream"),
+            (Method::POST, "/v1/hooks/claude-code"), (Method::POST, "/v1/report"), (Method::GET, "/v1/ctl/"),
+        ] {
+            assert_eq!(without_origin(&m, p, &none), NoOrigin::NoHeader, "{m} {p}");
+            assert_eq!(without_origin(&m, p, &glint), NoOrigin::Serve, "{m} {p}");
+            assert_eq!(without_origin(&m, p, &img), NoOrigin::Foreign, "{m} {p}");
+            assert_eq!(without_origin(&m, p, &img_same_site), NoOrigin::Foreign, "{m} {p}");
+            assert_eq!(without_origin(&m, p, &forged), NoOrigin::Foreign, "{m} {p}");
+        }
     }
 
     #[test]

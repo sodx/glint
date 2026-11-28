@@ -24,7 +24,7 @@ pub fn run(base: &str, agent: &str) -> Result<(), String> {
         return Ok(());
     }
     let base = base.trim_end_matches('/');
-    let http = ureq::AgentBuilder::new()
+    let http = crate::client::builder()
         .timeout_connect(Duration::from_millis(300))
         .timeout(Duration::from_secs(1))
         .build();

@@ -586,16 +586,17 @@ export default { plugins: [glint()] };""", "js")}
     s.append(("d-config", "Settings and data", """
 <h2>Settings and data</h2>
 <p>Open Settings with <kbd>,</kbd> or the gear at the top. There you choose how long events are kept and how many, which editor files open in, and whether coding agents hear about failures. Changes apply right away and are saved to <code>~/.glint/config.toml</code>, which you can also edit by hand. An environment variable with the same name (<code>GLINT_KEEP_DAYS</code>, <code>GLINT_EDITOR</code>, …) wins over both, and Settings shows which ones are set that way.</p>
-<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them, so it stays at a few hundred MB at most. <span id="docsData"></span></p>
+<p>By default Glint keeps 7 days and at most 100,000 events. Every 10 minutes it deletes older ones and the database file shrinks with them. The database also stays under 500 MB: glintd checks every 10 seconds and deletes the oldest events when it is crossed. <span id="docsData"></span></p>
 <p>Everything lives in <code>~/.glint</code>: the database, the settings, the SDK copies and <code>glintd.log</code>.</p>
 """))
     s.append(("d-secrets", "Secrets", """
 <h2>Secrets</h2>
 <p>glintd replaces passwords, tokens and keys in every event before it stores it, so they never reach the database, this window or a coding agent, which sends what it reads to a cloud model. It works the same for every SDK, OpenTelemetry and <code>glint pipe</code>. An event that had secrets says how many were replaced when you open it.</p>
-<p>Two things are caught:</p>
+<p>Three things are caught:</p>
 <ul>
 <li>Values under keys that look secret, at any depth: names containing <code>password</code>, <code>passwd</code>, <code>secret</code>, <code>api_key</code>, <code>authorization</code>, <code>cookie</code>, <code>private_key</code>, <code>access_key</code>, <code>credentials</code>, and names ending in <code>token</code> or <code>dsn</code>. Case, <code>_</code>, <code>-</code> and dots are ignored, so <code>X-Api-Key</code> and <code>apiKey</code> count. Header pairs and SQL bindings count too: in <code>WHERE password = ?</code> the bound value is replaced.</li>
 <li>Well-known shapes anywhere in text: <code>Bearer</code> tokens, JWTs, AWS <code>AKIA</code> keys, GitHub <code>ghp_</code> and <code>github_pat_</code>, Slack <code>xox</code>, Stripe <code>sk_live_</code>, OpenAI and Anthropic <code>sk-</code>, Google <code>AIza</code>, PEM private keys, the password in <code>postgres://user:pass@host</code>, and <code>password=...</code> in log lines and SQL.</li>
+<li>Payment, identity and session data: card numbers (keys such as <code>card_number</code>, <code>cvv</code>, <code>cvc</code>, and any 13 to 19 digit number in text that passes the Luhn check; a bare <code>card</code> or <code>cc</code> key only when it holds a card number), <code>ssn</code>, <code>otp</code> and <code>pin</code> as the last word of a key, <code>session</code>, <code>PHPSESSID</code>, <code>csrf</code> and <code>xsrf</code>, and <code>sig</code> or <code>signature</code> values such as <code>X-Amz-Signature=...</code>, in keys and in <code>key=value</code> text.</li>
 </ul>
 <p>A replaced value reads <code>[redacted]</code>; a known shape keeps its prefix, as in <code>sk-ant-…[redacted]</code>, so you can still tell which key was used. A URL keeps everything but its password.</p>
 <p>Left alone on purpose: counters and sizes such as <code>token_count</code>, <code>max_tokens</code> and <code>password_length</code>, pagination cursors such as <code>next_token</code>, and ids such as <code>session_id</code>, because a debugging session follows them from event to event. Add any of them to the extra keys if you want them hidden.</p>
