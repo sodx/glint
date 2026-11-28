@@ -1,8 +1,9 @@
 //! Glint for the desktop.
 //!
 //! - a window with the live UI served by glintd (the same `ui/index.html` the browser gets);
-//! - a menu-bar spark that turns red when something fails and amber when a program waits for
-//!   you, with a status line, Open, Open in browser and Quit;
+//! - a menu-bar spark that turns red when something fails, amber when a program waits for you
+//!   and struck through when glintd is not running, with a status line that names the newest
+//!   failure, Open, Open in browser and Quit;
 //! - a notification for each new failure and each new pause;
 //! - the Dock icon carries the same state as a badge (✗ or ⏸), because on a MacBook with a notch
 //!   the menu-bar spark can be hidden behind it;
@@ -35,6 +36,7 @@ use tauri_plugin_notification::NotificationExt;
 const TRAY_OK: &[u8] = include_bytes!("../icons/tray.png");
 const TRAY_FAIL: &[u8] = include_bytes!("../icons/tray-fail.png");
 const TRAY_WAIT: &[u8] = include_bytes!("../icons/tray-wait.png");
+const TRAY_OFFLINE: &[u8] = include_bytes!("../icons/tray-offline.png");
 
 fn base_url() -> String {
     std::env::var("GLINT_URL").unwrap_or_else(|_| "http://127.0.0.1:23600".into()).trim_end_matches('/').to_owned()
@@ -203,8 +205,20 @@ fn open_in_browser() {
 
 // ------------------------------------------------------------------ watcher
 
-/// The same names the UI gives runs.
+/// The same names the UI gives runs: a program's run by its request line (`POST /checkout/8`)
+/// or its script (`worker.py`), others by what started them.
 fn run_title(run: &str) -> String {
+    if run.starts_with("js-") || run.starts_with("python-") || run.starts_with("php-") {
+        let summary = get("/v1/runs?limit=200").and_then(|r| r["runs"].as_array()?.iter().find(|x| x["run"] == run).cloned());
+        if let Some(r) = summary {
+            if let Some(head) = r["head"].as_str().filter(|h| h.split_once(' ').is_some_and(|(m, p)| !m.is_empty() && m.chars().all(|c| c.is_ascii_uppercase()) && p.starts_with('/'))) {
+                return head.split(' ').take(2).collect::<Vec<_>>().join(" ");
+            }
+            if let Some(f) = r["file"].as_str() {
+                return base(f).to_owned();
+            }
+        }
+    }
     let prefixes = [("claude-code:", "Agent session"), ("otel-", "Trace"), ("pipe-", "Piped output"), ("send-", "glint send"), ("js-", "Node process"), ("python-", "Python process"), ("php-", "PHP process")];
     prefixes.iter().find(|(p, _)| run.starts_with(p)).map(|(_, t)| (*t).to_owned()).unwrap_or_else(|| run.to_owned())
 }
@@ -237,32 +251,46 @@ enum State {
     Offline,
 }
 
+/// Failures stored since local midnight, of the newest `list` (oldest first).
+fn failures_today(list: &[Value]) -> usize {
+    let midnight = chrono::Local::now().date_naive().and_hms_opt(0, 0, 0).and_then(|m| m.and_local_timezone(chrono::Local).earliest());
+    list.iter()
+        .filter(|e| !matches!(e["kind"].as_str(), Some("core.update" | "ctl.resume")))
+        .filter(|e| {
+            let ts = e["ts"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok());
+            matches!((ts, midnight), (Some(t), Some(m)) if t >= m)
+        })
+        .count()
+}
+
 /// Polls glintd every two seconds: notifies about new failures and pauses, and keeps the tray
 /// icon and status line current. A failure stays red until you look at the window.
 fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
     let mut last_error: Option<String> = None;
+    let mut fail_title = String::new();
     let mut known_pauses: Vec<String> = Vec::new();
     let mut first = true;
     let mut failing = false;
-    let mut shown: Option<State> = None;
+    let mut shown: Option<(State, String)> = None;
     let mut misses = 0u32;
     let mut down_why: Option<String> = None;
-    let mut shown_line = String::new();
     loop {
-        let errors = get("/v1/events?level=error&limit=1");
+        let errors = get("/v1/events?level=error&limit=500");
         let pauses = get("/v1/ctl");
         let state;
         let line;
         match (errors, pauses) {
             (Some(errors), Some(pauses)) => {
-                if let Some(e) = errors["events"].as_array().and_then(|a| a.first()) {
+                let list = errors["events"].as_array().cloned().unwrap_or_default();
+                let today = failures_today(&list);
+                if let Some(e) = list.iter().rev().find(|e| !matches!(e["kind"].as_str(), Some("core.update" | "ctl.resume"))) {
                     let id = e["id"].as_str().unwrap_or("").to_owned();
                     if last_error.as_deref() != Some(&id) {
+                        fail_title = run_title(e["run"].as_str().unwrap_or(""));
                         if !first {
                             failing = true;
                             seen_by_user.store(false, Ordering::Relaxed);
-                            let title = format!("✗ {} failed", run_title(e["run"].as_str().unwrap_or("")));
-                            let _ = app.notification().builder().title(title).body(fail_text(e)).show();
+                            let _ = app.notification().builder().title(format!("✗ {fail_title} failed")).body(fail_text(e)).show();
                         }
                         last_error = Some(id);
                     }
@@ -288,7 +316,7 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
                 (state, line) = if !list.is_empty() {
                     (State::Wait, format!("⏸ {} waiting for you", if list.len() == 1 { "A program is".into() } else { format!("{} programs are", list.len()) }))
                 } else if failing {
-                    (State::Fail, "✗ Something failed".to_owned())
+                    (State::Fail, format!("✗ {} failed · {today} today", clip(&fail_title, 60)))
                 } else {
                     (State::Ok, "✓ All quiet".to_owned())
                 };
@@ -303,21 +331,21 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
                     misses = 0;
                 }
                 (state, line) = (State::Offline, match &down_why {
-                    Some(why) => format!("glintd is not running: {}", clip(why, 80)),
-                    None => "glintd is not running".to_owned(),
+                    Some(why) => format!("Not recording: glintd is not running ({})", clip(why, 80)),
+                    None => "Not recording: glintd is not running".to_owned(),
                 });
             }
         }
         if state != State::Offline {
             down_why = None;
         }
-        if shown != Some(state) || shown_line != line {
-            shown = Some(state);
-            shown_line.clone_from(&line);
+        if shown.as_ref() != Some(&(state, line.clone())) {
+            shown = Some((state, line.clone()));
             let _ = status.set_text(&line);
             if let Some(tray) = app.tray_by_id("main") {
                 let (bytes, template) = match state {
-                    State::Ok | State::Offline => (TRAY_OK, true),
+                    State::Ok => (TRAY_OK, true),
+                    State::Offline => (TRAY_OFFLINE, true),
                     State::Fail => (TRAY_FAIL, false),
                     State::Wait => (TRAY_WAIT, false),
                 };
@@ -325,7 +353,7 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
                     let _ = tray.set_icon(Some(img));
                     let _ = tray.set_icon_as_template(template);
                 }
-                let _ = tray.set_tooltip(Some(format!("Glint — {line}")));
+                let _ = tray.set_tooltip(Some(format!("Glint: {line}")));
             }
             if let Some(w) = app.get_webview_window("main") {
                 let badge = match state {
@@ -459,15 +487,22 @@ fn main() {
                 // The version shows in the title bar, and in About.
                 .title(format!("Glint {}", update::VERSION))
                 // The update banner links to glint-app://update; the click never leaves the page.
+                // The page's "Start glintd" button links to glint-app://start-glintd.
                 .on_navigation(move |url| {
                     if url.scheme() == "glint-app" {
-                        update::banner_clicked(&nav);
+                        if url.host_str() == Some("start-glintd") {
+                            std::thread::spawn(ensure_daemon);
+                        } else {
+                            update::banner_clicked(&nav);
+                        }
                         return false;
                     }
                     true
                 })
                 .on_page_load(|w, p| {
                     if p.event() == PageLoadEvent::Finished {
+                        // Tells the page it runs in the app, which can start glintd for it.
+                        let _ = w.eval("window.glintApp = true");
                         update::banner(w.app_handle());
                     }
                 })
@@ -508,4 +543,23 @@ fn main() {
         }
         let _ = (app, event);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_failures_since_local_midnight_only() {
+        let now = chrono::Local::now();
+        let midnight = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(chrono::Local).earliest().unwrap();
+        let ts = |t: chrono::DateTime<chrono::Local>| t.with_timezone(&chrono::Utc).to_rfc3339();
+        let list = vec![
+            serde_json::json!({ "kind": "core.exception", "ts": ts(midnight - chrono::Duration::minutes(1)) }),
+            serde_json::json!({ "kind": "core.exception", "ts": ts(midnight + chrono::Duration::seconds(1)) }),
+            serde_json::json!({ "kind": "core.update", "ts": ts(now) }),
+            serde_json::json!({ "kind": "core.log", "ts": ts(now) }),
+        ];
+        assert_eq!(failures_today(&list), 2);
+    }
 }

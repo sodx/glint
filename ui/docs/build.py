@@ -581,7 +581,7 @@ export default { plugins: [glint()] };""", "js")}
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>
-<p>Click an event to open it: values as foldable JSON, the code around a failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app, <kbd>⌥⌘G</kbd> shows and hides the window from anywhere, and the menu-bar spark turns red on a failure and amber when a program waits.</p>
+<p>Click an event to open it: values as foldable JSON, the code around a failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app, <kbd>⌥⌘G</kbd> shows and hides the window from anywhere, and the menu-bar spark turns red on a failure (its menu names the run and counts today's failures), amber when a program waits, and is struck through when glintd is not running. If glintd stops, this window says so, marks what it shows as out of date, and picks up again when glintd is back.</p>
 """))
     s.append(("d-config", "Settings and data", """
 <h2>Settings and data</h2>

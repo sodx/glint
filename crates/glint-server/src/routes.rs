@@ -66,6 +66,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/info", get(info))
         .route("/v1/events", post(ingest).get(list))
         .route("/v1/runs", get(runs))
+        .route("/v1/projects", get(projects))
         .route("/v1/events/{id}", get(one))
         .route("/v1/stream", get(stream))
         .route("/v1/hooks/{agent}", post(hook))
@@ -208,8 +209,17 @@ struct RunsParams {
 
 /// Most recently active runs, newest first (`docs/PROTOCOL.md` §7).
 async fn runs(State(hub): State<Hub>, QueryParams(p): QueryParams<RunsParams>) -> Response {
-    match hub.runs(p.project.filter(|s| !s.is_empty()), p.limit.unwrap_or(50).clamp(1, 500)).await {
+    match hub.runs(p.project.filter(|s| !s.is_empty()), p.limit.unwrap_or(50).clamp(1, 5000)).await {
         Ok(runs) => Json(json!({ "runs": runs })).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// Every project, most recently active first, with its run counts: what the project menu lists,
+/// however many runs there are.
+async fn projects(State(hub): State<Hub>) -> Response {
+    match hub.projects().await {
+        Ok(projects) => Json(json!({ "projects": projects })).into_response(),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

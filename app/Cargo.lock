@@ -1465,6 +1465,7 @@ dependencies = [
 name = "glint-app"
 version = "0.1.4"
 dependencies = [
+ "chrono",
  "serde_json",
  "tauri",
  "tauri-build",
