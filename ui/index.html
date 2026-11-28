@@ -71,13 +71,46 @@ header { display: flex; align-items: center; gap: 12px; height: 56px; }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
 kbd { font: 11px var(--mono); color: var(--faint); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
 
-/* status: the answer */
-.status { padding: 28px 0 24px; display: grid; gap: 14px; }
-.say { display: flex; align-items: flex-start; gap: 12px; }
-.say .glyph { margin-top: 4px; }
-.say .text { flex: 1; min-width: 0; font-size: 18px; line-height: 1.45; letter-spacing: -0.01em; }
+/* status: the answer. One line per thing that needs you, actions inline; only the top line says
+   one line more, the rest wait behind "N more need you". */
+.status { padding: 18px 0 14px; display: grid; gap: 8px; }
+.say { display: flex; align-items: flex-start; gap: 10px; }
+.say .glyph { margin-top: 3px; }
+.say .text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.45; letter-spacing: -0.01em; }
+.say.top .text, .say.down .text, .say.idle .text { font-size: 17px; }
+.say.top .glyph { margin-top: 4px; }
 .say .text b { font-weight: 600; }
-.say .sub { display: block; font-size: 14px; color: var(--muted); margin-top: 2px; letter-spacing: 0; }
+.say .sub { display: block; font-size: 13.5px; color: var(--muted); margin-top: 1px; letter-spacing: 0; }
+.say.top .sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.say:not(.top):not(.quiet):not(.back):not(.down):not(.idle) .text { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
+.say:not(.top):not(.quiet):not(.back):not(.down):not(.idle) .line { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.say:not(.top):not(.quiet):not(.back):not(.down):not(.idle) .sub { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; margin: 0; }
+.say .actions .btn { height: 28px; padding: 0 11px; font-size: 13.5px; }
+.say .actions .icon-btn { width: 28px; height: 28px; }
+.here, .count { display: inline-block; font-size: 12px; font-weight: 500; letter-spacing: 0; line-height: 18px; padding: 0 7px; border-radius: 999px; vertical-align: 2px; white-space: nowrap; }
+.here { background: var(--hover); color: var(--text); border: 1px solid var(--line-strong); }
+.count { background: var(--red-soft); color: var(--red); }
+.more-need { justify-self: start; display: inline-flex; align-items: center; gap: 6px; margin-left: 20px; padding: 3px 8px; border-radius: 6px; color: var(--muted); font-size: 13.5px; }
+.more-need:hover { color: var(--text); background: var(--hover); }
+.more-need .kinds { color: var(--muted); }
+.more-need svg { width: 14px; height: 14px; transition: transform .12s; }
+.more-need[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.status > *, .more-list > * { min-width: 0; }
+.more-list { display: grid; gap: 6px; }
+.more-list > .link { justify-self: start; margin-left: 18px; font-size: 13px; }
+.say.back .text { font-size: 14px; color: var(--muted); }
+.say.back .glyph { color: var(--muted); margin-top: 2px; }
+/* answering a pause: what it asks first, Continue as the main action, Stop apart */
+.answer { margin: 2px 0 4px 26px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: grid; gap: 10px; }
+.answer dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 13.5px; }
+.answer dt { color: var(--muted); }
+.answer dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.answer code { font-size: 12.5px; }
+.answer .faint { color: var(--muted); }
+.ans-val { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.ans-val input { height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); color: var(--text); font: 13px var(--mono); }
+.ans-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ans-btns .spacer { flex: 1; }
 .say .sub .mono { font-size: 13px; }
 .say.fail .glyph { color: var(--red); } .say.fail b.verb { color: var(--red); }
 .say.pause .glyph { color: var(--amber); } .say.pause b.verb { color: var(--amber); }
@@ -123,6 +156,20 @@ body.switching #entries, body.switching #runHead { opacity: .45; pointer-events:
 .menu button:hover, .menu button[aria-current="true"] { background: var(--hover); }
 .menu .when { color: var(--faint); font-size: 13px; }
 .menu .state { color: var(--muted); font-size: 13px; }
+/* runs: outcome and time lead each line */
+#runMenu button { grid-template-columns: 15px 6ch minmax(0, 1fr) auto; }
+#runMenu .glyph, .sib .glyph { width: 15px; height: 15px; }
+#runMenu .t { font: 12.5px var(--mono); color: var(--muted); }
+#runMenu .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#runMenu .lv-error .glyph, .sib.lv-error .glyph { color: var(--red); }
+#runMenu .lv-pause .glyph, .sib.lv-pause .glyph { color: var(--amber); }
+#runMenu .lv-ok .glyph, .sib.lv-ok .glyph { color: var(--green); }
+#runMenu .lv-error .state { color: var(--red); }
+.sibs { display: flex; gap: 2px; min-width: 0; }
+.sibs:empty { display: none; }
+.sib { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.sib:hover { background: var(--hover); color: var(--text); }
+.searching .sibs { display: none; }
 
 ol.entries { list-style: none; margin: 0 0 96px; padding: 0; }
 .entry { border-radius: 10px; }
@@ -386,10 +433,15 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 560px) {
   .wrap { padding: 0 14px; }
-  .status { padding: 18px 0 18px; }
-  .say { flex-wrap: wrap; }
-  .say .text { font-size: 16px; }
-  .say .actions { width: 100%; padding-left: 28px; }
+  .status { padding: 14px 0 12px; }
+  .say.down { flex-wrap: wrap; }
+  .say.top .text, .say.down .text, .say.idle .text { font-size: 16px; }
+  .say.down .actions { width: 100%; padding-left: 28px; }
+  .say .actions kbd { display: none; }
+  .answer { margin-left: 0; }
+  .sib-more { display: none; }
+  .run-switch .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .run-switch { min-width: 0; }
   .right .when { display: none; } .right .loc { margin-right: 0; }
   .row:not(:hover):not(:focus-visible) .right { display: none; }
   .hit .row:not(:hover):not(:focus-visible) .right { display: block; } /* a search result names its run */
@@ -397,7 +449,7 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
   .pane { padding-left: 10px; }
   .turn { grid-template-columns: 1fr; gap: 2px; }
 }
-@media (min-width: 1200px) { body { font-size: 15.5px; } .wrap { max-width: 840px; } .say .text { font-size: 20px; } }
+@media (min-width: 1200px) { body { font-size: 15.5px; } .wrap { max-width: 840px; } .say.top .text, .say.down .text, .say.idle .text { font-size: 19px; } }
 
 /* live-data additions */
 .entry.muted > .row { opacity: .55; }
@@ -491,7 +543,14 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .ob-list { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 6px; }
 .ob-row { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; font-size: 14px; }
 .ob-row .i { width: 16px; height: 16px; color: var(--green); margin-top: 2px; }
-.ob-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); margin: 6px 0 0 4px; }
+.ob-pend { width: 10px; height: 10px; border-radius: 50%; border: 1.75px solid var(--amber); margin: 5px 0 0 3px; }
+details.ob-card > summary { list-style: none; display: flex; align-items: baseline; gap: 10px; cursor: pointer; border-radius: 6px; }
+details.ob-card > summary::-webkit-details-marker { display: none; }
+details.ob-card > summary h2 { margin: 0; }
+details.ob-card > summary .ob-hint { color: var(--muted); font-size: 13px; }
+details.ob-card > summary svg { margin-left: auto; align-self: center; color: var(--faint); transition: transform .12s; }
+details.ob-card:not([open]) > summary svg { transform: rotate(-90deg); }
+details.ob-card[open] > summary { margin-bottom: 6px; }
 .ob-dash { color: var(--faint); text-align: center; }
 .ob-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
 .ob-code { position: relative; margin: 6px 0 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px 44px 10px 12px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -564,6 +623,8 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M10 7l-5 5 5 5M5 12h10a4 4 0 0 1 4 4v1"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></symbol>
@@ -605,6 +666,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 
   <div class="run-head" id="runHead">
     <button class="run-switch" id="runSwitch" aria-haspopup="menu" aria-expanded="false" aria-controls="runMenu"></button>
+    <span class="sibs" id="runSibs"></span>
     <label class="search"><svg class="i" style="color:var(--faint)"><use href="#i-search"/></svg><input id="q" placeholder="Search: text, kind:sql, level:warn" aria-label="Search this run"><select id="qScope" aria-label="Search in"><option value="run">This run</option><option value="project">This project</option><option value="all">Every project</option></select><kbd>esc</kbd></label>
     <span class="stale-note" id="staleNote"></span>
     <div class="menu" id="runMenu" role="menu" aria-label="Runs"></div>
@@ -961,10 +1023,10 @@ export default { plugins: [glint()] };</code></pre>
 </table>
 </section><section id="d-app">
 <h2>Using this window</h2>
-<p>The top line covers every project: it says what failed and where, which program waits for you, or that all is quiet everywhere. Below it is one run at a time, the newest by when its last event happened. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>; a project with a failure or a pause opens on that run.</p>
+<p>The top line covers every project: it says what failed and where, which program waits for you, or that all is quiet everywhere. When more than one thing needs you, it says how many and lists the rest under it; the open run's own failure always comes first. Show opens a failure in its run, Dismiss marks it seen without opening it, and a failure in another project opens there with a way back. A paused program waits until you answer: Answer shows what it asks and what it sent, then Continue, or Stop, which asks first. Below the top line is one run at a time, the newest by when its last event happened, named by what it did (<code>POST /checkout</code>). Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>; next to the run's name, Previous opens the run before it of the same request or script, to compare a failing run with one that passed.</p>
 <table class="ref">
 <tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action; it also finds what events say, in every project, and opens a match in its run</td></tr>
-<tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
+<tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure on top; answer the paused program on top</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
 <tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events (the arrow keys do too), between runs</td></tr>
@@ -1055,6 +1117,7 @@ const S = {
   open: new Set(), q: "", rowCap: ROWS, raw: [], moreEvents: false, runLimit: RUNS_PAGE, projectInfo: [],
   full: new Set(), tableRows: new Map(),
   fail: null, fails: [], seen: null, ack: new Set(store.get("ack", [])), pauses: [], answered: [],
+  answering: null, pauseEv: new Map(), pval: new Map(), moreOpen: false, cameFrom: null, obOpen: {},
   editor: null, editors: [],
   offline: false, offlineSince: null, offlineWhy: "", loaded: false,
   gen: 0, switching: null, switchSlow: false, scope: "run", hits: null,
@@ -1109,11 +1172,13 @@ function glint() { const m = $("liveMark"); if (!m.classList.contains("glint")) 
 function runTitle(id) {
   if (!id) return "";
   let m;
-  // A run of a program is named by what it did first: its request line (`GET /checkout/8`), else
-  // its script (`worker.py`), so runs of one language can be told apart.
+  // A run of a program is named by what it did: its request line (`GET /checkout/8`), the name of
+  // the measure it ended with (a framework's `POST /checkout`) or its first label, else its script
+  // (`worker.py`), so runs of one language can be told apart.
   if (/^(js|python|php)-/.test(id)) {
     const r = S.runInfo.get(id);
     if (r?.head && /^[A-Z]+ \/\S*/.test(r.head)) return r.head.split(" ").slice(0, 2).join(" ");
+    if (r?.name) return clip(r.name, 60);
     if (r?.file) return r.file.split(/[\\/]/).pop();
   }
   if ((m = id.match(/^claude-code:(.+)$/))) return "Agent session " + m[1].slice(0, 8);
@@ -1466,40 +1531,107 @@ function downStatus() {
     ? "Glint tries to start it again every few seconds."
     : `Start it with the Glint app, or in a terminal:<div class="code"><code>glint install --only service</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></div>`;
   const why = S.offlineWhy ? ` (${esc(S.offlineWhy)})` : "";
-  return `<div class="say down">${icon("pause")}<div class="text"><b>Not recording.</b> <b class="verb">glintd stopped answering</b> <span class="ago" data-t="${new Date(since).toISOString()}">${rel(since)}</span><span class="sub">Nothing answers at <span class="mono">${esc(addr)}</span>${why}, so new events from your programs are lost and the list below shows what was there at ${esc(clock(since))}. ${how}</span></div>${action}</div>`;
+  const cached = S.loaded && S.runs.length > 0; // else there is no list to point at
+  return `<div class="say down">${icon("pause")}<div class="text"><b>Not recording.</b> <b class="verb">glintd stopped answering</b> <span class="ago" data-t="${new Date(since).toISOString()}">${rel(since)}</span><span class="sub">Nothing answers at <span class="mono">${esc(addr)}</span>${why}, so new events from your programs are lost${cached ? ` and the list below, dimmed, shows what was there at ${esc(clock(since))}` : ""}. ${how}</span></div>${action}</div>`;
 }
-/* What needs you, in every project: the newest failure not seen yet and the oldest waiting pause.
-   "All quiet" only when neither exists anywhere. */
-const unseenFail = () => S.fail && !S.ack.has(S.fail.id) ? S.fail : null;
+/* What needs you, in every project: failures not seen yet (one line per failed run) and waiting
+   pauses. One line each with its actions; the top one may say more, the rest wait behind
+   "N more need you". "All quiet" only when nothing needs you anywhere. */
 const inProj = p => p && p !== S.project ? ` <span class="in-proj">in <b>${esc(p)}</b></span>` : "";
-/* "Seen" after Show: a way back for a few minutes while you look elsewhere, not a line for the day. */
-const SEEN_MS = 3 * 60 * 1000;
-const seenLine = () => S.seen && S.seen !== unseenFail() && Date.now() - S.seenAt < SEEN_MS && S.run !== S.seen.run ? S.seen : null;
+/* "Seen" after Show or Dismiss: a way back for a few minutes, not a line for the day. */
+const SEEN_MS = 3 * 60 * 1000, ANSWERED_MS = 60 * 1000;
+const seenLine = () => S.seen && !S.ack.has(S.seen.id) ? null : S.seen && Date.now() - S.seenAt < SEEN_MS && (S.seenHow === "dismissed" || S.run !== S.seen.run) ? S.seen : null;
+/* Failures not seen yet, one per run (its newest). The open run's own comes first, so the status
+   never talks about another run while this one failed; then this project's; then the newest. */
+function failItems() {
+  const runs = new Set(), out = [];
+  for (let i = S.fails.length - 1; i >= 0; i--) { const f = S.fails[i]; if (S.ack.has(f.id) || runs.has(f.run)) continue; runs.add(f.run); out.push(f); }
+  const rank = f => f.run === S.run ? 0 : f.project === S.project ? 1 : 2;
+  return out.sort((a, b) => rank(a) - rank(b) || (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+}
+const unseenFail = () => failItems()[0] || null;
+/* Seeing one failure of a run sees all of it: older failures of that run do not queue up next. */
+function ackFail(f) { S.fails.forEach(x => { if (x.run === f.run) S.ack.add(x.id); }); S.ack.add(f.id); store.set("ack", [...S.ack].slice(-200)); }
+/* Everything that needs you, most urgent first: what happened in the open run, then programs
+   waiting for an answer (they hold a process), then failures. */
+function needs() {
+  const fails = failItems().map(f => ({ t: "fail", e: f, run: f.run, at: f.ts })), pauses = S.pauses.map(p => ({ t: "pause", e: p, run: p.run, at: p.since }));
+  const rank = x => x.run === S.run ? 0 : x.t === "pause" ? 1 : 2;
+  return [...pauses, ...fails].sort((a, b) => rank(a) - rank(b)); // stable: failures keep their order
+}
+const atFile = (file, line) => file ? `<span class="mono">${esc(base(file))}${line ? ":" + line : ""}</span>` : "";
+const agoSpan = t => `<span class="ago" data-t="${esc(t)}">${rel(t)}</span>`;
+function failLine(f, top, nFails) {
+  const l = loc(f), away = f.project !== S.project, name = runTitle(f.run);
+  const here = f.run === S.run ? ` <span class="here">this run</span>` : "";
+  const count = top && nFails > 1 ? ` <span class="count">${nFails} failures</span>` : "";
+  const detail = `${esc(clip(failText(f), 200))}${l ? ` · <span class="mono">${esc(l)}</span>` : ""}`;
+  return `<div class="say fail${top ? " top" : ""}">${icon("x")}<div class="text"><span class="line"><b>${esc(name)}</b> <b class="verb">failed</b>${here}${inProj(f.project)} ${agoSpan(f.ts)}${count}</span>`
+    + `<span class="sub">${detail}</span></div>`
+    + `<div class="actions"><button class="btn${top ? " primary" : ""}" data-act="show" data-id="${esc(f.id)}" title="${away ? `Open ${esc(f.project)} and show the failure` : "Show the failure"}${top ? " (E)" : ""}">Show${top ? "<kbd>E</kbd>" : ""}</button>`
+    + `<button class="icon-btn dismiss" data-act="dismiss" data-id="${esc(f.id)}" aria-label="Dismiss: ${esc(name)} failed" title="Dismiss. It stays in its run."><svg class="i"><use href="#i-close"/></svg></button></div></div>`;
+}
+function pauseLine(pz, top) {
+  const open = S.answering === pz.id, name = runTitle(pz.run);
+  const sub = [pz.reason ? "“" + esc(clip(pz.reason, 160)) + "”" : "", atFile(pz.file, pz.line)].filter(Boolean).join(" · ");
+  return `<div class="say pause${top ? " top" : ""}">${icon("pause")}<div class="text"><span class="line"><b>${esc(name)}</b> <b class="verb">is waiting for you</b>${pz.run === S.run ? ` <span class="here">this run</span>` : ""}${inProj(pz.project)} ${agoSpan(pz.since)}</span>`
+    + `${sub ? `<span class="sub">${sub}</span>` : ""}</div>`
+    + `<div class="actions"><button class="btn${top && !open ? " primary" : ""}" data-act="answer" data-id="${esc(pz.id)}" aria-expanded="${open}" aria-controls="ans-${esc(pz.id)}" title="See what it asks, then continue or stop it${top ? " (C)" : ""}">Answer${top ? "<kbd>C</kbd>" : ""}</button></div></div>`
+    + (open ? answerPanel(pz) : "");
+}
+/* The question, what the program sent with it, and the answer: Continue is the main action; Stop
+   sits apart and asks first. */
+function answerPanel(pz) {
+  const ev = S.pauseEv.get(pz.id), p = ev?.payload || {};
+  const rest = Object.fromEntries(Object.entries(p).filter(([k]) => k !== "reason"));
+  const payload = ev === undefined ? `<span class="faint">Loading…</span>` : Object.keys(rest).length ? `<code class="mono">${esc(clip(JSON.stringify(rest), 400))}</code>` : `<span class="faint">Nothing else</span>`;
+  const id = esc(pz.id);
+  return `<div class="answer" id="ans-${id}" role="group" aria-label="Answer ${esc(runTitle(pz.run))}"><dl>`
+    + `<dt>Asks</dt><dd>${pz.reason ? "“" + esc(pz.reason) + "”" : `<span class="faint">No question, it only stopped</span>`}</dd>`
+    + `<dt>Sent</dt><dd>${payload}</dd>`
+    + `<dt>Stopped at</dt><dd>${atFile(pz.file, pz.line) || `<span class="faint">unknown</span>`}${pz.project !== S.project ? " in " + esc(pz.project) : ""}</dd></dl>`
+    + `<label class="ans-val"><span>Value to hand back, optional</span><input data-pval="${id}" placeholder='e.g. {"discount": 0.1}' autocomplete="off" spellcheck="false"></label>`
+    + `<div class="ans-btns"><button class="btn primary" data-act="continue" data-id="${id}">Continue</button><button class="link" data-act="answer" data-id="${id}">Not now</button>${pz.run !== S.run ? `<button class="link" data-act="goto-pause" data-id="${id}">Open its run</button>` : ""}<span class="spacer"></span><button class="btn danger" data-act="stop" data-id="${id}">Stop the program…</button></div></div>`;
+}
+const restKinds = rest => { const f = rest.filter(x => x.t === "fail").length, p = rest.length - f; return [f ? plural(f, "failure") : "", p ? plural(p, "waiting program") : ""].filter(Boolean).join(", "); };
+let statusKey = "";
 function status() {
   const el = $("status"), out = [];
-  const fail = unseenFail();
-  if (S.offline) { el.innerHTML = downStatus(); document.body.dataset.state = "down"; return; }
-  if (!S.loaded) { el.innerHTML = ""; return; }
-  if (fail) {
-    const l = loc(fail), away = fail.project !== S.project;
-    out.push(`<div class="say fail">${icon("x")}<div class="text"><b>${esc(runTitle(fail.run))}</b> <b class="verb">failed</b>${inProj(fail.project)} <span class="ago" data-t="${esc(fail.ts)}">${rel(fail.ts)}</span><span class="sub">${esc(clip(failText(fail), 200))}${l ? ` · <span class="mono">${esc(l)}</span>` : ""}</span></div><div class="actions"><button class="btn primary" data-act="show" title="${away ? `Open ${esc(fail.project)} and show the failure` : "Show the failure"} (E)">Show<kbd>E</kbd></button></div></div>`);
-  }
-  const pz = S.pauses[0];
-  if (pz) {
-    const more = S.pauses.length - 1, open = pz.run !== S.run ? `<button class="link" data-act="goto-pause" data-id="${esc(pz.id)}" title="Open the run that is waiting">Open</button>` : "";
-    out.push(`<div class="say pause">${icon("pause")}<div class="text"><b>${esc(runTitle(pz.run))}</b> <b class="verb">is waiting for you</b>${inProj(pz.project)}<span class="sub">${[pz.reason ? "“" + esc(pz.reason) + "”" : "", pz.file ? `<span class="mono">${esc(base(pz.file))}${pz.line ? ":" + pz.line : ""}</span>` : "", more ? `and ${more} more` : ""].filter(Boolean).join(" · ")}</span></div><div class="actions"><button class="btn ${fail ? "" : "primary"}" data-act="continue" data-id="${esc(pz.id)}" title="Continue the program (C)">Continue<kbd>C</kbd></button>${open}<button class="link" data-act="stop" data-id="${esc(pz.id)}">Stop</button></div></div>`);
-  }
-  if (!fail && !pz) {
+  if (S.offline) { setStatus(el, downStatus()); document.body.dataset.state = "down"; return; }
+  if (!S.loaded) { setStatus(el, ""); return; }
+  if (S.cameFrom && S.cameFrom.to === S.project) out.push(`<div class="say back"><svg class="i glyph"><use href="#i-back"/></svg><div class="text">Opened <b>${esc(S.project)}</b>.</div><div class="actions"><button class="btn" data-act="go-back">Back to ${esc(S.cameFrom.project)}</button><button class="icon-btn dismiss" data-act="back-hide" aria-label="Stay in ${esc(S.project)}" title="Stay here"><svg class="i"><use href="#i-close"/></svg></button></div></div>`);
+  const all = needs(), nFails = all.filter(x => x.t === "fail").length;
+  const line = (x, top) => x.t === "fail" ? failLine(x.e, top, nFails) : pauseLine(x.e, top);
+  if (all.length) {
+    out.push(line(all[0], true));
+    const rest = all.slice(1);
+    if (rest.length) {
+      out.push(`<button class="more-need" data-act="more-need" aria-expanded="${!!S.moreOpen}" aria-controls="moreNeed"><svg class="i"><use href="#i-down"/></svg>${rest.length} more need${rest.length === 1 ? "s" : ""} you<span class="kinds"> · ${restKinds(rest)}</span></button>`);
+      if (S.moreOpen) out.push(`<div class="more-list" id="moreNeed">${rest.map(x => line(x, false)).join("")}${nFails > 1 ? `<button class="link" data-act="dismiss-all">Dismiss all ${nFails} failures</button>` : ""}</div>`);
+    }
+  } else {
     const last = S.runs[0];
-    out.push(`<div class="say ok">${icon("check")}<div class="text">All quiet<span class="sub">${last ? `Last run in ${esc(S.project)}: ${esc(runTitle(last.run))} · ${last.events} event${last.events === 1 ? "" : "s"} · ${last.errors ? last.errors + " error" + (last.errors > 1 ? "s" : "") : "no errors"} · ${rel(last.last)}` : "No runs yet"}</span></div></div>`);
+    out.push(`<div class="say ok top">${icon("check")}<div class="text"><span class="line">All quiet</span><span class="sub">${last ? `Last run in ${esc(S.project)}: ${esc(runTitle(last.run))} · ${last.events} event${last.events === 1 ? "" : "s"} · ${last.errors ? last.errors + " error" + (last.errors > 1 ? "s" : "") : "no errors"} · ${rel(last.last)}` : "No runs yet"}</span></div></div>`);
   }
   const seen = seenLine();
-  if (seen) out.push(`<div class="say quiet">${icon("x")}<div class="text">${esc(runTitle(seen.run))} failed ${rel(seen.ts)}${inProj(seen.project)}. You have seen it. <button class="link" data-act="show" data-again="1" style="padding:2px 4px">Show again</button></div></div>`);
-  S.answered.slice(-2).forEach(a => out.push(`<div class="say quiet">${icon("check")}<div class="text">${esc(a)}</div></div>`));
-  el.innerHTML = out.join("");
-  const state = fail ? "fail" : pz ? "pause" : "calm";
+  if (seen) out.push(`<div class="say quiet">${icon("x")}<div class="text">${esc(runTitle(seen.run))} failed ${rel(seen.ts)}${inProj(seen.project)}. ${S.seenHow === "dismissed" ? "Dismissed." : "You have seen it."} <button class="link" data-act="show" data-again="1">${S.seenHow === "dismissed" ? "Show it" : "Show again"}</button></div></div>`);
+  S.answered = S.answered.filter(a => Date.now() - a.at < ANSWERED_MS);
+  S.answered.slice(-2).forEach(a => out.push(`<div class="say quiet">${icon("check")}<div class="text">${esc(a.text)}</div></div>`));
+  setStatus(el, out.join(""));
+  const state = nFails ? "fail" : S.pauses.length ? "pause" : "calm";
   if (state === "calm" && document.body.dataset.state && document.body.dataset.state !== "calm") setTimeout(glint, 60);
   document.body.dataset.state = state;
+}
+/* The status is drawn again for every event; it is replaced only when what it says changed, so a
+   value being typed into the answer field and the focus stay put. */
+function setStatus(el, html) {
+  const key = html.replace(/(<span class="ago"[^>]*>)[^<]*/g, "$1");
+  if (key === statusKey && el.innerHTML) return;
+  statusKey = key;
+  const f = document.activeElement, keep = el.contains(f) && f.dataset ? [f.dataset.act, f.dataset.id, f.dataset.pval] : null;
+  el.innerHTML = html;
+  el.querySelectorAll("[data-pval]").forEach(i => { i.value = S.pval.get(i.dataset.pval) || ""; });
+  if (keep) (el.querySelector(keep[2] ? `[data-pval="${CSS.escape(keep[2])}"]` : `[data-act="${keep[0]}"]${keep[1] ? `[data-id="${CSS.escape(keep[1])}"]` : ""}`) || null)?.focus();
 }
 
 /* ---------------- run header, menus ---------------- */
@@ -1513,16 +1645,38 @@ function runHead() {
   // Events from a linked git worktree carry origin.worktree / origin.branch (see project.rs).
   const wo = S.entries.find(e => e.origin && (e.origin.branch || e.origin.worktree))?.origin;
   const wt = wo ? `<span class="wt" title="Git worktree ${esc(wo.worktree || "")}">${esc(wo.branch || wo.worktree)}</span> · ` : "";
+  $("runSibs").innerHTML = runSibs(r);
   $("runSwitch").innerHTML = `<span class="title">${esc(runTitle(r.run))}</span><span class="meta">${wt}${n.toLocaleString()} event${n === 1 ? "" : "s"}${errs ? " · " + errs + " error" + (errs > 1 ? "s" : "") : ""} · ${rel(r.last)}</span><svg class="i"><use href="#i-down"/></svg>`;
   const rm = $("runMenu"); // an open menu keeps its order under the pointer
   if (!rm.classList.contains("open") || !rm.children.length) {
     const total = runTotal();
+    // Outcome and time lead, so a failing and a passing run of the same request tell apart at a glance.
     rm.innerHTML = S.runs.map(x => {
-      const paused = S.pauses.some(p => p.run === x.run);
-      const st = paused ? ["pause", "waiting"] : x.errors ? ["error", x.errors + " error" + (x.errors > 1 ? "s" : "")] : ["ok", x.events + (x.events === 1 ? " event" : " events")];
-      return `<button role="menuitem" tabindex="-1" data-run="${esc(x.run)}" aria-current="${x.run === S.run}" class="lv-${st[0]}"><span class="dot"></span><span><b style="font-weight:500">${esc(runTitle(x.run))}</b> <span class="state">· ${st[1]}</span></span><span class="when">${rel(x.last)}</span></button>`;
+      const [lv, glyph, said] = runOutcome(x);
+      return `<button role="menuitem" tabindex="-1" data-run="${esc(x.run)}" aria-current="${x.run === S.run}" class="lv-${lv}" title="${esc(clock(x.last))}, ${rel(x.last)}">${icon(glyph)}<span class="t">${esc(shortWhen(x.last))}</span><span class="name"><b style="font-weight:500">${esc(runTitle(x.run))}</b></span><span class="state">${said}</span></button>`;
     }).join("") + (total > S.runs.length ? `<div class="more" role="none"><span>Showing the newest ${S.runs.length.toLocaleString()} of ${total.toLocaleString()} runs</span><button role="menuitem" tabindex="-1" data-act="more-runs">Load ${Math.min(RUNS_PAGE * 2, total - S.runs.length).toLocaleString()} more</button></div>` : "");
   }
+}
+/* failed, waiting or fine: [level, glyph, words] */
+function runOutcome(x) {
+  if (S.pauses.some(p => p.run === x.run)) return ["pause", "pause", "waiting"];
+  if (x.errors) return ["error", "x", x.errors + " error" + (x.errors > 1 ? "s" : "")];
+  return ["ok", "check", x.events + (x.events === 1 ? " event" : " events")];
+}
+/* 14:12 today, else Nov 27: the time a run ended, short enough to lead a menu line. */
+function shortWhen(t) {
+  const d = new Date(t), now = new Date();
+  return d.toDateString() === now.toDateString() ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+/* The run before (and after) this one of the same thing, one step away: compare a failing
+   POST /checkout with the last one that passed. */
+function runSibs(r) {
+  const name = runTitle(r.run), i = S.runs.indexOf(r);
+  const same = (x, j) => x.run !== r.run && runTitle(x.run) === name && j !== i;
+  const older = S.runs.find((x, j) => j > i && same(x, j)), newer = [...S.runs].reverse().find((x, j) => S.runs.length - 1 - j < i && same(x, S.runs.length - 1 - j));
+  const sib = (x, word) => { const [lv, glyph, said] = runOutcome(x), how = lv === "ok" ? "no errors" : said;
+    return `<button class="sib lv-${lv}" data-run="${esc(x.run)}" aria-label="${word} run of ${esc(name)}: ${esc(how)}, ${rel(x.last)}" title="${esc(clock(x.last))}">${icon(glyph)}<span>${word}<span class="sib-more">: ${esc(how)} · ${rel(x.last)}</span></span></button>`; };
+  return (older ? sib(older, "Previous") : "") + (newer ? sib(newer, "Newer") : "");
 }
 /* How many runs the project has in all (the server counts them; the list holds the newest). */
 function runTotal() { return Math.max(S.runs.length, S.projectInfo.find(p => p.project === S.project)?.runs || 0); }
@@ -1759,17 +1913,25 @@ async function sendReport() {
   } catch (err) { toast(`Could not write the report: ${err.message}`); }
   S.reporting = false; render(); drawSetMac();
 }
-function setupCard(inSettings) {
+/* `fold`: in the first-run view each card folds to its heading, so the first screen shows one next
+   action: set up this Mac while something is missing, else try it. */
+const obCard = (key, title, hint, body, fold) => fold === undefined ? `<div class="ob-card"><h2>${title}</h2>${body}</div>`
+  : `<details class="ob-card" data-ob="${key}"${fold ? "" : " open"}><summary><h2>${title}</h2>${hint ? `<span class="ob-hint">${hint}</span>` : ""}<svg class="i"><use href="#i-down"/></svg></summary>${body}</details>`;
+function setupCard(inSettings, fold) {
   const st = S.setup;
-  if (!st) return `<div class="ob-card"><h2>This Mac</h2><p class="ob-muted">Checking what is set up…</p></div>`;
+  if (!st) return obCard("mac", "This Mac", "checking", `<p class="ob-muted">Checking what is set up…</p>`, fold);
   const by = Object.fromEntries((st.steps || []).map(x => [x.name, x]));
   const rows = SETUP_ROWS.map(([k, label]) => {
+    // One glyph set and one wording for every row: a check when done, a circle and "not yet" while
+    // to do, a dash and "does not apply" when it cannot be done here.
     const x = by[k], state = !x ? "unknown" : x.status;
-    const mark = state === "ok" ? icon("check") : state === "fail" ? `<span class="ob-dot"></span>` : `<span class="ob-dash" aria-hidden="true">−</span>`;
-    const note = !x ? "" : state === "ok" ? "" : k === "agents" && state === "skip" ? "none found" : k === "service" && state === "fail" ? "not yet: for now Glint records only while the app runs"
-      : k === "login" && state === "fail" && !/gone/.test(x.detail) ? "not yet: after a restart, open Glint to get the menu bar spark back"
-      : state === "skip" ? x.detail : x.detail.replace(/:?\s*run `glint install[\s\S]*$/, "").trim() || "not set up yet";
-    return `<li class="ob-row ob-${state}">${mark}<span>${esc(label)}${note ? `<span class="ob-muted"> · ${esc(note)}</span>` : ""}</span></li>`;
+    const mark = state === "ok" ? icon("check") : state === "skip" ? `<span class="ob-dash" aria-hidden="true">−</span>` : `<span class="ob-pend" aria-hidden="true"></span>`;
+    const reason = x ? x.detail.replace(/:?\s*run `glint install[\s\S]*$/, "").trim() : "";
+    const why = reason.replace(/^not (set up|installed)( yet)?\s*/i, "");
+    const note = !x ? (st.error ? "not checked" : "checking") : state === "ok" ? "done" : state === "skip" ? "does not apply" + (k === "agents" ? ": no coding agent found" : reason ? ": " + reason : "")
+      : "not yet" + (k === "service" ? ": for now Glint records only while the app runs" : k === "login" && !/gone/.test(x.detail) ? ": after a restart, open Glint to get the menu bar spark back"
+      : /^in /.test(why) ? " " + why : why ? ": " + why : "");
+    return `<li class="ob-row ob-${state}">${mark}<span>${esc(label)}<span class="ob-muted${state === "ok" ? " vh" : ""}"> · ${esc(note)}</span></span></li>`;
   }).join("");
   const missing = (st.steps || []).some(x => x.status === "fail" && x.name !== "daemon");
   const noAgent = by.agents && by.agents.status === "skip";
@@ -1789,9 +1951,10 @@ function setupCard(inSettings) {
   const diag = (inSettings || failing) && !st.running
     ? `<button class="link" data-act="report" title="${diagText}"${S.reporting ? " disabled" : ""}>${S.reporting ? "Saving report…" : "Save diagnostics report"}</button>` : "";
   const diagHint = diag && failing ? `<p class="ob-muted">${diagText}</p>` : "";
-  return `<div class="ob-card"><h2>This Mac</h2>${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${agentHint}${err}<div class="ob-actions">${btn}${setupAgain}${again}${diag}</div>${after}${diagHint}</div>`;
+  const hint = missing ? "some parts not yet" : st.steps ? "set up" : "";
+  return obCard("mac", "This Mac", hint, `${lead ? `<p class="ob-muted">${lead}</p>` : ""}<ul class="ob-list">${rows}</ul>${agentHint}${err}<div class="ob-actions">${btn}${setupAgain}${again}${diag}</div>${after}${diagHint}`, fold);
 }
-function tryCard() {
+function tryCard(fold) {
   const CC = `<button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button>`;
   const ex = {
     php: `echo '<?php glint(["hello" => "from PHP"]);' > /tmp/hi.php && php /tmp/hi.php`,
@@ -1801,21 +1964,24 @@ function tryCard() {
   };
   const tabs = [["php", "PHP"], ["python", "Python"], ["node", "Node"], ["browser", "Browser"]];
   const lang = store.get("lang", "php");
-  return `<div class="ob-card"><h2>Try it</h2>
+  return obCard("try", "Try it", "one line in a terminal", `
     <p class="ob-muted">After setup, paste one of these into a new terminal window. The value appears here a moment later.</p>
     <div class="tabbed ob-tabs"><div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button role="tab" data-tab="${k}" aria-selected="${k === lang}">${n}</button>`).join("")}</div>
     ${tabs.map(([k]) => `<div class="pane" data-pane="${k}"${k === lang ? "" : " hidden"}><pre class="ob-code"><code data-lang="${k === "browser" ? "html" : "bash"}">${esc(ex[k])}</code>${CC}</pre></div>`).join("")}</div>
-    <div class="ob-actions"><button class="btn" data-act="sample">Show me an example</button><button class="link" data-act="docs">Read the docs</button></div></div>`;
+    <div class="ob-actions"><button class="btn" data-act="sample">Show me an example</button><button class="link" data-act="docs">Read the docs</button></div>`, fold);
 }
-function agentCard() {
-  return `<div class="ob-card"><h2>With your coding agent</h2>
+function agentCard(fold) {
+  return obCard("agent", "With your coding agent", "what to ask it", `
     <p class="ob-muted">Once set up, Claude Code hears about new failures with your next prompt. You can also ask it directly:</p>
-    <pre class="ob-code"><code>look in Glint for what failed and fix it</code></pre></div>`;
+    <pre class="ob-code"><code>look in Glint for what failed and fix it</code></pre>`, fold);
 }
 function onboarding() {
   $("status").innerHTML = `<div class="say idle"><svg class="mark glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><div class="text"><b>Glint is running</b>. Nothing has arrived yet.<span class="sub">Glint shows what your programs do: values you send with glint(), logs, SQL, errors and timings.</span></div></div>`;
   drawCap("");
-  $("entries").innerHTML = `<li class="onboard">${setupCard()}${tryCard()}${agentCard()}</li>`;
+  // One card open: the next thing to do. A card you opened or closed stays that way (S.obOpen).
+  const st = S.setup, missing = !st?.steps || st.error || st.steps.some(x => x.status === "fail" && x.name !== "daemon");
+  const next = missing ? "mac" : S.projectInfo.length ? "" : "try", fold = k => !(S.obOpen[k] ?? k === next);
+  $("entries").innerHTML = `<li class="onboard">${setupCard(false, fold("mac"))}${tryCard(fold("try"))}${agentCard(fold("agent"))}</li>`;
   $("entries").querySelectorAll("code[data-lang]").forEach(c => { c.innerHTML = highlight(c.textContent, c.dataset.lang); });
   if (S.setup === null) { S.setup = undefined; loadSetup(); }
   document.body.dataset.state = "idle";
@@ -1860,7 +2026,7 @@ function chrome() {
   const st = document.body.dataset.state || "idle";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="${FAV[st]}" d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg>`;
   $("favicon").href = "data:image/svg+xml," + encodeURIComponent(svg);
-  const fail = S.fail && !S.ack.has(S.fail.id) ? S.fail : null;
+  const fail = unseenFail();
   document.title = S.offline ? "Not recording · Glint" : st === "fail" && fail ? `✗ ${runTitle(fail.run)} failed · Glint` : st === "pause" && S.pauses[0] ? `⏸ ${runTitle(S.pauses[0].run)} is waiting · Glint` : `Glint${S.project ? " · " + S.project : ""}`;
   $("live").classList.toggle("offline", S.offline);
   $("liveText").textContent = S.offline ? "Offline" : "Live";
@@ -2021,14 +2187,36 @@ function announceFailure(e) {
 /* ---------------- actions ---------------- */
 async function showFailure(which) {
   const f = which || unseenFail() || S.fail; if (!f) return;
-  S.ack.add(f.id); store.set("ack", [...S.ack].slice(-200)); S.seen = f; S.seenAt = Date.now();
+  ackFail(f); S.seen = f; S.seenAt = Date.now(); S.seenHow = "shown";
   return openEvent(f);
+}
+/* Dismissed: seen without opening it. It stays in its run; the quiet line can bring it back. */
+function dismissFailure(f) {
+  if (!f) return;
+  ackFail(f); S.seen = f; S.seenAt = Date.now(); S.seenHow = "dismissed";
+  if (!failItems().length) S.moreOpen = false;
+  render();
+  requestAnimationFrame(() => ($("status").querySelector(".say.top .btn") || $("status").querySelector("button"))?.focus());
+}
+/* Opens the answer to a pause under its line: the question and what came with it first. */
+function openAnswer(id, focus) {
+  const pz = S.pauses.find(p => p.id === id); if (!pz) return;
+  S.answering = S.answering === id && !focus ? null : id;
+  if (S.answering && !S.pauseEv.has(id)) {
+    const known = S.byId.get(id);
+    if (known) S.pauseEv.set(id, known);
+    else api(`/v1/events/${encodeURIComponent(id)}`).then(e => { S.pauseEv.set(id, e); render(); }).catch(() => { S.pauseEv.set(id, null); render(); });
+  }
+  if (S.answering && !needs().slice(0, 1).some(x => x.e.id === id)) S.moreOpen = true;
+  draw();
+  if (S.answering) $("status").querySelector(`.answer [data-act="continue"]`)?.focus();
+  else $("status").querySelector(`[data-act="answer"][data-id="${CSS.escape(id)}"]`)?.focus();
 }
 /* Opens an event where it happened: its project, its run, its row unfolded and in view. */
 async function openEvent(e) {
   if (!e) return;
   closeSearch(true);
-  if (e.project && e.project !== S.project) await goProject(e.project, e.run);
+  if (e.project && e.project !== S.project) await goProject(e.project, e.run, true);
   else if (S.run !== e.run) await goRun(e.run);
   if (S.run !== e.run) return; // the user went elsewhere meanwhile
   // A tool result is shown on its call's row; an event older than the page loaded is fetched.
@@ -2040,15 +2228,22 @@ async function openEvent(e) {
   const li = document.querySelector(`#entries [data-id="${CSS.escape(holder)}"]`);
   li?.scrollIntoView({ block: "center", behavior: motionOK ? "smooth" : "auto" }); li?.querySelector(".row").focus({ preventScroll: true });
 }
-async function answer(id, how) {
+/* `raw`: the value typed next to the button that answered (the status line and the pause's row
+   each have a field). Stop asks first: the program ends and cannot be brought back. */
+async function answer(id, how, raw) {
   const pz = S.pauses.find(p => p.id === id) || S.pauses[0]; if (!pz) return;
-  const raw = document.querySelector(`[data-pval="${CSS.escape(pz.id)}"]`)?.value.trim();
+  raw = (raw ?? S.pval.get(pz.id) ?? "").trim();
+  if (how === "stop") {
+    const at = pz.file ? ` at ${base(pz.file)}${pz.line ? ":" + pz.line : ""}` : "";
+    const ok = await ask(`Stop ${runTitle(pz.run)}?`, `The program gets a stop answer${at} and ends there. This cannot be undone. Continue it instead if it should go on.`, "Stop the program");
+    if (!ok || !S.pauses.some(p => p.id === pz.id)) return;
+  }
   const body = { by: "ui" };
   if (how === "stop") body.stop = true; else if (raw) { try { body.value = JSON.parse(raw); } catch { body.value = raw; } }
   try {
     await api(`/v1/ctl/${encodeURIComponent(pz.id)}/resume`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    S.answered.push(`${runTitle(pz.run)} ${how === "stop" ? "stopped" : "continued" + (body.value !== undefined ? " with " + JSON.stringify(body.value) : "")} by you.`);
-    S.pauses = S.pauses.filter(p => p.id !== pz.id);
+    S.answered.push({ at: Date.now(), text: `${runTitle(pz.run)} ${how === "stop" ? "stopped" : "continued" + (body.value !== undefined ? " with " + JSON.stringify(body.value) : "")} by you.` });
+    S.pauses = S.pauses.filter(p => p.id !== pz.id); S.pval.delete(pz.id); if (S.answering === pz.id) S.answering = null;
     toast(how === "stop" ? "Asked the program to stop" : "Program continued");
   } catch (err) { toast(String(err.message || err)); S.pauses = S.pauses.filter(p => p.id !== pz.id); }
   render();
@@ -2079,7 +2274,10 @@ async function goRun(id) {
   if (done(g)) vt(draw);
 }
 function stepRun(d) { const o = S.runs.map(r => r.run), i = o.indexOf(S.run); if (o.length) goRun(o[(i + d + o.length) % o.length]); }
-async function goProject(p, run) {
+/* `away`: opened from the status line (a failure or a pause in another project). The status line
+   then offers the way back to where you were. */
+async function goProject(p, run, away) {
+  S.cameFrom = away && S.project && S.project !== p ? { project: S.project, run: S.run, to: p } : null;
   S.gen++; S.project = p; store.set("project", p); S.runLimit = RUNS_PAGE;
   S.run = S.wantRun = run || attentionRun(p); S.q = ""; S.hits = null; document.body.classList.remove("searching"); $("q").value = "";
   const g = busy(p); draw();
@@ -2105,11 +2303,16 @@ document.addEventListener("click", ev => {
   if (ev.target.closest('a[data-act="start-glintd"]')) { toast("Starting glintd…"); return; } // the app handles the link
   const b = ev.target.closest("button"); if (!b) return;
   const act = b.dataset.act;
-  if (act === "show") return showFailure(b.dataset.again ? S.seen : null);
-  if (act === "goto-pause") { const pz = S.pauses.find(p => p.id === b.dataset.id); if (!pz) return; return pz.project !== S.project ? goProject(pz.project, pz.run) : goRun(pz.run); }
+  if (act === "show") return showFailure(b.dataset.again ? S.seen : b.dataset.id ? S.fails.find(f => f.id === b.dataset.id) : null);
+  if (act === "dismiss") return dismissFailure(S.fails.find(f => f.id === b.dataset.id));
+  if (act === "dismiss-all") { failItems().forEach(ackFail); S.moreOpen = false; S.seen = null; toast("Dismissed. The failures stay in their runs."); render(); return; }
+  if (act === "more-need") { S.moreOpen = !S.moreOpen; draw(); return $("status").querySelector('[data-act="more-need"]')?.focus(); }
+  if (act === "answer") return openAnswer(b.dataset.id);
+  if (act === "go-back") { const c = S.cameFrom; if (!c) return; S.cameFrom = null; return goProject(c.project, c.run); }
+  if (act === "back-hide") { S.cameFrom = null; render(); return; }
+  if (act === "goto-pause") { const pz = S.pauses.find(p => p.id === b.dataset.id); if (!pz) return; return pz.project !== S.project ? goProject(pz.project, pz.run, true) : goRun(pz.run); }
   if (act === "scope") return openSearch(b.dataset.scope);
-  if (act === "continue") return answer(b.dataset.id, "continue");
-  if (act === "stop") return answer(b.dataset.id, "stop");
+  if (act === "continue" || act === "stop") return answer(b.dataset.id, act, b.parentElement.closest(".answer, .field")?.querySelector("[data-pval]")?.value);
   if (act === "copyexc") return copyException(b.dataset.id);
   if (act === "open") { ev.stopPropagation(); return openInEditor(b.dataset.id, b.dataset.frame); }
   if (act === "twig") { const id = b.dataset.id; S.collapsed.has(id) ? S.collapsed.delete(id) : S.collapsed.add(id); return render(); }
@@ -2234,6 +2437,10 @@ async function clearData() {
   catch (err) { toast(err.message); }
 }
 $("q").addEventListener("input", e => { S.q = e.target.value; searchHits(); render(); });
+// Only your own clicks count: a card drawn open also fires "toggle".
+$("entries").addEventListener("click", e => { const d = e.target.closest("details.ob-card > summary")?.parentElement; if (d) S.obOpen[d.dataset.ob] = !d.open; });
+$("status").addEventListener("input", e => { const id = e.target.dataset?.pval; if (id) S.pval.set(id, e.target.value); });
+$("status").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset?.pval) { e.preventDefault(); answer(e.target.dataset.pval, "continue", e.target.value); } });
 $("qScope").addEventListener("change", e => { setScope(e.target.value); $("q").focus(); });
 
 
@@ -2511,8 +2718,8 @@ document.addEventListener("keydown", e => {
     }
   }
   if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
-    if (e.key === "e" && S.fail && !S.ack.has(S.fail.id)) return showFailure();
-    if (e.key === "c" && S.pauses[0]) return answer(S.pauses[0].id, "continue");
+    if (e.key === "e" && unseenFail()) return showFailure();
+    if (e.key === "c" && S.pauses.length) { e.preventDefault(); return openAnswer((needs().find(x => x.t === "pause") || {}).e?.id, true); }
     if (e.key === "[") return stepRun(-1);
     if (e.key === "]") return stepRun(1);
     if (e.key === "/") { e.preventDefault(); return openSearch(); }

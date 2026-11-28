@@ -373,7 +373,9 @@ impl Store for SqliteStore {
         // Runs that end at the same instant keep ingest order.
         let sql = "SELECT g.run, g.project, g.first, g.last, g.n, g.errors, e.id,
                           json_extract(f.body, '$.origin.file'),
-                          CASE WHEN f.kind = 'core.log' THEN json_extract(f.body, '$.payload.message') END
+                          CASE WHEN f.kind = 'core.log' THEN json_extract(f.body, '$.payload.message') END,
+                          COALESCE(CASE WHEN e.kind = 'core.measure' AND e.parent IS NULL THEN json_extract(e.body, '$.payload.name') END,
+                                   json_extract(f.body, '$.meta.label'))
                    FROM (SELECT run, MAX(project) AS project, MIN(ts) AS first, MAX(ts) AS last,
                                 COUNT(*) AS n, SUM(level >= 4) AS errors, MAX(seq) AS last_seq,
                                 MIN(seq) AS first_seq
@@ -399,6 +401,7 @@ impl Store for SqliteStore {
                         last_id: r.get(6)?,
                         file: r.get(7)?,
                         head: r.get::<_, Option<String>>(8)?.map(|h| h.chars().take(120).collect()),
+                        name: r.get::<_, Option<String>>(9)?.map(|h| h.chars().take(120).collect()),
                     })
                 })
                 .map_err(backend)?;
@@ -774,6 +777,26 @@ mod tests {
         assert_eq!(order(10), ["new", "b", "a", "late"]);
         // The limit keeps the newest by time, not the last to arrive.
         assert_eq!(order(1), ["new"]);
+    }
+
+    #[test]
+    fn runs_are_named_by_their_root_measure_else_their_first_label() {
+        let s = SqliteStore::open_in_memory().unwrap();
+        // A request run sends its root measure last, when the request ends.
+        s.insert(&events(
+            r#"[
+              {"id":"q1","kind":"sql.query","payload":{"sql":"select 1"},"run":"req","parent":"m1","ts":"2026-01-02T10:00:00Z"},
+              {"id":"m1","kind":"core.measure","payload":{"name":"POST /checkout","duration_ms":3},"run":"req","ts":"2026-01-02T10:00:01Z"},
+              {"kind":"core.value","payload":{"value":1},"meta":{"label":"cart"},"run":"labelled","ts":"2026-01-02T09:00:00Z"},
+              {"kind":"core.value","payload":{"value":1},"run":"plain","ts":"2026-01-02T08:00:00Z"}
+            ]"#,
+        ))
+        .unwrap();
+        let names = s.runs(None, 10).unwrap().into_iter().map(|r| (r.run, r.name)).collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [("req".into(), Some("POST /checkout".into())), ("labelled".into(), Some("cart".into())), ("plain".into(), None)]
+        );
     }
 
     #[test]

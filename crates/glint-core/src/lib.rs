@@ -73,6 +73,10 @@ pub struct RunSummary {
     /// The run's first log line (e.g. `GET /checkout/8`), when it starts with one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub head: Option<String>,
+    /// What the run did, when it says so: the name of its root `core.measure` (a request run ends
+    /// with one, e.g. `POST /checkout`), else the label of its first event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// One project at a glance: how many runs it has, how many of them failed, when it was last active.

@@ -575,10 +575,10 @@ export default { plugins: [glint()] };""", "js")}
 """))
     s.append(("d-app", "This window", """
 <h2>Using this window</h2>
-<p>The top line covers every project: it says what failed and where, which program waits for you, or that all is quiet everywhere. Below it is one run at a time, the newest by when its last event happened. Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>; a project with a failure or a pause opens on that run.</p>
+<p>The top line covers every project: it says what failed and where, which program waits for you, or that all is quiet everywhere. When more than one thing needs you, it says how many and lists the rest under it; the open run's own failure always comes first. Show opens a failure in its run, Dismiss marks it seen without opening it, and a failure in another project opens there with a way back. A paused program waits until you answer: Answer shows what it asks and what it sent, then Continue, or Stop, which asks first. Below the top line is one run at a time, the newest by when its last event happened, named by what it did (<code>POST /checkout</code>). Switch runs and projects with the menus at the top or with <kbd>⌘K</kbd>; next to the run's name, Previous opens the run before it of the same request or script, to compare a failing run with one that passed.</p>
 <table class="ref">
 <tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action; it also finds what events say, in every project, and opens a match in its run</td></tr>
-<tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
+<tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure on top; answer the paused program on top</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
 <tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events (the arrow keys do too), between runs</td></tr>
