@@ -16,11 +16,13 @@
    States share one lightness/chroma band per theme: fail 25°, wait 70°, ok 155°.
    Code: number = sky 235°, string = sand 75°, keyword = violet 300°.
    Type: Mona Sans (variable width) for UI, JetBrains Mono for data.
+   Contrast: --faint is the lightest text colour and still reads at 4.5:1 or more on --bg,
+   --surface and --hover in both themes; --muted is above 6:1.
    ======================================================== */
 :root {
   --bg: oklch(98.7% .003 265); --surface: oklch(100% 0 0); --hover: oklch(96.2% .005 265); --code: oklch(97.4% .004 265);
   --line: oklch(92% .006 265); --line-strong: oklch(86.5% .008 265);
-  --text: oklch(21% .012 265); --muted: oklch(47% .014 265); --faint: oklch(61% .012 265);
+  --text: oklch(21% .012 265); --muted: oklch(47% .014 265); --faint: oklch(54% .012 265);
   --red: oklch(54% .2 25); --red-soft: oklch(96% .028 25);
   --amber: oklch(56% .13 65); --amber-soft: oklch(96.5% .035 75);
   --green: oklch(52% .13 155); --green-soft: oklch(96.5% .035 155);
@@ -35,7 +37,7 @@
   :root {
     --bg: oklch(16.5% .009 265); --surface: oklch(20% .01 265); --hover: oklch(22.5% .011 265); --code: oklch(18.5% .01 265);
     --line: oklch(26.5% .011 265); --line-strong: oklch(32.5% .013 265);
-    --text: oklch(95.5% .005 265); --muted: oklch(73% .013 265); --faint: oklch(57% .013 265);
+    --text: oklch(95.5% .005 265); --muted: oklch(73% .013 265); --faint: oklch(62% .013 265);
     --red: oklch(69% .19 25); --red-soft: oklch(25% .055 25);
     --amber: oklch(81% .14 75); --amber-soft: oklch(26% .045 75);
     --green: oklch(77% .14 155); --green-soft: oklch(25% .04 155);
@@ -102,6 +104,9 @@ kbd { font: 11px var(--mono); color: var(--faint); border: 1px solid var(--line-
 
 .menu { position: absolute; top: 48px; left: -8px; z-index: 5; width: min(420px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; display: none; }
 .menu.open { display: block; }
+#runMenu, #projMenu { max-height: min(60vh, 520px); overflow-y: auto; }
+.menu .more { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.menu .more button { display: inline; width: auto; padding: 4px 8px; color: var(--text); font-size: 13px; }
 .menu button { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; }
 .menu button:hover, .menu button[aria-current="true"] { background: var(--hover); }
 .menu .when { color: var(--faint); font-size: 13px; }
@@ -121,7 +126,7 @@ ol.entries { list-style: none; margin: 0 0 96px; padding: 0; }
 .sum .soft { color: var(--muted); }
 .right { color: var(--faint); font-size: 13px; white-space: nowrap; }
 .right .loc { font-family: var(--mono); font-size: 12.5px; margin-right: 12px; opacity: 0; transition: opacity .15s; }
-.row:hover .loc, .open .loc { opacity: 1; }
+.row:hover .loc, .row:focus-visible .loc, .open .loc { opacity: 1; }
 .open > .row { background: var(--hover); align-items: start; }
 .open .sum { white-space: normal; overflow: visible; }
 .open .sum .in-pane { display: none; }
@@ -264,6 +269,29 @@ ol.entries:has(.onboard)::before { display: none; }
 @keyframes blink { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .live.offline .mark { animation: none; } }
 
+/* glintd unreachable: the answer says so, and what is shown is marked as stale */
+.say.down .glyph { color: var(--amber); }
+.say.down b.verb { color: var(--amber); }
+.say.down .code { margin-top: 8px; position: relative; padding: 8px 44px 8px 12px; font-size: 12.5px; white-space: pre-wrap; }
+.say.down .code .cc { top: 3px; right: 3px; }
+body.stale .run-head, body.stale ol.entries { opacity: .55; filter: saturate(.4); transition: opacity .2s; }
+.stale-note { display: none; font-size: 12.5px; color: var(--amber); border: 1px solid color-mix(in oklch, var(--amber) 45%, transparent); border-radius: 999px; padding: 0 8px; white-space: nowrap; }
+body.stale .stale-note { display: inline; }
+@media (max-width: 560px) { body.stale .stale-note { display: none; } }
+/* "showing the newest N of M" */
+.cap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 10px 10px 32px; color: var(--muted); font-size: 13px; }
+.cap .link { font-size: 13px; padding: 4px 8px; }
+td.more-rows { color: var(--muted); font-family: var(--sans); border-bottom: 0; padding-top: 10px; }
+.long-more { margin-top: -4px; }
+/* in-app confirm */
+dialog.confirm { border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); padding: 20px 22px 16px; width: min(440px, calc(100vw - 32px)); }
+dialog.confirm::backdrop { background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(3px); }
+dialog.confirm h2 { font: 600 16px var(--sans); margin: 0 0 6px; }
+dialog.confirm p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
+.btn.danger-fill { background: var(--red); border-color: var(--red); color: var(--surface); }
+.btn.danger-fill:hover { opacity: .9; }
+
 /* terminal output (agent tool calls) */
 .term { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font: 13px/1.7 var(--mono); }
 .term-head { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -291,9 +319,11 @@ ol.entries:has(.onboard)::before { display: none; }
 
 /* quick actions on hover */
 .entry { position: relative; }
-.qa { position: absolute; right: 8px; top: 5px; display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s; background: var(--hover); padding-left: 8px; }
-.entry:hover > .qa, .qa:focus-within { opacity: 1; pointer-events: auto; }
-.entry:hover > .row .when, .entry:hover > .row .loc { visibility: hidden; }
+/* The row makes room for them while they show, so file:line and the time stay visible. */
+.qa { position: absolute; right: 6px; top: 5px; display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.entry { --qa-w: 32px; } .entry.qa2 { --qa-w: 64px; }
+.entry:hover > .qa, .entry:has(> .row:focus-visible) > .qa, .qa:focus-within { opacity: 1; pointer-events: auto; }
+.entry:hover > .row, .entry:has(> .row:focus-visible) > .row, .entry:has(> .qa:focus-within) > .row { padding-right: calc(14px + var(--qa-w)); }
 .qa button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
 .qa button:hover { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); }
 .qa svg { width: 15px; height: 15px; }
@@ -342,7 +372,7 @@ ol.entries:has(.onboard)::before { display: none; }
   .say .text { font-size: 16px; }
   .say .actions { width: 100%; padding-left: 28px; }
   .right .when { display: none; } .right .loc { margin-right: 0; }
-  .row:not(:hover) .right { display: none; }
+  .row:not(:hover):not(:focus-visible) .right { display: none; }
   .open .right { display: block; }
   .pane { padding-left: 10px; }
   .turn { grid-template-columns: 1fr; gap: 2px; }
@@ -527,8 +557,8 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 <div class="wrap">
   <header>
     <span class="brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg>Glint</span>
-    <div class="proj-wrap"><button class="proj" id="projBtn" aria-haspopup="true" aria-expanded="false"><span id="projName">…</span><svg class="i"><use href="#i-down"/></svg></button>
-      <div class="menu" id="projMenu" role="menu"></div></div>
+    <div class="proj-wrap"><button class="proj" id="projBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="projMenu"><span id="projName">…</span><svg class="i"><use href="#i-down"/></svg></button>
+      <div class="menu" id="projMenu" role="menu" aria-label="Projects"></div></div>
     <span class="spacer"></span>
     <span class="live" id="live" title="Connected to glintd"><svg class="mark" id="liveMark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="liveText">Live</span></span>
     <button class="docs-btn" id="agentsBtn" data-act="agents" aria-label="Agents (g)" title="What coding agents did with Glint (g)"><svg class="i"><use href="#k-prompt"/></svg></button>
@@ -540,9 +570,10 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <section class="status" id="status" aria-live="polite"></section>
 
   <div class="run-head" id="runHead">
-    <button class="run-switch" id="runSwitch" aria-haspopup="true" aria-expanded="false"></button>
+    <button class="run-switch" id="runSwitch" aria-haspopup="menu" aria-expanded="false" aria-controls="runMenu"></button>
     <label class="search"><svg class="i" style="color:var(--faint)"><use href="#i-search"/></svg><input id="q" placeholder="Search this run — text, kind:sql, level:warn" aria-label="Search this run"><kbd>esc</kbd></label>
-    <div class="menu" id="runMenu" role="menu"></div>
+    <span class="stale-note" id="staleNote"></span>
+    <div class="menu" id="runMenu" role="menu" aria-label="Runs"></div>
   </div>
   <ol class="entries" id="entries"></ol>
 </div>
@@ -898,7 +929,7 @@ export default { plugins: [glint()] };</code></pre>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>
-<p>Click an event to open it: values as foldable JSON, the code around a failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app, <kbd>⌥⌘G</kbd> shows and hides the window from anywhere, and the menu-bar spark turns red on a failure and amber when a program waits.</p>
+<p>Click an event to open it: values as foldable JSON, the code around a failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app, <kbd>⌥⌘G</kbd> shows and hides the window from anywhere, and the menu-bar spark turns red on a failure (its menu names the run and counts today's failures), amber when a program waits, and is struck through when glintd is not running. If glintd stops, this window says so, marks what it shows as out of date, and picks up again when glintd is back.</p>
 </section><section id="d-config">
 <h2>Settings and data</h2>
 <p>Open Settings with <kbd>,</kbd> or the gear at the top. There you choose how long events are kept and how many, which editor files open in, and whether coding agents hear about failures. Changes apply right away and are saved to <code>~/.glint/config.toml</code>, which you can also edit by hand. An environment variable with the same name (<code>GLINT_KEEP_DAYS</code>, <code>GLINT_EDITOR</code>, …) wins over both, and Settings shows which ones are set that way.</p>
@@ -950,6 +981,10 @@ export default { plugins: [glint()] };</code></pre>
 </div>
 <!-- docs:end -->
 <div class="toast" id="toast" role="status"></div>
+<dialog class="confirm" id="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmText">
+  <form method="dialog"><h2 id="confirmTitle"></h2><p id="confirmText"></p>
+    <div class="row-btns"><button class="btn" value="cancel" autofocus>Cancel</button><button class="btn danger-fill" value="ok" id="confirmOk"></button></div></form>
+</dialog>
 
 <script>
 "use strict";
@@ -958,7 +993,12 @@ export default { plugins: [glint()] };</code></pre>
 
 const $ = id => document.getElementById(id);
 const LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
-const MAX_ROWS = 500;
+/* What one window holds at once. Nothing is cut silently: past each limit the list says how many
+   more there are and offers to load or show them. */
+const ROWS = 500, MORE_ROWS = 1000;         // rows drawn in a run; "Show earlier" adds MORE_ROWS
+const EVENTS_PAGE = 5000;                   // events fetched per run, and per "Load earlier"
+const RUNS_PAGE = 100;                      // runs listed per project, and per "Load more"
+const TABLE_ROWS = 200, LONG_TEXT = 20000;  // table rows and characters of text shown before "show more"
 const store = {
   get(k, d) { try { const v = localStorage.getItem("glint." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("glint." + k, JSON.stringify(v)); } catch {} },
@@ -967,10 +1007,11 @@ const store = {
 const S = {
   project: store.get("project", null), projects: [], allRuns: [], runs: [],
   run: null, entries: [], byId: new Map(), pendingUpd: new Map(),
-  open: new Set(), q: "", showAll: false,
+  open: new Set(), q: "", rowCap: ROWS, raw: [], moreEvents: false, runLimit: RUNS_PAGE, projectInfo: [],
+  full: new Set(), tableRows: new Map(),
   fail: null, fails: [], seen: null, ack: new Set(store.get("ack", [])), pauses: [], answered: [],
   editor: null, editors: [],
-  offline: false, loaded: false,
+  offline: false, offlineSince: null, offlineWhy: "", loaded: false,
 };
 
 /* ---------------- helpers ---------------- */
@@ -1089,14 +1130,14 @@ function foldAll(list) {
   list.forEach(e => fold(e, false));
 }
 function fold(e, live) {
-  const p = e.payload || {};
+  const p = e.payload || {}; S.ver = (S.ver || 0) + 1;
   if (e.kind === "core.update") {
     const t = S.byId.get(p.target);
     if (t) applyUpdate(t, p); else S.pendingUpd.set(p.target, [...(S.pendingUpd.get(p.target) || []), p]);
     return;
   }
-  if (e.kind === "ctl.resume") { const t = S.byId.get(p.target); if (t) t.resolved = p; return; }
-  if (e.kind === "agent.tool_result" && e.parent && S.byId.has(e.parent)) { const c = S.byId.get(e.parent); c.result = e; return; }
+  if (e.kind === "ctl.resume") { const t = S.byId.get(p.target); if (t) { t.resolved = p; t._s = null; } return; }
+  if (e.kind === "agent.tool_result" && e.parent && S.byId.has(e.parent)) { const c = S.byId.get(e.parent); c.result = e; c._s = null; return; }
   if (e.kind === "core.clear") { S.entries = []; return; }
   if (live) e.isNew = true;
   S.byId.set(e.id, e); S.entries.push(e);
@@ -1106,15 +1147,18 @@ function applyUpdate(e, u) {
   e.meta = { ...(e.meta || {}), ...(u.meta || {}) };
   if (u.hidden != null) e.hiddenByUser = u.hidden;
   if (u.removed) e.removed = true;
+  e._s = null;
 }
 
-/* What a row says, by kind: one line. */
-function summary(e) {
+/* What a row says, by kind: one line. Kept on the event, since a 1 MB value takes a while to
+   turn into text and every search keystroke and live event asks again. */
+function summary(e) { return e._s || (e._s = summaryOf(e)); }
+function summaryOf(e) {
   const p = e.payload || {}, k = e.kind;
   const tag = t => ({ tag: t });
   let lead = e.meta?.label || "", body = "", mono = false, t = null;
   switch (k) {
-    case "core.value": body = compact(p.value !== undefined ? p.value : p); mono = true; if (!lead && p.type) lead = p.type; break;
+    case "core.value": body = compact(p.value !== undefined ? p.value : p).slice(0, 2000); mono = true; if (!lead && p.type) lead = p.type; break;
     case "core.log": body = p.message ?? compact(p); break;
     case "core.text": case "core.markdown": case "core.mermaid": body = String(p.content ?? "").split("\n")[0]; break;
     case "core.html": body = String(p.content ?? "").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "HTML"; if (!lead) lead = "html"; break;
@@ -1180,12 +1224,19 @@ function rowLevel(e) {
 }
 
 /* ---------------- value tree ---------------- */
-const prim = v => v === null ? `<span class="z">null</span>` : typeof v === "string" ? `<span class="s">"${esc(v)}"</span>` : `<span class="n">${esc(v)}</span>`;
+const prim = v => v === null ? `<span class="z">null</span>` : typeof v === "string" ? (v.length > LONG_STR
+  ? `<span class="s">"${esc(v.slice(0, LONG_STR))}</span><button class="jt" data-act="jstr" data-z="${lazy(v)}">… ${(v.length - LONG_STR).toLocaleString()} more characters</button><span class="s">"</span>`
+  : `<span class="s">"${esc(v)}"</span>`) : `<span class="n">${esc(v)}</span>`;
 const isPrim = v => v === null || typeof v !== "object";
 /* JSON as JSON: one key per line, braces kept, every object and array foldable (⌥-click unfolds
    or folds a whole branch). Small values open fully; a big one opens only its top level, and each
    folded node previews its first scalars. Short lists of scalars stay on one line. */
-const FOLD_KIDS = 25, BIG_JSON = 4000;
+const FOLD_KIDS = 25, BIG_JSON = 4000, LONG_STR = 2000;
+/* A big value draws only what is open: a folded node keeps its value here and draws its children
+   when unfolded, so a 1 MB payload costs its top level, not every nested key. Long strings show
+   their start and the rest on request. Cleared when the list is drawn again. */
+const LAZY = new Map(); let lazyN = 0;
+const lazy = v => { const k = "z" + lazyN++; LAZY.set(k, v); return k; };
 function jsonLen(v) { try { return JSON.stringify(v).length; } catch { return 0; } }
 function jflat(v) {
   if (isPrim(v)) return prim(v);
@@ -1208,14 +1259,23 @@ function jpreview(v, ks, arr) {
   if (out.length && out.length < ks.length && out[out.length - 1] !== "…") out.push("…");
   return out.length ? ` ${esc(out.join(", "))} ` : "";
 }
+function jkids(v, d, big, from = 0) {
+  const arr = Array.isArray(v), ks = Object.keys(v), to = from + 500, rest = ks.length - to;
+  return ks.slice(from, to).map((k, i) => `<div class="jl">${arr ? "" : `<span class="k">"${esc(k)}"</span>: `}${jnode(v[k], d + 1, big)}${from + i < ks.length - 1 ? "," : ""}</div>`).join("")
+    + (rest > 0 ? `<div class="jl"><button class="jt z" data-act="jmore" data-z="${lazy({ v, d, big, from: to })}">… ${rest.toLocaleString()} more ${arr ? "items" : "keys"}, show ${Math.min(rest, 500)}</button></div>` : "");
+}
 function jnode(v, d, big) {
   const flat = jflat(v); if (flat !== null) return flat;
-  const arr = Array.isArray(v), ks = Object.keys(v), shown = ks.slice(0, 500), [o, c] = arr ? ["[", "]"] : ["{", "}"];
-  const kids = shown.map((k, i) => `<div class="jl">${arr ? "" : `<span class="k">"${esc(k)}"</span>: `}${jnode(v[k], d + 1, big)}${i < ks.length - 1 ? "," : ""}</div>`).join("")
-    + (ks.length > shown.length ? `<div class="jl z">… ${ks.length - shown.length} more</div>` : "");
+  const arr = Array.isArray(v), ks = Object.keys(v), [o, c] = arr ? ["[", "]"] : ["{", "}"];
   const open = d === 0 || (!big && ks.length <= FOLD_KIDS && d < 5);
+  const kids = open || !big ? jkids(v, d, big) : "";
   const n = `${ks.length} ${arr ? "item" : "key"}${ks.length === 1 ? "" : "s"}`;
-  return `<span class="j${open ? "" : " shut"}"><button class="jt" data-act="jtoggle" aria-expanded="${open}" aria-label="${open ? "Fold" : "Unfold"} ${n}">${o}</button><span class="fold">${jpreview(v, ks, arr) || n}${c}</span><span class="in">${kids}</span><span class="close">${c}</span></span>`;
+  return `<span class="j${open ? "" : " shut"}"><button class="jt" data-act="jtoggle" aria-expanded="${open}" aria-label="${open ? "Fold" : "Unfold"} ${n}">${o}</button><span class="fold">${jpreview(v, ks, arr) || n}${c}</span><span class="in"${kids ? "" : ` data-z="${lazy({ v, d })}"`}>${kids}</span><span class="close">${c}</span></span>`;
+}
+/* Draws a folded node's children the first time it opens. */
+function jfill(j) {
+  const inn = j.querySelector(":scope > .in"), z = inn?.dataset.z; if (!z) return;
+  const got = LAZY.get(z); inn.removeAttribute("data-z"); if (got) inn.innerHTML = jkids(got.v, got.d, true);
 }
 function tree(v) {
   return `<div class="tree">${jnode(v, 0, jsonLen(v) > BIG_JSON)}</div>`;
@@ -1267,31 +1327,40 @@ function originLine(e) {
   const file = where ? (isAbs(o.file) ? openBtn(e, null, where + `<svg class="i" aria-hidden="true"><use href="#i-open"/></svg>`) : `<span class="where">${where}</span>`) : "";
   return `<div class="origin-line" title="${esc(tip)}">${file}${o.fn ? `<span>${esc(o.fn)}</span>` : ""}<span>${esc(clock(e.ts))}</span></div>`;
 }
+/* Text longer than LONG_TEXT shows its start and a button for the rest. */
+function longText(e, key, text) {
+  text = String(text ?? ""); const k = e.id + ":" + key;
+  if (text.length <= LONG_TEXT || S.full.has(k)) return [text, ""];
+  return [text.slice(0, LONG_TEXT), `<div class="long-more"><button class="link" data-act="full" data-k="${esc(k)}">Show all ${text.length.toLocaleString()} characters</button></div>`];
+}
 function pane(e) {
   const p = e.payload || {}; let h = note(e) + redactedNote(e);
   switch (e.kind) {
     case "core.value": h += (p.type ? `<div class="kv"><span>${esc(p.type)}</span></div>` : "") + tree(p.value !== undefined ? p.value : p); break;
-    case "core.log": if (String(p.message || "").length > 80) h += `<div class="code">${esc(p.message)}</div>`; if (p.fields && Object.keys(p.fields).length) h += tree(p.fields); break;
-    case "core.text": case "core.markdown": case "core.mermaid": h += `<div class="code" style="white-space:pre-wrap">${esc(p.content)}</div>`; break;
+    case "core.log": { const [t, more] = longText(e, "message", p.message); if (t.length > 80) h += `<div class="code">${esc(t)}</div>${more}`; if (p.fields && Object.keys(p.fields).length) h += tree(p.fields); break; }
+    case "core.text": case "core.markdown": case "core.mermaid": { const [t, more] = longText(e, "content", p.content); h += `<div class="code" style="white-space:pre-wrap">${esc(t)}</div>${more}`; break; }
     case "core.html": h += `<iframe class="html" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(p.content)}"></iframe>`; break;
     case "core.json": h += tree(p.content !== undefined ? p.content : p); break;
     case "core.table": {
       const rows = p.rows || [], cols = p.columns || (rows[0] && !Array.isArray(rows[0]) ? Object.keys(rows[0]) : []);
-      h += `<div style="overflow-x:auto"><table>${cols.length ? `<tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>` : ""}${rows.slice(0, 200).map(r => `<tr>${(Array.isArray(r) ? r : cols.map(c => r[c])).map(c => `<td>${isPrim(c) ? esc(c) : esc(JSON.stringify(c))}</td>`).join("")}</tr>`).join("")}</table></div>`; break;
+      const cap = S.tableRows.get(e.id) || TABLE_ROWS, rest = rows.length - cap, width = Math.max(1, cols.length || (Array.isArray(rows[0]) ? rows[0].length : 1));
+      const more = rest > 0 ? `<tr><td class="more-rows" colspan="${width}">${rest.toLocaleString()} more row${rest === 1 ? "" : "s"} <button class="link" data-act="rows" data-id="${esc(e.id)}">Show ${Math.min(rest, MORE_ROWS).toLocaleString()} more</button></td></tr>` : "";
+      h += `<div style="overflow-x:auto"><table>${cols.length ? `<tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>` : ""}${rows.slice(0, cap).map(r => `<tr>${(Array.isArray(r) ? r : cols.map(c => r[c])).map(c => `<td>${isPrim(c) ? esc(c) : esc(JSON.stringify(c))}</td>`).join("")}</tr>`).join("")}${more}</table></div>`; break;
     }
     case "core.exception": {
       const frames = p.frames || [];
       const sent = frames.find(f => !f.vendor && f.snippet), first = frames.findIndex(f => !f.vendor && isAbs(f.file));
-      h = (sent ? snippet(sent) : first >= 0 ? srcSlot(e, first) : "") + (frames.length ? frameList(frames, e) : p.stacktrace ? `<div class="code">${esc(p.stacktrace)}</div>` : "") + h;
+      const [stack, moreStack] = longText(e, "stack", p.stacktrace);
+      h = (sent ? snippet(sent) : first >= 0 ? srcSlot(e, first) : "") + (frames.length ? frameList(frames, e) : p.stacktrace ? `<div class="code">${esc(stack)}</div>${moreStack}` : "") + h;
       let c = p.cause, n = 0; while (c && n++ < 5) { h += `<div class="kv"><span>caused by <b>${esc(c.class)}</b>: ${esc(c.message)}</span></div>`; c = c.cause; }
       h += `<div class="pane-actions"><button class="btn" data-act="copyexc" data-id="${esc(e.id)}">Copy for agent</button></div>`; break;
     }
     case "core.trace": h += frameList(p.frames || [], e); break;
     case "core.measure": h += `<div class="kv"><span><b>${p.duration_ms ?? "?"} ms</b></span>${p.memory_bytes ? `<span>${(p.memory_bytes / 1048576).toFixed(1)} MiB</span>` : ""}${p.since_last_ms != null && !p.new_timer ? `<span>+${p.since_last_ms} ms since last</span>` : ""}</div>`; break;
     case "sql.query": {
-      let i = 0; const b = p.bindings || [];
-      const filled = esc(p.sql).replace(/\?/g, () => i < b.length ? `<span class="n">${esc(JSON.stringify(b[i++]))}</span>` : "?");
-      h += `<div class="code">${filled}</div><div class="kv">${p.duration_ms != null ? `<span><b>${p.duration_ms} ms</b></span>` : ""}${p.conn ? `<span>${esc(p.conn)}</span>` : ""}${p.rows != null ? `<span>${p.rows} rows</span>` : ""}${b.length ? `<span>${b.length === 1 ? "binding" : b.length + " bindings"} filled in</span>` : ""}</div>`; break;
+      let i = 0; const b = p.bindings || [], [sql, moreSql] = longText(e, "sql", p.sql);
+      const filled = esc(sql).replace(/\?/g, () => i < b.length ? `<span class="n">${esc(JSON.stringify(b[i++]))}</span>` : "?");
+      h += `<div class="code" style="white-space:pre-wrap;overflow-wrap:anywhere">${filled}</div>${moreSql}<div class="kv">${p.duration_ms != null ? `<span><b>${p.duration_ms} ms</b></span>` : ""}${p.conn ? `<span>${esc(p.conn)}</span>` : ""}${p.rows != null ? `<span>${p.rows} rows</span>` : ""}${b.length ? `<span>${b.length === 1 ? "binding" : b.length + " bindings"} filled in</span>` : ""}</div>`; break;
     }
     case "llm.call": {
       const u = p.usage || {};
@@ -1304,9 +1373,9 @@ function pane(e) {
     }
     case "agent.tool_call": {
       const r = e.result?.payload, cmd = toolKey(p.args);
-      const res = r ? (r.error != null ? compact(r.error) : r.result && typeof r.result === "object" && ("stdout" in r.result || "stderr" in r.result) ? [r.result.stdout, r.result.stderr].filter(Boolean).join("\n") : compact(r.result)) : "";
+      const [res, moreRes] = longText(e, "result", r ? (r.error != null ? compact(r.error) : r.result && typeof r.result === "object" && ("stdout" in r.result || "stderr" in r.result) ? [r.result.stdout, r.result.stderr].filter(Boolean).join("\n") : compact(r.result)) : "");
       const out = esc(res).replace(/^(FAIL|ERROR).*$/gm, m => `<span class="t-fail">${m}</span>`).replace(/✕/g, `<span class="t-fail">✕</span>`).replace(/^(PASS).*$/gm, m => `<span class="t-ok">${m}</span>`);
-      h += `<div class="term"><div class="term-head"><span><span class="t-prompt">$</span> ${esc(cmd)}</span>${r ? `<span class="exit" style="${r.ok === false ? "" : "color:var(--green)"}">${r.ok === false ? "failed" : "ok"}${ms(e.result) ? " · " + ms(e.result) + " ms" : ""}</span>` : `<span class="exit" style="color:var(--faint)">running…</span>`}</div>${res ? `<div class="term-body">${out}</div>` : ""}</div>`;
+      h += `<div class="term"><div class="term-head"><span><span class="t-prompt">$</span> ${esc(cmd)}</span>${r ? `<span class="exit" style="${r.ok === false ? "" : "color:var(--green)"}">${r.ok === false ? "failed" : "ok"}${ms(e.result) ? " · " + ms(e.result) + " ms" : ""}</span>` : `<span class="exit" style="color:var(--faint)">running…</span>`}</div>${res ? `<div class="term-body">${out}</div>` : ""}</div>${moreRes}`;
       if (p.args && typeof p.args === "object" && Object.keys(p.args).length > 1) h += tree(p.args);
       break;
     }
@@ -1335,9 +1404,23 @@ function failText(e) {
   }
   const s = summary(e); return [s.lead, s.body].filter(Boolean).join(" ");
 }
+/* glintd stopped answering: say so, why it matters, and what brings it back. In the app a button
+   starts it (the app also retries on its own); in a browser, the command that does. */
+function downStatus() {
+  const addr = location.host, since = S.offlineSince || Date.now();
+  const action = window.glintApp
+    ? `<div class="actions"><a class="btn primary" href="glint-app://start-glintd" data-act="start-glintd" style="display:grid;place-items:center;text-decoration:none">Start glintd</a></div>`
+    : "";
+  const how = window.glintApp
+    ? "Glint tries to start it again every few seconds."
+    : `Start it with the Glint app, or in a terminal:<div class="code"><code>glint install --only service</code><button class="cc" data-cc aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button></div>`;
+  const why = S.offlineWhy ? ` (${esc(S.offlineWhy)})` : "";
+  return `<div class="say down">${icon("pause")}<div class="text"><b>Not recording.</b> <b class="verb">glintd stopped answering</b> <span class="ago" data-t="${new Date(since).toISOString()}">${rel(since)}</span><span class="sub">Nothing answers at <span class="mono">${esc(addr)}</span>${why}, so new events from your programs are lost and the list below shows what was there at ${esc(clock(since))}. ${how}</span></div>${action}</div>`;
+}
 function status() {
   const el = $("status"), out = [];
   const fail = S.fail && !S.ack.has(S.fail.id) ? S.fail : null;
+  if (S.offline) { el.innerHTML = downStatus(); document.body.dataset.state = "down"; return; }
   if (!S.loaded) { el.innerHTML = ""; return; }
   if (fail) {
     const l = loc(fail);
@@ -1366,26 +1449,32 @@ function runHead() {
   const r = S.runs.find(x => x.run === S.run);
   $("runHead").hidden = !r;
   if (!r) return;
-  const errs = S.entries.filter(e => rowLevel(e) === "error").length;
+  // Only part of a big run is loaded: the counts are the stored ones then.
+  const loadedErrs = S.entries.filter(e => rowLevel(e) === "error").length;
+  const errs = S.moreEvents ? Math.max(r.errors, loadedErrs) : loadedErrs, n = S.moreEvents ? Math.max(r.events, S.entries.length) : S.entries.length;
   // Events from a linked git worktree carry origin.worktree / origin.branch (see project.rs).
   const wo = S.entries.find(e => e.origin && (e.origin.branch || e.origin.worktree))?.origin;
   const wt = wo ? `<span class="wt" title="Git worktree ${esc(wo.worktree || "")}">${esc(wo.branch || wo.worktree)}</span> · ` : "";
-  $("runSwitch").innerHTML = `<span class="title">${esc(runTitle(r.run))}</span><span class="meta">${wt}${S.entries.length} event${S.entries.length === 1 ? "" : "s"}${errs ? " · " + errs + " error" + (errs > 1 ? "s" : "") : ""} · ${rel(r.last)}</span><svg class="i"><use href="#i-down"/></svg>`;
+  $("runSwitch").innerHTML = `<span class="title">${esc(runTitle(r.run))}</span><span class="meta">${wt}${n.toLocaleString()} event${n === 1 ? "" : "s"}${errs ? " · " + errs + " error" + (errs > 1 ? "s" : "") : ""} · ${rel(r.last)}</span><svg class="i"><use href="#i-down"/></svg>`;
   const rm = $("runMenu"); // an open menu keeps its order under the pointer
-  if (!rm.classList.contains("open") || !rm.children.length) rm.innerHTML = S.runs.slice(0, 40).map(x => {
-    const paused = S.pauses.some(p => p.run === x.run);
-    const st = paused ? ["pause", "waiting"] : x.errors ? ["error", x.errors + " error" + (x.errors > 1 ? "s" : "")] : ["ok", x.events + (x.events === 1 ? " event" : " events")];
-    return `<button role="menuitem" data-run="${esc(x.run)}" aria-current="${x.run === S.run}" class="lv-${st[0]}"><span class="dot"></span><span><b style="font-weight:500">${esc(runTitle(x.run))}</b> <span class="state">· ${st[1]}</span></span><span class="when">${rel(x.last)}</span></button>`;
-  }).join("");
+  if (!rm.classList.contains("open") || !rm.children.length) {
+    const total = runTotal();
+    rm.innerHTML = S.runs.map(x => {
+      const paused = S.pauses.some(p => p.run === x.run);
+      const st = paused ? ["pause", "waiting"] : x.errors ? ["error", x.errors + " error" + (x.errors > 1 ? "s" : "")] : ["ok", x.events + (x.events === 1 ? " event" : " events")];
+      return `<button role="menuitem" tabindex="-1" data-run="${esc(x.run)}" aria-current="${x.run === S.run}" class="lv-${st[0]}"><span class="dot"></span><span><b style="font-weight:500">${esc(runTitle(x.run))}</b> <span class="state">· ${st[1]}</span></span><span class="when">${rel(x.last)}</span></button>`;
+    }).join("") + (total > S.runs.length ? `<div class="more" role="none"><span>Showing the newest ${S.runs.length.toLocaleString()} of ${total.toLocaleString()} runs</span><button role="menuitem" tabindex="-1" data-act="more-runs">Load ${Math.min(RUNS_PAGE * 2, total - S.runs.length).toLocaleString()} more</button></div>` : "");
+  }
 }
+/* How many runs the project has in all (the server counts them; the list holds the newest). */
+function runTotal() { return Math.max(S.runs.length, S.projectInfo.find(p => p.project === S.project)?.runs || 0); }
 function projMenu() {
   $("projName").textContent = S.project || "no project";
   const pm = $("projMenu"); // an open menu keeps its order under the pointer
   if (pm.classList.contains("open") && pm.children.length) return;
-  $("projMenu").innerHTML = S.projects.map(p => {
-    const runs = S.allRuns.filter(r => r.project === p), failing = runs.filter(r => r.errors).length;
-    return `<button role="menuitem" data-proj="${esc(p)}" class="${failing ? "lv-error" : ""}" aria-current="${p === S.project}"><span class="dot"></span><span><b style="font-weight:500">${esc(p)}</b> <span class="state">· ${runs.length} run${runs.length === 1 ? "" : "s"}${failing ? " · " + failing + " failing" : ""}</span></span><span class="when">${runs[0] ? rel(runs[0].last) : ""}</span></button>`;
-  }).join("") || `<div class="none" style="padding:10px;color:var(--muted)">No projects yet</div>`;
+  $("projMenu").innerHTML = S.projectInfo.map(({ project: p, runs, failing, last }) =>
+    `<button role="menuitem" tabindex="-1" data-proj="${esc(p)}" class="${failing ? "lv-error" : ""}" aria-current="${p === S.project}"><span class="dot"></span><span><b style="font-weight:500">${esc(p)}</b> <span class="state">· ${runs.toLocaleString()} run${runs === 1 ? "" : "s"}${failing ? " · " + failing.toLocaleString() + " failing" : ""}</span></span><span class="when">${last ? rel(last) : ""}</span></button>`
+  ).join("") || `<div class="none" role="none" style="padding:10px;color:var(--muted)">No projects yet</div>`;
 }
 
 /* ---------------- the list ---------------- */
@@ -1400,38 +1489,64 @@ function matches(e, tokens) {
 }
 function entries() {
   const ol = $("entries");
-  if (!S.runs.length) { onboarding(); return; }
+  if (!S.runs.length) { if (S.loaded && !S.offline) onboarding(); else ol.innerHTML = ""; return; }
+  LAZY.clear();
   const tokens = S.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let list = S.entries.filter(e => !e.removed && (!tokens.length || matches(e, tokens)));
-  const hiddenCount = Math.max(0, list.length - MAX_ROWS);
-  if (!S.showAll && hiddenCount) list = list.slice(-MAX_ROWS);
+  const matched = list.length, hiddenCount = Math.max(0, matched - S.rowCap);
+  if (hiddenCount) list = list.slice(-S.rowCap);
   const searching = tokens.length > 0;
   if (searching) list.forEach(e => { e.depth = 0; e.kidCount = 0; }); else list = treeOrder(list);
   // Timeline of the run, for the duration bars: each bar sits where its work started.
   const t0 = Math.min(...list.map(startOf)), t1 = Math.max(...list.map(e => startOf(e) + (ms(e) || 0)));
   const span = Math.max(1, t1 - t0);
   if (!list.length) { ol.innerHTML = S.q ? `<li class="empty">Nothing in ${esc(runTitle(S.run))} matches “${esc(S.q)}”. <button class="link" data-act="clearq">Clear search</button></li>` : `<li class="empty">This run has no events yet.</li>`; return; }
-  ol.innerHTML = (hiddenCount && !S.showAll ? `<li class="empty"><button class="link" data-act="showall">Show ${hiddenCount} earlier events</button></li>` : "") + list.map(e => {
+  ol.innerHTML = capLine(list.length, matched, hiddenCount, tokens.length > 0) + list.map(e => {
     const s = summary(e), lv = rowLevel(e), open = S.open.has(e.id), d = ms(e), l = loc(e);
     if (e.kind === "core.separator") return `<li class="entry sep" data-id="${esc(e.id)}"><hr></li>`;
     // An object or array is shown in full in the pane, so the open row keeps only its label.
     const structured = s.mono && /^[\[{]/.test(String(s.body || ""));
     const body = s.mono ? `<span class="mono${structured ? " in-pane" : ""}">${esc(s.body)}</span>` : esc(s.body);
     const twig = e.kidCount ? `<button class="twig" data-act="twig" data-id="${esc(e.id)}" aria-expanded="${!S.collapsed.has(e.id)}" aria-label="${S.collapsed.has(e.id) ? "Show" : "Hide"} ${e.kidCount} inside" title="${e.kidCount} inside"><svg class="i"><use href="#i-down"/></svg></button>` : "";
-    return `<li class="entry lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
+    const canOpen = isAbs(e.origin?.file);
+    return `<li class="entry${canOpen ? " qa2" : ""} lv-${lv}${open ? " open" : ""}${e.isNew ? " new" : ""}${e.hiddenByUser ? " muted" : ""}${e.depth ? " child" : ""}" style="--depth:${e.depth || 0}" data-id="${esc(e.id)}"${e.meta?.color ? ` data-color="${esc(e.meta.color)}"` : ""}>${twig}
       <button class="row" aria-expanded="${open}"><span class="node" aria-hidden="true"><svg><use href="#k-${KIND_ICON[e.kind] || "job"}"/></svg></span><span class="sum">${s.tag ? `<span class="tag">${esc(s.tag)}</span>` : ""}${s.lead ? `<span class="soft">${esc(s.lead)}</span> ` : ""}${body}${e.meta?.note ? ` <span class="has-note" title="Agent note">note</span>` : ""}${e.kidCount && S.collapsed.has(e.id) ? ` <span class="kids">+${e.kidCount}</span>` : ""}</span><span class="right">${readBy(e)}${d ? `<span class="dur" title="${d} ms, started +${Math.round(startOf(e) - t0)} ms into the run"><i style="--x:${((startOf(e) - t0) / span * 100).toFixed(1)}%;--w:${Math.max(3, d / span * 100).toFixed(1)}%"></i>${d < 1000 ? d + " ms" : (d / 1000).toFixed(2) + " s"}</span>` : ""}${l ? `<span class="loc">${esc(l)}</span>` : ""}<span class="when">${clock(e.ts)}</span></span></button>
-      <div class="qa"><button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")}"><svg class="i"><use href="#i-open"/></svg></button>` : ""}</div>
       <div class="detail"><div><div class="pane">${open ? pane(e) : ""}</div></div></div></li>`;
   }).join("");
   S.entries.forEach(e => (e.isNew = false));
+  if (QA.dataset.id) placeQa(ol.querySelector(`.entry[data-id="${CSS.escape(QA.dataset.id)}"]`));
   fillSources();
+}
+/* Quick actions (copy, open in editor): one set, moved to the row under the pointer or with
+   keyboard focus. A set in every row cost as much layout as the rows themselves. */
+const QA = document.createElement("div"); QA.className = "qa";
+function placeQa(li) {
+  if (!li || li.classList.contains("sep") || QA.parentElement === li) return;
+  const e = S.byId.get(li.dataset.id); if (!e) return;
+  const l = loc(e);
+  QA.dataset.id = e.id;
+  QA.innerHTML = `<button data-qa="copy" aria-label="Copy as text" title="Copy"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")}"><svg class="i"><use href="#i-open"/></svg></button>` : ""}`;
+  li.querySelector(":scope > .row").after(QA);
+}
+["mouseover", "focusin"].forEach(t => $("entries").addEventListener(t, ev => { if (!QA.contains(ev.target)) placeQa(ev.target.closest(".entry")); }));
+/* "Showing the newest N of M events": what the run holds beyond what is drawn (more loaded rows
+   than ROWS) or beyond what was fetched (more stored than EVENTS_PAGE). */
+function capLine(shown, matched, hidden, searching) {
+  const r = S.runs.find(x => x.run === S.run), stored = r ? r.events : 0;
+  const more = S.moreEvents && !searching;
+  if (!hidden && !more) return "";
+  const total = more ? Math.max(stored, matched) : matched;
+  const what = searching ? `matching events of the ${S.entries.length.toLocaleString()} loaded` : "events";
+  const btn = hidden ? `<button class="link" data-act="more-rows">Show ${Math.min(hidden, MORE_ROWS).toLocaleString()} earlier</button>`
+    : `<button class="link" data-act="more-events"${S.loadingEarlier ? " disabled" : ""}>${S.loadingEarlier ? "Loading…" : `Load ${Math.min(EVENTS_PAGE, Math.max(1, total - matched)).toLocaleString()} earlier`}</button>`;
+  return `<li class="cap" role="status">Showing the newest ${shown.toLocaleString()} of ${total.toLocaleString()} ${what}${btn}</li>`;
 }
 /* ---------------- first run ----------------
    Someone who just opened Glint sees what is set up on this Mac, one button that sets up the
    rest, ways to try it in their language, and an example to look at before writing any code. */
 S.setup = null; // null: not asked yet; {steps} | {error}; .running while setting up
 const SETUP_ROWS = [
-  ["service", "Glint starts when you log in"],
+  ["service", "Records in the background from login"],
   ["php", "glint() in PHP"],
   ["python", "glint() in Python"],
   ["node", "glint() in Node"],
@@ -1469,7 +1584,8 @@ function setupCard(inSettings) {
   const rows = SETUP_ROWS.map(([k, label]) => {
     const x = by[k], state = !x ? "unknown" : x.status;
     const mark = state === "ok" ? icon("check") : state === "fail" ? `<span class="ob-dot"></span>` : `<span class="ob-dash">–</span>`;
-    const note = !x ? "" : state === "ok" ? "" : k === "agents" && state === "skip" ? "none found" : state === "skip" ? x.detail : x.detail.replace(/ — run `.*`.*$/, "").replace(/run `glint install.*`/, "");
+    const note = !x ? "" : state === "ok" ? "" : k === "agents" && state === "skip" ? "none found" : k === "service" && state === "fail" ? "not yet: for now Glint records only while the app runs"
+      : state === "skip" ? x.detail : x.detail.replace(/ — run `.*`.*$/, "").replace(/run `glint install.*`/, "");
     return `<li class="ob-row ob-${state}">${mark}<span>${esc(label)}${note ? `<span class="ob-muted"> · ${esc(note)}</span>` : ""}</span></li>`;
   }).join("");
   const missing = (st.steps || []).some(x => x.status === "fail" && x.name !== "daemon");
@@ -1546,35 +1662,68 @@ let raf = 0;
 function render() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; draw(); }); }
 function draw() {
   projMenu();
-  if (S.loaded && !S.runs.length) { $("runHead").hidden = true; onboarding(); chrome(); return; }
-  status(); runHead(); entries(); chrome();
+  if (S.loaded && !S.runs.length && !S.offline) { $("runHead").hidden = true; onboarding(); chrome(); return; }
+  status(); runHead();
+  // The list is the costly part (a few hundred rows): draw it only when something it shows changed,
+  // not for every event of another run.
+  const key = JSON.stringify([S.run, S.ver, S.entries.length, S.q, S.rowCap, [...S.open], [...S.collapsed], S.full.size, [...S.tableRows], S.loadingEarlier, S.moreEvents, S.pauses.map(p => p.id), S.editor, S.loaded]);
+  if (key !== listKey || !$("entries").children.length) { listKey = key; entries(); }
+  chrome();
 }
-const FAV = { fail: "#e5484d", pause: "#e0a23c", calm: "#a8d63a", idle: "#8a8f9c" };
+let listKey = "";
+const FAV = { fail: "#e5484d", pause: "#e0a23c", calm: "#a8d63a", idle: "#8a8f9c", down: "#8a8f9c" };
 function chrome() {
   const st = document.body.dataset.state || "idle";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="${FAV[st]}" d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg>`;
   $("favicon").href = "data:image/svg+xml," + encodeURIComponent(svg);
   const fail = S.fail && !S.ack.has(S.fail.id) ? S.fail : null;
-  document.title = st === "fail" && fail ? `✗ ${runTitle(fail.run)} failed · Glint` : st === "pause" && S.pauses[0] ? `⏸ ${runTitle(S.pauses[0].run)} is waiting · Glint` : `Glint${S.project ? " · " + S.project : ""}`;
+  document.title = S.offline ? "Not recording · Glint" : st === "fail" && fail ? `✗ ${runTitle(fail.run)} failed · Glint` : st === "pause" && S.pauses[0] ? `⏸ ${runTitle(S.pauses[0].run)} is waiting · Glint` : `Glint${S.project ? " · " + S.project : ""}`;
   $("live").classList.toggle("offline", S.offline);
-  $("liveText").textContent = S.offline ? "Reconnecting…" : "Live";
-  $("live").title = S.offline ? "Lost the connection to glintd; retrying" : "Connected to glintd";
+  $("liveText").textContent = S.offline ? "Offline" : "Live";
+  $("live").title = S.offline ? "glintd is not answering; this window checks again every few seconds" : "Connected to glintd";
+  document.body.classList.toggle("stale", S.offline && S.loaded);
+  $("staleNote").textContent = S.offline && S.loaded ? `As of ${clock(S.offlineSince || Date.now())}` : "";
 }
 
 /* ---------------- loading ---------------- */
-async function loadRuns() {
-  const { runs } = await api("/v1/runs?limit=300");
-  S.allRuns = runs;
-  S.projects = [...new Set(runs.map(r => r.project))];
+/* Every project, from the server: the menu lists all of them, not only those with recent runs.
+   An older glintd has no /v1/projects; then the newest runs name them. */
+async function loadProjects() {
+  let list;
+  try { list = (await api("/v1/projects")).projects; } catch (err) { if (!(err instanceof TypeError) && !/not found/i.test(err.message)) throw err; }
+  if (!list?.length) {
+    const { runs } = await api("/v1/runs?limit=500"), by = new Map();
+    runs.forEach(r => { const p = by.get(r.project) || by.set(r.project, { project: r.project, runs: 0, failing: 0, last: r.last }).get(r.project); p.runs++; if (r.errors) p.failing++; });
+    list = [...by.values()];
+  }
+  S.projectInfo = list; S.projects = list.map(p => p.project);
   if (!S.projects.includes(S.project)) S.project = S.projects[0] || null;
-  S.runs = runs.filter(r => r.project === S.project);
+}
+async function loadRuns() {
+  const { runs } = S.project ? await api(`/v1/runs?project=${encodeURIComponent(S.project)}&limit=${S.runLimit}`) : { runs: [] };
+  S.allRuns = S.runs = runs;
   if (!S.runs.some(r => r.run === S.run)) S.run = S.runs[0]?.run || null;
 }
 async function loadRun() {
-  if (!S.run) { S.entries = []; return; }
-  const { events } = await api(`/v1/events?run=${encodeURIComponent(S.run)}&limit=5000`);
+  if (S.loadedRun !== S.run) { S.rowCap = ROWS; S.full.clear(); S.tableRows.clear(); S.loadedRun = S.run; }
+  if (!S.run) { S.entries = []; S.raw = []; S.moreEvents = false; return; }
+  const { events } = await api(`/v1/events?run=${encodeURIComponent(S.run)}&limit=${EVENTS_PAGE}`);
+  S.raw = events; S.moreEvents = events.length >= EVENTS_PAGE;
   foldAll(events);
   loadReads();
+}
+/* The page of events before the oldest one loaded. */
+async function loadEarlier() {
+  if (!S.raw.length || S.loadingEarlier) return;
+  const run = S.run; S.loadingEarlier = true; render();
+  try {
+    const { events } = await api(`/v1/events?run=${encodeURIComponent(run)}&before=${encodeURIComponent(S.raw[0].id)}&limit=${EVENTS_PAGE}`);
+    if (run !== S.run) return;
+    S.raw = events.concat(S.raw); S.moreEvents = events.length >= EVENTS_PAGE;
+    S.rowCap = Math.max(S.rowCap, S.entries.length) + events.length;
+    foldAll(S.raw);
+  } catch (err) { toast(`Could not load earlier events: ${err.message}`); }
+  finally { S.loadingEarlier = false; render(); }
 }
 async function loadStatus() {
   const q = S.project ? `&project=${encodeURIComponent(S.project)}` : "";
@@ -1590,27 +1739,36 @@ function pickFail() {
   S.fail = S.fails[S.fails.length - 1] || null;
 }
 async function loadAll() {
-  try { await loadRuns(); await Promise.all([loadRun(), loadStatus()]); S.loaded = true; S.offline = false; }
-  catch (err) { S.offline = true; console.warn("glint: load failed", err); }
+  try { await loadProjects(); await loadRuns(); await Promise.all([loadRun(), loadStatus()]); S.loaded = true; setOnline(); }
+  catch (err) { goneOffline(err instanceof TypeError ? "" : err.message); console.warn("glint: load failed", err); }
   render();
 }
+function goneOffline(why) {
+  if (!S.offline) { S.offline = true; S.offlineSince = Date.now(); }
+  S.offlineWhy = why || S.offlineWhy;
+}
+function setOnline() { S.offline = false; S.offlineSince = null; S.offlineWhy = ""; }
 
 /* ---------------- live stream ---------------- */
-let ws, retry = 500, runsTimer;
+/* When glintd goes away the window says so at once and keeps trying; when it is back, everything
+   is loaded again (glintd may have restarted with other data), and the list is current again. */
+let ws, retry = 500, runsTimer, projTimer;
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/v1/stream");
-  ws.onopen = () => { retry = 500; if (S.offline) { S.offline = false; loadAll(); } };
+  ws.onopen = () => { retry = 500; if (S.offline) loadAll(); };
   ws.onmessage = m => {
     let e; try { e = JSON.parse(m.data); } catch { return; }
     if (e.glint === "lagged") { loadAll(); return; }
     onEvent(e);
   };
-  ws.onclose = () => { S.offline = true; render(); setTimeout(connect, retry); retry = Math.min(retry * 2, 5000); };
+  ws.onclose = () => { goneOffline(); render(); setTimeout(connect, retry); retry = Math.min(retry * 2, 3000); };
 }
 function onEvent(e) {
   const inProject = e.project === S.project || !S.project;
   if (!S.project) { loadAll(); return; }
-  if (inProject && e.run === S.run) fold(e, true);
+  if (inProject && e.run === S.run) { S.raw.push(e); fold(e, true); }
+  // A project not in the menu yet: list projects again (at most every few seconds).
+  if (e.project && !S.projects.includes(e.project) && !projTimer) projTimer = setTimeout(() => { projTimer = null; loadProjects().then(render).catch(() => {}); }, 2000);
   if (e.kind === "ctl.pause" || e.kind === "ctl.resume") api("/v1/ctl").then(r => { S.pauses = r.pauses.filter(p => p.project === S.project); render(); }).catch(() => {});
   if (inProject && levelOf(e) >= 4 && !["core.update", "ctl.resume"].includes(e.kind)) { S.fails.push(e); pickFail(); }
   // The run list is refreshed at most once a second, however busy the stream (an agent's hooks
@@ -1653,7 +1811,7 @@ function copyException(id) {
 }
 function goRun(id) { vt(async () => { S.run = id; S.q = ""; document.body.classList.remove("searching"); await loadRun(); draw(); }); }
 function stepRun(d) { const o = S.runs.map(r => r.run), i = o.indexOf(S.run); if (o.length) goRun(o[(i + d + o.length) % o.length]); }
-function goProject(p) { vt(async () => { S.project = p; store.set("project", p); S.run = null; await loadAll(); }); }
+function goProject(p) { vt(async () => { S.project = p; store.set("project", p); S.run = null; S.runLimit = RUNS_PAGE; await loadAll(); }); }
 function openSearch() { document.body.classList.add("searching"); $("q").focus(); }
 function closeSearch() { document.body.classList.remove("searching"); S.q = ""; $("q").value = ""; render(); }
 
@@ -1662,6 +1820,7 @@ document.addEventListener("click", ev => {
   if (tab && !tab.closest("#docs")) return selectTab(tab);
   const fold = ev.target.closest(".tree .fold"); // a folded node's preview unfolds it, like its brace
   if (fold) { fold.previousElementSibling.click(); return; }
+  if (ev.target.closest('a[data-act="start-glintd"]')) { toast("Starting glintd…"); return; } // the app handles the link
   const b = ev.target.closest("button"); if (!b) return;
   const act = b.dataset.act;
   if (act === "show") return showFailure(b.dataset.again ? S.seen : null);
@@ -1680,19 +1839,24 @@ document.addEventListener("click", ev => {
   if (act === "agents-close") return closeAgents();
   if (act === "settings-close") return closeSettings();
   if (act === "data-prune") return api("/v1/data/prune", { method: "POST" }).then(r => { toast(r.removed ? `Removed ${r.removed} old events` : "Nothing old enough to remove"); return openSettings(); }).catch(e => toast(e.message));
-  if (act === "data-clear") {
-    if (!confirm("Delete every stored event? This cannot be undone.")) return;
-    return api("/v1/data/clear", { method: "POST" }).then(r => { toast(`Deleted ${r.removed} events`); loadAll(); return openSettings(); }).catch(e => toast(e.message));
-  }
+  if (act === "data-clear") return clearData();
   if (act === "docs-close") return closeDocs();
   if (act === "jtoggle") {
     const j = b.parentElement, shut = j.classList.toggle("shut");
+    if (!shut) jfill(j);
+    if (ev.altKey && !shut) { let more; do { more = [...j.querySelectorAll(".in[data-z]")]; more.forEach(x => jfill(x.parentElement)); } while (more.length); }
     const all = ev.altKey ? [j, ...j.querySelectorAll(".j")] : [j];
     all.forEach(x => { x.classList.toggle("shut", shut); x.querySelector(":scope > .jt").setAttribute("aria-expanded", String(!shut)); });
     return;
   }
   if (act === "clearq") return closeSearch();
-  if (act === "showall") { S.showAll = true; return render(); }
+  if (act === "more-rows") { S.rowCap += MORE_ROWS; return render(); }
+  if (act === "more-events") return loadEarlier();
+  if (act === "more-runs") { S.runLimit = S.runs.length + RUNS_PAGE * 2; return loadRuns().then(() => { $("runMenu").innerHTML = ""; runHead(); focusItem($("runMenu"), S.runs.length - RUNS_PAGE * 2); }).catch(e => toast(e.message)); }
+  if (act === "rows") { S.tableRows.set(b.dataset.id, (S.tableRows.get(b.dataset.id) || TABLE_ROWS) + MORE_ROWS); return render(); }
+  if (act === "full") { S.full.add(b.dataset.k); return render(); }
+  if (act === "jmore") { const z = LAZY.get(b.dataset.z); if (z) b.parentElement.outerHTML = jkids(z.v, z.d, z.big, z.from); return; }
+  if (act === "jstr") { const v = LAZY.get(b.dataset.z); if (v != null) { b.previousElementSibling.textContent = '"' + v; b.remove(); } return; }
   if (b.hasAttribute("data-cc")) { const c = b.parentElement.cloneNode(true); c.querySelector(".cc").remove(); copy(c.textContent.trim()); return toast("Command copied"); }
   if (b.dataset.qa === "copy") { const e = S.byId.get(b.closest(".entry").dataset.id); const s = summary(e); copy([s.tag, s.lead, s.body].filter(Boolean).join(" ") + (loc(e) ? `  (${loc(e)})` : "")); return toast("Copied"); }
   if (b.classList.contains("row")) {
@@ -1700,16 +1864,66 @@ document.addEventListener("click", ev => {
     S.open.has(id) ? S.open.delete(id) : S.open.add(id); draw();
     document.querySelector(`[data-id="${CSS.escape(id)}"] .row`)?.focus(); return;
   }
-  if (b.id === "runSwitch") { const m = $("runMenu"); m.classList.toggle("open"); b.setAttribute("aria-expanded", m.classList.contains("open")); return; }
-  if (b.dataset.run) { $("runMenu").classList.remove("open"); return goRun(b.dataset.run); }
-  if (b.id === "projBtn") { const m = $("projMenu"); m.classList.toggle("open"); b.setAttribute("aria-expanded", m.classList.contains("open")); return; }
-  if (b.dataset.proj) { $("projMenu").classList.remove("open"); return goProject(b.dataset.proj); }
+  if (b.id === "runSwitch") return toggleMenu(b, $("runMenu"));
+  if (b.dataset.run) { closeMenu($("runMenu"), true); return goRun(b.dataset.run); }
+  if (b.id === "projBtn") { toggleMenu(b, $("projMenu")); return loadProjects().then(() => { if (!$("projMenu").contains(document.activeElement)) return; $("projMenu").innerHTML = ""; projMenu(); focusItem($("projMenu")); }).catch(() => {}); }
+  if (b.dataset.proj) { closeMenu($("projMenu"), true); return goProject(b.dataset.proj); }
   if (b.id === "cmdkBtn") return openPalette();
 });
 document.addEventListener("click", ev => {
-  if (!ev.target.closest(".run-head")) $("runMenu").classList.remove("open");
-  if (!ev.target.closest(".proj-wrap")) $("projMenu").classList.remove("open");
+  if (!ev.target.closest(".run-head")) closeMenu($("runMenu"));
+  if (!ev.target.closest(".proj-wrap")) closeMenu($("projMenu"));
 }, true);
+
+/* ---------------- menus ----------------
+   The project and run menus follow the WAI menu button pattern: opening focuses the current item,
+   arrows move (wrapping), Home and End jump, Escape closes and returns to the button, Tab closes. */
+const menuButton = m => $(m.id === "runMenu" ? "runSwitch" : "projBtn");
+const menuItems = m => [...m.querySelectorAll('[role="menuitem"]')];
+function focusItem(m, i) {
+  const items = menuItems(m); if (!items.length) return;
+  const cur = items.findIndex(x => x.getAttribute("aria-current") === "true");
+  const at = i == null ? Math.max(0, cur) : (i + items.length) % items.length;
+  items[at].focus(); items[at].scrollIntoView({ block: "nearest" });
+}
+function openMenu(btn, m) { m.innerHTML = ""; (m.id === "runMenu" ? runHead : projMenu)(); m.classList.add("open"); btn.setAttribute("aria-expanded", "true"); focusItem(m); }
+function closeMenu(m, refocus) {
+  if (!m.classList.contains("open")) return;
+  m.classList.remove("open"); const btn = menuButton(m); btn.setAttribute("aria-expanded", "false");
+  if (refocus) btn.focus();
+}
+function toggleMenu(btn, m) { m.classList.contains("open") ? closeMenu(m) : openMenu(btn, m); }
+["runMenu", "projMenu"].forEach(id => $(id).addEventListener("keydown", e => {
+  const m = $(id), items = menuItems(m), i = items.indexOf(document.activeElement);
+  const go = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (go !== undefined) { e.preventDefault(); focusItem(m, go); }
+  else if (e.key === "Escape") { e.preventDefault(); closeMenu(m, true); }
+  else if (e.key === "Tab") { closeMenu(m); return; }
+  if (!e.metaKey && !e.ctrlKey) e.stopPropagation(); // j, k, [, ] and the rest act on the page, not here
+}));
+["runSwitch", "projBtn"].forEach(id => $(id).addEventListener("keydown", e => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault(); const m = $(id === "runSwitch" ? "runMenu" : "projMenu");
+  openMenu($(id), m); if (e.key === "ArrowUp") focusItem(m, -1);
+}));
+
+/* ---------------- confirm ----------------
+   An in-app question instead of the browser's confirm(): it names what goes and how much. */
+function ask(title, text, ok) {
+  const d = $("confirm"); $("confirmTitle").textContent = title; $("confirmText").textContent = text; $("confirmOk").textContent = ok;
+  d.returnValue = "";
+  return new Promise(res => { d.addEventListener("close", () => res(d.returnValue === "ok"), { once: true }); d.showModal(); });
+}
+async function clearData() {
+  let n, mb;
+  try { const i = await api("/v1/settings"); n = i.data.events; mb = i.data.bytes / 1048576; } catch (err) { return toast(err.message); }
+  if (!n) return toast("There are no stored events to delete");
+  const yes = await ask(`Delete all ${n.toLocaleString()} events?`,
+    `Every run in every project goes, and about ${mb < 0.1 ? "0.1" : mb.toFixed(1)} MB of disk space is freed. This cannot be undone.`, `Delete ${n.toLocaleString()} events`);
+  if (!yes) return;
+  try { const r = await api("/v1/data/clear", { method: "POST" }); toast(`Deleted ${r.removed.toLocaleString()} events`); loadAll(); openSettings(); }
+  catch (err) { toast(err.message); }
+}
 $("q").addEventListener("input", e => { S.q = e.target.value; render(); });
 
 
@@ -1730,7 +1944,7 @@ async function loadReads() {
     reads.forEach(r => { const l = m.get(r.event) || []; l.push(r); m.set(r.event, l); });
     const changed = m.size !== S.reads.size || [...m].some(([k, v]) => (S.reads.get(k) || []).length !== v.length);
     S.reads = m;
-    if (changed) render();
+    if (changed) { S.ver = (S.ver || 0) + 1; render(); }
   } catch {}
 }
 /* "read by Claude Code 14:02" when an agent asked for it; "told Claude Code" when a hook listed it.
@@ -1929,6 +2143,7 @@ $("palette").addEventListener("mousedown", e => { if (e.target.id === "palette")
 
 /* ---------------- keyboard ---------------- */
 document.addEventListener("keydown", e => {
+  if ($("confirm").open) return; // the dialog handles its own keys
   const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("palette").classList.contains("open") ? closePalette() : openPalette(); return; }
   if (e.key === "Escape" && $("palette").classList.contains("open")) { closePalette(); return; }
@@ -1951,7 +2166,7 @@ document.addEventListener("keydown", e => {
       next.focus(); next.scrollIntoView({ block: "nearest" });
     }
   }
-  if (e.key === "Escape") { closeSearch(); $("runMenu").classList.remove("open"); $("projMenu").classList.remove("open"); }
+  if (e.key === "Escape") { closeSearch(); closeMenu($("runMenu")); closeMenu($("projMenu")); }
 });
 
 // Agents read events without the stream saying so: look again every few seconds.
