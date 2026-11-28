@@ -336,7 +336,7 @@ def vite(c: Checker) -> Result:
     env = c.env("check-vite", GLINT_PROJECT="")
     env.pop("GLINT_PROJECT")
     vite_bin = os.path.join(dest, "node_modules/.bin/vite")
-    p = c.start([vite_bin, "--port", str(port), "--strictPort"], dest, env, os.path.join(c.work, "vite.log"))
+    p = c.start([vite_bin, "--host", "127.0.0.1", "--port", str(port), "--strictPort"], dest, env, os.path.join(c.work, "vite.log"))
     ok = wait_http(f"http://127.0.0.1:{port}/", 30, p)
     _, html = get(f"http://127.0.0.1:{port}/")
     c.stop(p)
