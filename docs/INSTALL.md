@@ -8,8 +8,10 @@ Cursor and others) reads the same events. Everything stays on your machine.
 
 - A Mac with Apple silicon (M1 or newer) and macOS 11 or later. This build does not run on Intel
   Macs.
-- For `glint()` in your code: PHP 8.0+, Python 3.9+ or Node 18+, whichever you use. Glint works
-  with the versions your terminal finds (Homebrew, nvm, pyenv and so on).
+- For `glint()` in your code: PHP 8.0+, Python 3.9+ or Node 18.19+ (or 20.6+), whichever you use.
+  Setup covers the versions your terminal finds (Homebrew, nvm, pyenv and so on); `glint doctor`
+  names the other ones it finds and prints the command that covers each. An older PHP or Node is
+  left alone, so it keeps working exactly as before.
 
 ## Install
 
@@ -50,7 +52,9 @@ Cursor and others) reads the same events. Everything stays on your machine.
 glint doctor
 ```
 
-`glint doctor` says whether Glint is running, whether `glint()` works in PHP, Python and Node, and
+`glint doctor` says whether Glint is running and answering, whether the login service runs it,
+whether `glint()` works in PHP, Python and Node, which other PHP and Python versions (Homebrew
+versions, pyenv versions, a virtual environment) do not have `glint()` yet and how to add it, and
 which coding agents know about Glint. Then send something:
 
 ```bash
@@ -72,21 +76,34 @@ restarts Glint. The version you have is in the window title and in About Glint.
 
 ## What setup changes on your Mac
 
-Setup writes these files, and `glint uninstall` removes them again:
+Setup writes these files, lists each one in `~/.glint/installed.json`, and `glint uninstall`
+removes them again, even if the PHP or Python they belong to is no longer on your PATH:
 
-- `~/Library/LaunchAgents/local.glint.glintd.plist`, so the Glint service starts when you log in;
+- `~/Library/LaunchAgents/local.glint.glintd.plist`, so the Glint service starts when you log in.
+  If glintd stops with an error, macOS starts it again after 10 seconds; it never restarts in a
+  tight loop. A Glint service that finds another glintd on its port waits for that one to stop.
 - `~/.glint/` with the service, the command line tool, the SDKs, the settings and the event
-  database;
-- a `99-glint.ini` in PHP's configuration folder, so every PHP script has `glint()`;
-- a `glint.pth` in Python's user site-packages, so every Python program has `glint()`;
-- a few marked lines in your shell profile (`~/.zshrc` for zsh), so Node has `glint()` and the
-  `glint` command is on your PATH;
+  database. If the database file is damaged, glintd moves it aside as `glint.db.corrupt-<time>`
+  and starts with an empty one.
+- a `99-glint.ini` and a small `glint-prepend.php` in PHP's configuration folder, so every PHP
+  script has `glint()`. The small file loads Glint only while `~/.glint` is there and the PHP is
+  8.0 or newer, so deleting `~/.glint` never breaks PHP.
+- a `glint.pth` in Python's user site-packages, so every Python program has `glint()`.
+- a few marked lines in your shell profile (`~/.zshrc`, or `$ZDOTDIR/.zshrc` when you set
+  ZDOTDIR), so Node has `glint()` and the `glint` command is on your PATH. Node gets `glint()`
+  only while `~/.glint` is there.
 - the MCP server entry for the coding agents it finds (Claude Code, Cursor, VS Code, Windsurf,
   Gemini CLI, Codex), and hooks in `~/.claude/settings.json` for Claude Code. Each file gets a
   one-time `.glint-backup` copy before the first change.
 
 Glint never sends anything off your Mac. SDKs send nothing when `APP_ENV` or `NODE_ENV` is
-`production`, so a production deployment stays untouched even with the same code.
+`production`, so a production deployment stays untouched even with the same code. WordPress sites
+report only when they are development sites: `WP_ENVIRONMENT_TYPE` is `local` or `development`,
+or `WP_DEBUG` is on.
+
+When glintd is running but stuck, your programs do not wait for it: PHP gives up after half a
+second and tells the next PHP processes (php-fpm's next requests) to skip Glint for 5 seconds,
+and a Node program never waits more than a quarter of a second at exit.
 
 ## Uninstall
 
@@ -94,8 +111,9 @@ Glint never sends anything off your Mac. SDKs send nothing when `APP_ENV` or `NO
 glint uninstall
 ```
 
-Then quit Glint from its menu, move the app to the Trash, and delete `~/.glint` if you also want
-the stored events and settings gone.
+It removes the `99-glint.ini` of every PHP on the Mac (Homebrew versions, Herd, the system's),
+not only the one on your PATH. Then quit Glint from its menu, move the app to the Trash, and
+delete `~/.glint` if you also want the stored events and settings gone.
 
 ## When something is off
 
@@ -105,6 +123,9 @@ the stored events and settings gone.
 | No spark in the menu bar | On a MacBook with a notch, menu bar icons can hide behind it. Quit an app with a long menu, or look for the Glint icon in the Dock instead: it shows a badge on failures. |
 | No notifications | System Settings > Notifications > Glint, and allow them. |
 | `glint()` is undefined | Open a new terminal window. Run `glint doctor`, which says what is missing. Code run with `php -r` never gets it; a PHP file does. |
+| `glint()` is undefined in one PHP or Python version, or in a virtual environment | Run `glint doctor`. Its coverage line names each one and the command that adds `glint()` there. |
+| Node says `--import` is not allowed or unknown | That Node is older than 18.19. Setup leaves NODE_OPTIONS alone for it; if you switched Node versions afterwards, update Node or remove the glint lines from your shell profile. |
+| The menu says glintd is not running | The reason follows. Glint starts its own copy when the login service does not answer; `~/.glint/glintd.log` has the details. |
 | `glint: command not found` | Open a new terminal window, or run `/Applications/Glint.app/Contents/Resources/bin/glint`. |
 | Claude Code says it has no Glint server | Glint was not set up yet, or the session started before setup. Click **Set up this Mac** in the Glint window, then start a new Claude Code session. An agent you install later gets Glint the next time you click it. |
 | Setup reported a problem | Read `~/.glint/setup.log`. PHP's configuration folder may need `sudo` on some setups; run the install command from step 4 in Terminal to see the details. |

@@ -103,6 +103,9 @@ async fn attempt(shell: &str, flags: &str, line: &str, timeout: Duration) -> Res
         // The CLI may run from a copy in ~/.glint/cache (see `unquarantined`), where it cannot
         // find this glintd next to itself; `glint install` copies the one named here.
         .envs(std::env::current_exe().ok().map(|e| ("GLINT_DAEMON", e)))
+        // `glint install` must not stop this glintd while it waits for the answer; it swaps it for
+        // the login service after the command ends instead.
+        .env("GLINT_SETUP_PID", std::process::id().to_string())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

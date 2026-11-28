@@ -29,7 +29,12 @@ M2 in progress: MCP server (`/mcp`, `glint mcp`), control plane (pause/resume fr
 service and a zero-config global `glint()` for PHP (auto_prepend_file), Python (.pth → builtins)
 and Node (NODE_OPTIONS --import); the SDKs are embedded with `include_str!`, so SDK edits ship with
 the next `glint` build. Test it with `HOME=<tmp>` plus `--php-ini-dir` / `--shell-profile`, never
-against the real home.
+against the real home. Safety rules: what install writes is recorded in `~/.glint/installed.json`
+(uninstall and doctor read it); PHP's prepend is a PHP-5-safe stub next to `99-glint.ini` that
+includes the SDK only if it exists; NODE_OPTIONS is set only for Node with `--import` and only
+while global.mjs exists; uninstall sweeps every PHP's ini folder only when HOME is the account's
+real home. glintd binds its port before opening the store, moves a corrupt DB aside, and waits for
+a taken port under the login service (`GLINT_WAIT_FOR_PORT=1`).
 
 Desktop app in `app/` (Tauri 2, its own Cargo workspace so `cargo test --workspace` never builds
 it): tray state, notifications for new failures and pauses, ⌥⌘G, glintd autostart; window shows
