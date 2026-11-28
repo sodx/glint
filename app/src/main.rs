@@ -62,25 +62,30 @@ fn wait_up(tenths: u32) -> bool {
     false
 }
 
-/// Start glintd when nothing answers. When `glint install` set it up as a login service, ask the
-/// service manager to start it: starting a copy ourselves would take its port, and the service
-/// (kept current by `glint install`) would then fail to start. Otherwise run the newest of
-/// ~/.glint/bin/glintd and the copy bundled next to this binary, logging to ~/.glint/glintd.log.
-fn ensure_daemon() {
+/// Start glintd when nothing answers, and say why when it still does not. When `glint install`
+/// set it up as a login service, ask the service manager first. When the service does not come
+/// up (a broken copy in ~/.glint/bin, a service launchd gave up on), run the newest of
+/// ~/.glint/bin/glintd and the copy bundled next to this binary, logging to ~/.glint/glintd.log;
+/// the service's glintd waits for the port (GLINT_WAIT_FOR_PORT) and takes over when this one
+/// stops, so the two never fight.
+fn ensure_daemon() -> Result<(), String> {
     if daemon_up() {
-        return;
+        return Ok(());
     }
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     if cfg!(target_os = "macos") && home.join(format!("Library/LaunchAgents/{SERVICE_LABEL}.plist")).exists() {
         let uid = Command::new("id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned()).unwrap_or_default();
         let _ = Command::new("launchctl").args(["kickstart", &format!("gui/{uid}/{SERVICE_LABEL}")]).status();
-        wait_up(50);
-        return;
+        if wait_up(50) {
+            return Ok(());
+        }
+        eprintln!("glint: the login service did not start glintd; starting the bundled one");
     }
     if cfg!(target_os = "linux") && home.join(".config/systemd/user/glintd.service").exists() {
         let _ = Command::new("systemctl").args(["--user", "start", "glintd.service"]).status();
-        wait_up(50);
-        return;
+        if wait_up(50) {
+            return Ok(());
+        }
     }
     let mut candidates = vec![home.join(".glint/bin/glintd")];
     if let Ok(exe) = std::env::current_exe() {
@@ -88,7 +93,11 @@ fn ensure_daemon() {
     }
     candidates.retain(|p| p.exists());
     candidates.sort_by_key(|p| std::cmp::Reverse(std::fs::metadata(p).and_then(|m| m.modified()).ok()));
-    let Some(bin) = candidates.into_iter().next() else { return };
+    let why = || {
+        let log = std::fs::read_to_string(home.join(".glint/glintd.log")).unwrap_or_default();
+        log.lines().rev().find(|l| !l.trim().is_empty()).map(|l| l.chars().take(200).collect::<String>()).unwrap_or_else(|| "no log yet".into())
+    };
+    let Some(bin) = candidates.into_iter().next() else { return Err("no glintd found in the app or ~/.glint/bin".into()) };
     let log = std::fs::create_dir_all(home.join(".glint"))
         .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(home.join(".glint/glintd.log")));
     let mut cmd = Command::new(bin);
@@ -98,8 +107,10 @@ fn ensure_daemon() {
     {
         cmd.stdout(f).stderr(f2);
     }
-    if cmd.spawn().is_ok() {
-        wait_up(30);
+    match cmd.spawn() {
+        Ok(_) if wait_up(30) => Ok(()),
+        Ok(_) => Err(why()),
+        Err(e) => Err(format!("could not start {}: {e}", cmd.get_program().to_string_lossy())),
     }
 }
 
@@ -235,6 +246,8 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
     let mut failing = false;
     let mut shown: Option<State> = None;
     let mut misses = 0u32;
+    let mut down_why: Option<String> = None;
+    let mut shown_line = String::new();
     loop {
         let errors = get("/v1/events?level=error&limit=1");
         let pauses = get("/v1/ctl");
@@ -283,17 +296,24 @@ fn watch(app: AppHandle, status: MenuItem<Wry>, seen_by_user: Arc<AtomicBool>) {
                 misses = 0;
             }
             _ => {
-                (state, line) = (State::Offline, "glintd is not running".to_owned());
                 // A restart (e.g. `glint install` replacing the binary) takes under a second.
                 misses += 1;
                 if misses >= 3 {
-                    ensure_daemon();
+                    down_why = ensure_daemon().err();
                     misses = 0;
                 }
+                (state, line) = (State::Offline, match &down_why {
+                    Some(why) => format!("glintd is not running: {}", clip(why, 80)),
+                    None => "glintd is not running".to_owned(),
+                });
             }
         }
-        if shown != Some(state) {
+        if state != State::Offline {
+            down_why = None;
+        }
+        if shown != Some(state) || shown_line != line {
             shown = Some(state);
+            shown_line.clone_from(&line);
             let _ = status.set_text(&line);
             if let Some(tray) = app.tray_by_id("main") {
                 let (bytes, template) = match state {
@@ -338,7 +358,9 @@ fn clear_own_quarantine() {
 fn main() {
     clear_own_quarantine();
     update::sync_tools();
-    ensure_daemon();
+    if let Err(why) = ensure_daemon() {
+        eprintln!("glint: glintd is not running: {why}");
+    }
     let seen_by_user = Arc::new(AtomicBool::new(true));
     let seen = seen_by_user.clone();
     let hotkey = Shortcut::new(Some(Modifiers::ALT | Modifiers::SUPER), Code::KeyG);
