@@ -20,8 +20,10 @@ final class Transport
     private const BATCH = 100;
     private const MAX_QUEUE = 10000;
     private const FLUSH_INTERVAL = 0.1;
-    private const CONNECT_MS = 500;
-    private const TIMEOUT_MS = 2000;
+    /** glintd is on this machine: it connects in a millisecond or not at all. */
+    private const CONNECT_MS = 100;
+    /** A stalled glintd (connects, never answers) costs a request at most this. */
+    private const TIMEOUT_MS = 500;
     private const RETRY_AFTER = 5.0;
     private const SRC_DIR = __DIR__ . DIRECTORY_SEPARATOR;
     private const JSON_FLAGS = JSON_PRESERVE_ZERO_FRACTION | JSON_UNESCAPED_SLASHES
@@ -41,6 +43,8 @@ final class Transport
     private static float $lastFlush = 0.0;
     private static bool $shutdownRegistered = false;
     private static bool $warned = false;
+    /** Queued, not sent, until release(): see hold(). */
+    private static bool $held = false;
 
     /** Reads GLINT_* once. Later calls do nothing. */
     public static function boot(): void
@@ -73,6 +77,25 @@ final class Transport
         }
         if ($project !== null) {
             self::$project = $project !== '' ? $project : null;
+        }
+    }
+
+    /**
+     * Queue events without sending them until release(). The WordPress integration holds from the
+     * start of a request until WordPress has said whether this is a development site; on any
+     * other site the queue is thrown away and nothing ever leaves the process.
+     */
+    public static function hold(): void
+    {
+        self::$held = true;
+    }
+
+    public static function release(bool $send): void
+    {
+        self::$held = false;
+        if (!$send) {
+            self::$queue = [];
+            self::$dropped = 0;
         }
     }
 
@@ -204,7 +227,7 @@ final class Transport
                 self::$shutdownRegistered = true;
                 register_shutdown_function([self::class, 'shutdown']);
             }
-            if (count(self::$queue) >= self::BATCH || microtime(true) - self::$lastFlush >= self::FLUSH_INTERVAL) {
+            if (!self::$held && (count(self::$queue) >= self::BATCH || microtime(true) - self::$lastFlush >= self::FLUSH_INTERVAL)) {
                 self::flush(2.0);
             }
             return $id;
@@ -217,12 +240,15 @@ final class Transport
     public static function flush(float $timeout = 2.0): void
     {
         try {
+            if (self::$held) {
+                return; // undecided: see hold()
+            }
             self::$lastFlush = microtime(true);
             $deadline = self::$lastFlush + max(0.0, $timeout);
             while (self::$queue !== []) {
                 $batch = array_splice(self::$queue, 0, self::BATCH);
                 $now = microtime(true);
-                if ($now < self::$downUntil || $now >= $deadline) {
+                if ($now < self::$downUntil || $now >= $deadline || self::downElsewhere($now)) {
                     self::$dropped += count($batch);
                     continue;
                 }
@@ -239,6 +265,7 @@ final class Transport
                 $budget = (int) (($deadline - $now) * 1000);
                 if (!self::post($json, min(self::TIMEOUT_MS, $budget))) {
                     self::$downUntil = microtime(true) + self::RETRY_AFTER;
+                    self::markDown();
                     self::$dropped += $reported + count($batch);
                     self::warnOnce();
                 }
@@ -246,6 +273,37 @@ final class Transport
         } catch (Throwable) {
             // Never let delivery break the host program.
         }
+    }
+
+    /**
+     * A marker file in the temp folder, shared by every PHP process on this machine: php-fpm and
+     * mod_php start each request fresh, so without it every request would wait for a glintd that
+     * is down or stalled. Its modification time is when glintd last failed; for RETRY_AFTER seconds
+     * after that, nobody tries.
+     */
+    private static function marker(): string
+    {
+        return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'glint-down-' . substr(md5(self::$url), 0, 12);
+    }
+
+    private static function downElsewhere(float $now): bool
+    {
+        $file = self::marker();
+        clearstatcache(true, $file);
+        $at = @filemtime($file);
+        if ($at === false) {
+            return false;
+        }
+        if ($now - $at < self::RETRY_AFTER) {
+            self::$downUntil = $at + self::RETRY_AFTER;
+            return true;
+        }
+        return false;
+    }
+
+    private static function markDown(): void
+    {
+        @touch(self::marker());
     }
 
     /** One line on stderr for CLI scripts; web requests stay silent rather than flood error logs. */
@@ -304,6 +362,8 @@ final class Transport
                 CURLOPT_POSTFIELDS => $json,
                 CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
                 CURLOPT_RETURNTRANSFER => true,
+                // Timeouts under a second need this on curl builds that time DNS with signals.
+                CURLOPT_NOSIGNAL => true,
                 CURLOPT_CONNECTTIMEOUT_MS => min(self::CONNECT_MS, $timeoutMs),
                 CURLOPT_TIMEOUT_MS => $timeoutMs,
             ]);

@@ -26,8 +26,12 @@ use Throwable;
  *
  * Opt out per feature with GLINT_WP (environment variable or constant), a comma list of what to
  * keep: `requests,queries,errors,mail,http,rest,notices,browser,editor`, plus `hooks` (off by
- * default: counts every action and filter). `GLINT_WP=off` turns the integration off. A site
- * whose WP_ENVIRONMENT_TYPE is `production` is left alone.
+ * default: counts every action and filter). `GLINT_WP=off` turns the integration off.
+ *
+ * Only development sites report: WP_ENVIRONMENT_TYPE `local` or `development`, or WP_DEBUG on, or
+ * GLINT_ENABLED=1. Any other site (WordPress treats a site without WP_ENVIRONMENT_TYPE as
+ * production) is left alone: nothing is sent, glint() does nothing and no browser script is added.
+ * Until WordPress has loaded wp-config.php and that is known, events are queued, not sent.
  *
  * Methods for code: WordPress::post(), user(), query(), hooks(), template(), conditionals(),
  * options(), queries().
@@ -116,6 +120,8 @@ final class WordPress
             foreach ($hooks as [$name, $priority, $method, $args]) {
                 $GLOBALS['wp_filter'][$name][$priority][] = ['function' => [self::class, $method], 'accepted_args' => $args];
             }
+            // Nothing leaves the process until boot() knows this is a development site.
+            Transport::hold();
             if ($on('errors')) {
                 self::catchWarnings();
             }
@@ -129,14 +135,37 @@ final class WordPress
         }
     }
 
-    /** At muplugins_loaded: production sites are left alone from here on. */
+    /** At muplugins_loaded (wp-config.php is loaded): only development sites report. */
     public static function boot(): void
     {
-        $env = defined('WP_ENVIRONMENT_TYPE') ? (string) constant('WP_ENVIRONMENT_TYPE') : (getenv('WP_ENVIRONMENT_TYPE') ?: null);
-        if ($env === 'production') {
+        try {
+            $dev = self::developmentSite();
+            Transport::release($dev);
+            if (!$dev) {
+                self::$off = true;
+                Glint::configure(enabled: false);
+            }
+        } catch (Throwable) {
             self::$off = true;
-            Glint::configure(enabled: false);
         }
+    }
+
+    /** WP_ENVIRONMENT_TYPE local or development, WP_DEBUG on, or GLINT_ENABLED=1. */
+    private static function developmentSite(): bool
+    {
+        $forced = strtolower(trim((string) Transport::env('GLINT_ENABLED')));
+        if (in_array($forced, ['1', 'true', 'on'], true)) {
+            return true;
+        }
+        if (function_exists('wp_get_environment_type')) {
+            $env = (string) wp_get_environment_type();
+        } else {
+            $env = defined('WP_ENVIRONMENT_TYPE') ? (string) constant('WP_ENVIRONMENT_TYPE') : (string) (getenv('WP_ENVIRONMENT_TYPE') ?: 'production');
+        }
+        if (in_array($env, ['local', 'development'], true)) {
+            return true;
+        }
+        return defined('WP_DEBUG') && (bool) constant('WP_DEBUG');
     }
 
     private static function looksLikeWordPress(): bool

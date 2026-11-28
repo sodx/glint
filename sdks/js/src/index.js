@@ -15,12 +15,28 @@ const DEFAULT_URL = "http://127.0.0.1:23600";
 // Linux) names the host machine host.docker.internal.
 const CONTAINER_URL = "http://host.docker.internal:23600";
 const TIMEOUT_MS = 2000;
+// Node only: glintd is on this machine, so connecting takes a millisecond or is refused at once;
+// when it does not, glintd is stalled and the send is given up. After a request is written, a
+// pending answer keeps the process alive at most GRACE_MS: a stalled glintd never holds up exit.
+const CONNECT_MS = 300;
+const GRACE_MS = 250;
 const RETRY_AFTER_MS = 5000;
 const MAX_QUEUE = 10_000;
 const COLORS = ["gray", "green", "orange", "red", "blue", "purple"];
 
 const env = (k) => (typeof process !== "undefined" && process.env ? process.env[k] : undefined);
 const SDK_DIR = new URL(".", import.meta.url).href;
+
+// node:http for sends in Node (postNode); absent elsewhere, where fetch is used.
+let nodeHttp = null;
+try {
+  if (typeof process !== "undefined" && process.versions && process.versions.node) {
+    const name = "node:http"; // a variable keeps bundlers for the browser from resolving it
+    nodeHttp = await import(name);
+  }
+} catch {
+  // not Node
+}
 
 const config = {
   url: env("GLINT_URL") || DEFAULT_URL,
@@ -201,8 +217,9 @@ function drain() {
     dropped = 0;
   }
   let p;
+  const url = `${config.url.replace(/\/$/, "")}/v1/events`;
   try {
-    p = fetch(`${config.url.replace(/\/$/, "")}/v1/events`, {
+    p = nodeHttp && url.startsWith("http:") ? postNode(url, JSON.stringify(batch)) : fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(batch),
@@ -223,6 +240,58 @@ function drain() {
   p.finally(() => {
     inFlight.delete(p);
     unanswered.delete(batch);
+  });
+}
+
+/** One POST with node:http, bounded by CONNECT_MS, GRACE_MS and TIMEOUT_MS; never rejects. */
+function postNode(url, body) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let req;
+    const timers = [];
+    const later = (ms, fn) => {
+      const t = setTimeout(fn, ms);
+      if (t.unref) t.unref();
+      timers.push(t);
+    };
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      for (const t of timers) clearTimeout(t);
+      if (!ok) goDown();
+      resolve();
+    };
+    const giveUp = () => {
+      try {
+        req.destroy();
+      } catch {
+        // ignore
+      }
+      finish(false);
+    };
+    try {
+      req = nodeHttp.request(url, {
+        method: "POST",
+        agent: false,
+        headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) },
+      });
+      req.on("socket", (sock) => {
+        if (sock.connecting) {
+          later(CONNECT_MS, () => sock.connecting && giveUp());
+        }
+        req.on("finish", () => later(GRACE_MS, () => sock.unref && sock.unref()));
+      });
+      req.on("response", (res) => {
+        res.on("end", () => finish(res.statusCode < 500));
+        res.on("error", () => finish(false));
+        res.resume();
+      });
+      req.on("error", () => finish(false));
+      later(TIMEOUT_MS, giveUp);
+      req.end(body);
+    } catch {
+      finish(false);
+    }
   });
 }
 
