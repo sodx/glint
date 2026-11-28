@@ -39,6 +39,10 @@ pub fn run(base: &str, agent: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// How many failures one hook asks glintd for, and how many it lists; the rest are counted.
+const FETCH: usize = 200;
+const SHOWN: usize = 5;
+
 /// The `additionalContext` reply for SessionStart and UserPromptSubmit, if there is news.
 fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     let event = hook["hook_event_name"].as_str()?;
@@ -47,9 +51,6 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     if event == "Stop" {
         return settings.stop_guard.then(|| stop_guard(http, base, hook)).flatten();
     }
-    if !settings.agent_context && event == "UserPromptSubmit" {
-        return None;
-    }
     if event != "SessionStart" && event != "UserPromptSubmit" {
         return None;
     }
@@ -57,16 +58,37 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     let session = hook["session_id"].as_str().unwrap_or("unknown");
     let project = glint_core::project::resolve(cwd).map(|r| r.project).or_else(|| glint_core::project::folder_name(cwd))?;
     let seen = state_file(session);
-    let last_seen = seen.as_ref().and_then(|f| std::fs::read_to_string(f).ok()).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty());
+    let last_seen = seen.as_deref().and_then(read_mark);
+    if !settings.agent_context && event == "UserPromptSubmit" {
+        // Nothing to say, but the Stop guard counts from where this turn began.
+        if let (Some(f), Some(id)) = (&seen, newest_id(http, base)) {
+            write_mark(f, &id);
+        }
+        return None;
+    }
 
-    let mut url = format!("{base}/v1/events?project={}&level=error&limit=20", enc(&project));
+    let mut url = format!("{base}/v1/events?project={}&level=error&limit={FETCH}", enc(&project));
     if event == "UserPromptSubmit"
         && let Some(id) = &last_seen
     {
         url.push_str(&format!("&after={}", enc(id)));
     }
-    let got: Value = http.get(&url).call().ok()?.into_json().ok()?;
+    let got: Value = match http.get(&url).call() {
+        Ok(r) => r.into_json().ok()?,
+        // Not running: the agent should still learn what Glint is, and that it is off.
+        Err(ureq::Error::Transport(_)) if event == "SessionStart" => {
+            let text = format!(
+                "{}\nGlint is not running right now (nothing answers at {base}), so nothing is being recorded and the \
+                 glint_* MCP tools will fail. Start it: open the Glint app, or run `glintd` (`glint install --only service` \
+                 keeps it running at login). `glint doctor` checks the setup.",
+                intro(base, &project)
+            );
+            return Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string());
+        }
+        Err(_) => return None,
+    };
     let events: Vec<Envelope> = serde_json::from_value(got["events"].clone()).ok()?;
+    let capped = events.len() >= FETCH;
     // The agent's own failed tool calls are already in front of it; only programs count.
     let mut fails: Vec<&Envelope> = events.iter().filter(|e| e.origin.lang.as_deref() != Some("agent")).collect();
     if event == "SessionStart" {
@@ -78,17 +100,11 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     if let Some(f) = &seen {
         let mark = match events.last() {
             Some(e) => Some(e.id.clone()),
-            None if last_seen.is_none() => http
-                .get(&format!("{base}/v1/events?limit=1"))
-                .call()
-                .ok()
-                .and_then(|r| r.into_json::<Value>().ok())
-                .and_then(|v| v["events"][0]["id"].as_str().map(str::to_owned)),
+            None if last_seen.is_none() => newest_id(http, base),
             None => None,
         };
-        if let (Some(mark), Some(dir)) = (mark, f.parent()) {
-            let _ = std::fs::create_dir_all(dir);
-            let _ = std::fs::write(f, mark);
+        if let Some(mark) = mark {
+            write_mark(f, &mark);
         }
     }
 
@@ -98,19 +114,12 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         prune_state(dir);
     }
 
+    let listed: Vec<(&Envelope, Option<String>)> = fails.iter().map(|e| (*e, None)).collect();
+    let more = more_line(fails.len(), capped, &project, if event == "UserPromptSubmit" { last_seen.as_deref() } else { None });
     let text = if event == "SessionStart" {
-        let mut t = format!(
-            "Glint (local debug desk, MCP server `glint`) is recording what programs in project `{project}` do: \
-             values sent with glint(), logs, SQL, exceptions, timings, LLM calls. glint(value) works in PHP, Python \
-             and Node without an import; prefer it over print/var_dump/console.log to inspect values, read them \
-             back with glint_wait_for or glint_events, and remove those calls when done. Uncaught errors of \
-             PHP, Python and Node processes are recorded with no code; for a web front end in development add \
-             <script src=\"{base}/v1/browser.js\" data-project=\"{project}\"></script> to the dev \
-             page. To prove a change works: place glint() markers, run it, confirm them with glint_wait_for. \
-             When something fails at runtime, start with glint_last_error."
-        );
+        let mut t = intro(base, &project);
         if !fails.is_empty() {
-            t.push_str(&format!("\nRecent failures in {project} (last 24 h):\n{}", list(&fails)));
+            t.push_str(&format!("\nRecent failures in {project} (last 24 h):\n{}{more}", list(&listed)));
         }
         t
     } else {
@@ -118,15 +127,63 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
             return None;
         }
         format!(
-            "Glint recorded {} new failure{} in {project} since the last prompt (programs, not your tools):\n{}\nglint_event <id> gives the full stack and values.",
+            "Glint recorded {}{} new failure{} in {project} since the last prompt (programs, not your tools):\n{}{more}\nglint_event <id> gives the full stack and values.",
+            if capped { "at least " } else { "" },
             fails.len(),
             if fails.len() == 1 { "" } else { "s" },
-            list(&fails)
+            list(&listed)
         )
     };
-    let listed: Vec<String> = fails.iter().rev().take(5).map(|e| e.id.clone()).collect();
-    record(http, base, session, &project, glint_core::agents::HOOK_CONTEXT, &listed, json!({ "event": event, "failures": fails.len() }));
+    let ids: Vec<String> = fails.iter().rev().take(SHOWN).map(|e| e.id.clone()).collect();
+    record(http, base, session, &project, glint_core::agents::HOOK_CONTEXT, &ids, json!({ "event": event, "failures": fails.len() }));
     Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string())
+}
+
+/// What a session learns at its start, whether or not Glint is running.
+fn intro(base: &str, project: &str) -> String {
+    format!(
+        "Glint (local debug desk, MCP server `glint`) is recording what programs in project `{project}` do: \
+         values sent with glint(), logs, SQL, exceptions, timings, LLM calls. glint(value) works in PHP, Python \
+         and Node without an import; prefer it over print/var_dump/console.log to inspect values, read them \
+         back with glint_wait_for or glint_events, and remove those calls when done. Uncaught errors of \
+         PHP, Python and Node processes are recorded with no code; for a web front end in development add \
+         <script src=\"{base}/v1/browser.js\" data-project=\"{project}\"></script> to the dev \
+         page. To prove a change works: place glint() markers, run it, confirm them with glint_wait_for. \
+         When something fails at runtime, start with glint_last_error."
+    )
+}
+
+/// `\n(12 more not shown: …)` when a list was cut, with the query that lists them all.
+fn more_line(total: usize, capped: bool, project: &str, after: Option<&str>) -> String {
+    if total <= SHOWN {
+        return String::new();
+    }
+    let n = total - SHOWN;
+    let after = after.map(|a| format!(" after={a}")).unwrap_or_default();
+    format!(
+        "\n({}{n} more not shown; glint_events project={project} level=error{after} lists them)",
+        if capped { "at least " } else { "" }
+    )
+}
+
+/// The newest stored event of any kind: where counting starts when nothing was seen yet.
+fn newest_id(http: &ureq::Agent, base: &str) -> Option<String> {
+    http.get(&format!("{base}/v1/events?limit=1"))
+        .call()
+        .ok()
+        .and_then(|r| r.into_json::<Value>().ok())
+        .and_then(|v| v["events"][0]["id"].as_str().map(str::to_owned))
+}
+
+fn read_mark(f: &std::path::Path) -> Option<String> {
+    std::fs::read_to_string(f).ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
+}
+
+fn write_mark(f: &std::path::Path, id: &str) {
+    if let Some(dir) = f.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(f, id);
 }
 
 /// Failures of this project's programs since the turn began keep the agent from stopping, once.
@@ -139,37 +196,82 @@ fn stop_guard(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         return None;
     }
     let seen = state_file(session)?;
-    let mark = std::fs::read_to_string(&seen).ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())?;
-    let url = format!("{base}/v1/events?project={}&level=error&limit=20&after={}", enc(&project), enc(&mark));
+    let Some(mark) = read_mark(&seen) else {
+        // The session's start was never marked (Glint was down then, or the hooks were added
+        // mid-session): this turn's failures cannot be told from older ones, but the next
+        // turn's can.
+        if let Some(id) = newest_id(http, base) {
+            write_mark(&seen, &id);
+        }
+        return None;
+    };
+    let url = format!("{base}/v1/events?project={}&level=error&limit={FETCH}&after={}", enc(&project), enc(&mark));
     let got: Value = http.get(&url).call().ok()?.into_json().ok()?;
     let events: Vec<Envelope> = serde_json::from_value(got["events"].clone()).ok()?;
+    let capped = events.len() >= FETCH;
     if let Some(newest) = events.last() {
-        let _ = std::fs::write(&seen, &newest.id); // reported once
+        write_mark(&seen, &newest.id); // reported once
     }
-    // A failure whose code was edited after it happened is most likely the agent reproducing the
-    // bug before fixing it (seen in a live session): not a reason to hold it back.
-    let fails: Vec<&Envelope> = events
-        .iter()
-        .filter(|e| e.origin.lang.as_deref() != Some("agent"))
-        .filter(|e| !edited_since(e))
+    let programs: Vec<&Envelope> = events.iter().filter(|e| e.origin.lang.as_deref() != Some("agent")).collect();
+    if programs.is_empty() {
+        return None;
+    }
+    // A failure whose code was edited after it happened is often the agent reproducing the bug
+    // before fixing it. It is left out only when a later run of the same program passed;
+    // otherwise it is listed as possibly fixed.
+    let runs: Vec<Value> = http
+        .get(&format!("{base}/v1/runs?project={}&limit=200", enc(&project)))
+        .call()
+        .ok()
+        .and_then(|r| r.into_json::<Value>().ok())
+        .and_then(|v| v["runs"].as_array().cloned())
+        .unwrap_or_default();
+    let fails: Vec<(&Envelope, Option<String>)> = programs
+        .into_iter()
+        .filter_map(|e| {
+            let Some(file) = edited_since(e) else { return Some((e, None)) };
+            if passed_later(e, &runs) {
+                return None;
+            }
+            Some((e, Some(format!("possibly fixed: {file} changed after it; rerun to confirm"))))
+        })
         .collect();
     if fails.is_empty() {
         return None;
     }
-    let ids: Vec<String> = fails.iter().map(|e| e.id.clone()).collect();
+    let ids: Vec<String> = fails.iter().map(|(e, _)| e.id.clone()).collect();
     if let Some(dir) = seen.parent() {
         let _ = std::fs::write(dir.join(format!("{}.guard", safe_name(session))), ids.join("\n"));
     }
     record(http, base, session, &project, glint_core::agents::HOOK_STOP_GUARD, &ids, json!({ "failures": ids.len() }));
     let reason = format!(
-        "Before you finish: Glint recorded {} failure{} in {project} while you worked on this turn (programs, not your tools):\n{}\n\
+        "Before you finish: Glint recorded {}{} failure{} in {project} while you worked on this turn (programs, not your tools):\n{}{}\n\
          Look at them (glint_event <id> has the stack and values) and fix what your change broke, or tell the user \
          why they are expected. You will not be stopped twice.",
+        if capped { "at least " } else { "" },
         fails.len(),
         if fails.len() == 1 { "" } else { "s" },
-        list(&fails)
+        list(&fails),
+        more_line(fails.len(), capped, &project, Some(&mark))
     );
     Some(json!({ "decision": "block", "reason": reason }).to_string())
+}
+
+/// A run of the same program (its first event came from the same file) started after the
+/// failure and recorded no error.
+fn passed_later(e: &Envelope, runs: &[Value]) -> bool {
+    let entry = runs
+        .iter()
+        .find(|r| r["run"] == e.run.as_str())
+        .and_then(|r| r["file"].as_str().map(str::to_owned))
+        .or_else(|| e.origin.file.clone());
+    let Some(entry) = entry else { return false };
+    runs.iter().any(|r| {
+        r["run"] != e.run.as_str()
+            && r["file"].as_str() == Some(entry.as_str())
+            && r["errors"].as_u64() == Some(0)
+            && r["first"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).is_some_and(|t| t > e.ts)
+    })
 }
 
 /// The agent stops again after the Stop guard sent it back: did it change the code a failure came
@@ -185,7 +287,7 @@ fn outcome(http: &ureq::Agent, base: &str, session: &str, project: &str) {
             .call()
             .ok()
             .and_then(|r| r.into_json::<Envelope>().ok())
-            .is_some_and(|e| edited_since(&e))
+            .is_some_and(|e| edited_since(&e).is_some())
     });
     let what = if fixed { "fixed" } else { "explained" };
     record(http, base, session, project, glint_core::agents::HOOK_STOP_OUTCOME, &ids, json!({ "outcome": what }));
@@ -206,20 +308,20 @@ fn throw_site(e: &Envelope) -> (Option<String>, Option<u64>) {
     }
 }
 
-/// The file the failure came from was changed after the failure.
-fn edited_since(e: &Envelope) -> bool {
-    let Some(file) = throw_site(e).0 else { return false };
-    std::fs::metadata(&file)
-        .and_then(|m| m.modified())
-        .is_ok_and(|t| chrono::DateTime::<chrono::Utc>::from(t) > e.ts)
+/// The file the failure came from, when it was changed after the failure.
+fn edited_since(e: &Envelope) -> Option<String> {
+    let file = throw_site(e).0?;
+    let changed = std::fs::metadata(&file).and_then(|m| m.modified()).ok()?;
+    (chrono::DateTime::<chrono::Utc>::from(changed) > e.ts).then_some(file)
 }
 
-fn list(fails: &[&Envelope]) -> String {
+/// The newest few failures, one line each, with a note when there is one.
+fn list(fails: &[(&Envelope, Option<String>)]) -> String {
     fails
         .iter()
         .rev()
-        .take(5)
-        .map(|e| {
+        .take(SHOWN)
+        .map(|(e, note)| {
             let p = &e.payload;
             let what = match (p["class"].as_str(), p["message"].as_str()) {
                 (Some(c), Some(m)) => format!("{c}: {m}"),
@@ -229,7 +331,8 @@ fn list(fails: &[&Envelope]) -> String {
             };
             let (file, line) = throw_site(e);
             let at = file.map(|f| format!(" at {f}{}", line.map(|l| format!(":{l}")).unwrap_or_default())).unwrap_or_default();
-            format!("- {}{at} ({}, id {})", what.chars().take(200).collect::<String>(), e.ts.format("%H:%M:%S"), e.id)
+            let note = note.as_deref().map(|n| format!("; {n}")).unwrap_or_default();
+            format!("- {}{at} ({}, id {}{note})", what.chars().take(200).collect::<String>(), e.ts.format("%H:%M:%S"), e.id)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -277,13 +380,15 @@ pub fn claude_code_config(binary: &str) -> String {
         "PreCompact",
         "SessionEnd",
     ];
+    // Claude Code runs it through a shell: a HOME with spaces must stay one word.
+    let command = format!("{} hook", crate::agents::shell_quote(binary));
     let mut hooks = serde_json::Map::new();
     for e in events {
         let needs_matcher = matches!(e, "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest");
         let entry = if needs_matcher {
-            serde_json::json!([{ "matcher": "*", "hooks": [{ "type": "command", "command": format!("{binary} hook"), "timeout": 5 }] }])
+            serde_json::json!([{ "matcher": "*", "hooks": [{ "type": "command", "command": command, "timeout": 5 }] }])
         } else {
-            serde_json::json!([{ "hooks": [{ "type": "command", "command": format!("{binary} hook"), "timeout": 5 }] }])
+            serde_json::json!([{ "hooks": [{ "type": "command", "command": command, "timeout": 5 }] }])
         };
         hooks.insert(e.into(), entry);
     }

@@ -6,9 +6,11 @@
 //!   HTTP. Codex: over stdio (`glint mcp`), in a marked block of `~/.codex/config.toml`.
 //!
 //! Only agents that are installed are touched; existing settings are kept (keys keep their order)
-//! and a file that is not plain JSON is left alone with a hint. Each edited file gets a one-time
-//! `.glint-backup` copy first. `glint uninstall` removes exactly what was added. The server's MCP
-//! `instructions` tell a connected agent when to use Glint.
+//! and a file that is not plain JSON, or cannot be read, is left alone with a hint. Each change
+//! first keeps a timestamped `.glint-backup-<time>` copy (the newest few are kept), and files are
+//! replaced in one step (temp file + rename) so an agent never reads half a file. `glint
+//! uninstall` removes exactly what was added. The server's MCP `instructions` tell a connected
+//! agent when to use Glint.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,9 +42,46 @@ fn ensure_bin(a: &Args) -> Result<(), String> {
     crate::install::replace_file(&here, &bin).map_err(|e| format!("copying glint to {}: {e}", bin.display()))
 }
 
+/// A config file's text: empty when it does not exist yet, an error when it exists but cannot be
+/// read (permissions, not UTF-8), so a file is never overwritten from a failed read.
+fn read_config(path: &Path) -> Result<String, String> {
+    match fs::read_to_string(path) {
+        Ok(t) => Ok(t),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("cannot read {} ({e}); left it alone", path.display())),
+    }
+}
+
+/// How many timestamped backups of one file are kept.
+const BACKUPS_KEPT: usize = 5;
+
+/// Copies `text` (the file's content before a change) to `<file>.glint-backup-<time>`, and drops
+/// the oldest backups beyond [`BACKUPS_KEPT`].
+fn backup(a: &Args, path: &Path, text: &str) -> Result<(), String> {
+    if a.dry_run || text.is_empty() {
+        return Ok(());
+    }
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("config");
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S%.3f");
+    let file = path.with_file_name(format!("{name}.glint-backup-{stamp}"));
+    fs::write(&file, text).map_err(|e| format!("backing up {} to {}: {e}", path.display(), file.display()))?;
+    let prefix = format!("{name}.glint-backup-");
+    if let Some(dir) = path.parent()
+        && let Ok(entries) = fs::read_dir(dir)
+    {
+        let mut old: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(&prefix))).collect();
+        old.sort(); // the stamp sorts by time
+        let excess = old.len().saturating_sub(BACKUPS_KEPT);
+        for p in &old[..excess] {
+            let _ = fs::remove_file(p);
+        }
+    }
+    Ok(())
+}
+
 /// One JSON config edit: `edit` changes the parsed file and says whether anything changed.
 fn edit_json(a: &Args, path: &Path, edit: impl FnOnce(&mut Map<String, Value>) -> bool) -> Result<bool, String> {
-    let text = fs::read_to_string(path).unwrap_or_default();
+    let text = read_config(path)?;
     let mut root: Map<String, Value> = if text.trim().is_empty() {
         Map::new()
     } else {
@@ -54,12 +93,7 @@ fn edit_json(a: &Args, path: &Path, edit: impl FnOnce(&mut Map<String, Value>) -
     if !edit(&mut root) {
         return Ok(false);
     }
-    if !a.dry_run && !text.is_empty() {
-        let backup = path.with_extension(format!("{}.glint-backup", path.extension().and_then(|e| e.to_str()).unwrap_or("")));
-        if !backup.exists() {
-            let _ = fs::write(&backup, &text);
-        }
-    }
+    backup(a, path, &text)?;
     let mut out = serde_json::to_string_pretty(&Value::Object(root)).map_err(|e| e.to_string())?;
     out.push('\n');
     write(a, path, &out)?;
@@ -176,20 +210,95 @@ fn claude(a: &Args, args: &[&str]) -> Option<std::process::Output> {
     Command::new("claude").args(args).env("HOME", &a.home).output().ok()
 }
 
-fn is_glint_hook(h: &Value) -> bool {
-    h.get("command").and_then(Value::as_str).is_some_and(|c| c.ends_with("glint hook") || c.contains("/glint hook"))
+/// What one `claude …` command did: success, stdout, stderr. `None`: it could not run.
+type Ran = Option<(bool, String, String)>;
+
+fn claude_run(a: &Args, args: &[&str]) -> Ran {
+    claude(a, args).map(|o| (o.status.success(), String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned()))
 }
 
-/// Adds Glint's hook to each event unless a `glint hook` command is already there.
+/// Registers Glint at user scope without ever leaving the user with no `glint` server: add
+/// first; only when an older entry is in the way is it removed, and if the new one then cannot
+/// be added, the old one is put back.
+fn register_claude_mcp(url: &str, run: &dyn Fn(&[&str]) -> Ran) -> Result<String, String> {
+    let added = |r: &Ran| matches!(r, Some((true, _, _)));
+    let add = ["mcp", "add", "--scope", "user", "--transport", "http", NAME, url];
+    let first = run(&add);
+    if added(&first) {
+        return Ok(format!("MCP server {NAME} → {url} for every project (user scope)"));
+    }
+    let Some((_, _, err)) = first else { return Err("could not run claude".into()) };
+    // Most likely an older entry with this name: see what it is.
+    let old = match run(&["mcp", "get", NAME]) {
+        Some((true, out, _)) => out,
+        _ => return Err(format!("claude mcp add failed: {}", err.trim())),
+    };
+    let field = |k: &str| old.lines().find_map(|l| l.trim().strip_prefix(k)).map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
+    if field("URL:").as_deref() == Some(url) {
+        return Ok(format!("MCP server {NAME} → {url} already registered"));
+    }
+    if !added(&run(&["mcp", "remove", "--scope", "user", NAME])) {
+        return Err(format!("claude mcp add failed and the existing `{NAME}` entry was kept: {}", err.trim()));
+    }
+    match run(&add) {
+        r if added(&r) => Ok(format!("MCP server {NAME} → {url} for every project (user scope, replaced the old entry)")),
+        r => {
+            let why = r.map(|(_, _, e)| e.trim().to_owned()).unwrap_or_else(|| "could not run claude".into());
+            let restored = match (field("Type:"), field("URL:"), field("Command:")) {
+                (Some(t), Some(u), _) if t == "http" || t == "sse" => added(&run(&["mcp", "add", "--scope", "user", "--transport", &t, NAME, &u])),
+                (_, _, Some(cmd)) => {
+                    let mut argv = vec!["mcp", "add", "--scope", "user", NAME, "--"];
+                    argv.extend(cmd.split_whitespace());
+                    added(&run(&argv))
+                }
+                _ => false,
+            };
+            let old_state = if restored { "the old entry was put back" } else { "the old entry could not be put back; see the backup of ~/.claude.json" };
+            Err(format!("claude mcp add failed ({why}); {old_state}"))
+        }
+    }
+}
+
+/// A word for a POSIX shell: as is when it needs no quoting, else in single quotes.
+pub fn shell_quote(s: &str) -> String {
+    if !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"/._-+:@%,=~".contains(&b)) {
+        s.to_owned()
+    } else {
+        format!("'{}'", s.replace('\'', r"'\''"))
+    }
+}
+
+fn is_glint_hook(h: &Value) -> bool {
+    h.get("command").and_then(Value::as_str).is_some_and(|c| {
+        let Some(bin) = c.trim_end().strip_suffix(" hook") else { return false };
+        let bin = bin.trim().trim_matches(['\'', '"']);
+        bin == "glint" || bin.ends_with("/glint")
+    })
+}
+
+/// Adds Glint's hook to each event unless a `glint hook` command is already there; one that is
+/// there gets our current command (an older install may not have quoted a path with spaces).
 fn add_hooks(root: &mut Map<String, Value>, ours: &Value) -> bool {
     let Some(ours) = ours.get("hooks").and_then(Value::as_object) else { return false };
     let hooks = root.entry("hooks").or_insert_with(|| json!({}));
     let Some(hooks) = hooks.as_object_mut() else { return false };
     let mut changed = false;
     for (event, groups) in ours {
+        let command = groups.pointer("/0/hooks/0/command").cloned();
         let list = hooks.entry(event.clone()).or_insert_with(|| json!([]));
         let Some(list) = list.as_array_mut() else { continue };
-        let present = list.iter().any(|g| g.get("hooks").and_then(Value::as_array).is_some_and(|hs| hs.iter().any(is_glint_hook)));
+        let mut present = false;
+        for h in list.iter_mut().filter_map(|g| g.get_mut("hooks").and_then(Value::as_array_mut)).flatten() {
+            if is_glint_hook(h) {
+                present = true;
+                if let (Some(c), Some(obj)) = (&command, h.as_object_mut())
+                    && obj.get("command") != Some(c)
+                {
+                    obj.insert("command".into(), c.clone());
+                    changed = true;
+                }
+            }
+        }
         if !present {
             list.extend(groups.as_array().cloned().unwrap_or_default());
             changed = true;
@@ -233,12 +342,10 @@ fn install_claude(a: &Args, steps: &mut Vec<Step>) {
     } else if a.dry_run {
         steps.push(done("claude", format!("would register MCP server {NAME} → {url} (user scope)")));
     } else {
-        let _ = claude(a, &["mcp", "remove", "--scope", "user", NAME]);
-        match claude(a, &["mcp", "add", "--scope", "user", "--transport", "http", NAME, &url]) {
-            Some(o) if o.status.success() => steps.push(done("claude", format!("MCP server {NAME} → {url} for every project (user scope)"))),
-            Some(o) => steps.push(fail("claude", format!("claude mcp add failed: {}", String::from_utf8_lossy(&o.stderr).trim()))),
-            None => steps.push(fail("claude", "could not run claude".into())),
-        }
+        steps.push(match register_claude_mcp(&url, &|args| claude_run(a, args)) {
+            Ok(m) => done("claude", m),
+            Err(e) => fail("claude", e),
+        });
     }
     // Hooks: the agent's prompts, tool calls and results show up in Glint next to the program's.
     let ours: Value = serde_json::from_str(&crate::hook::claude_code_config(&glint_bin(a).display().to_string())).unwrap_or_default();
@@ -267,14 +374,21 @@ pub fn install(a: &Args) -> Vec<Step> {
     }
     let codex = a.home.join(".codex/config.toml");
     if installed(a, &a.home.join(".codex"), &[], &["codex"]) {
-        let text = fs::read_to_string(&codex).unwrap_or_default();
-        let foreign = without_block(&text).contains(&format!("[mcp_servers.{NAME}]"));
-        steps.push(if foreign {
-            skip("agents", format!("Codex: {} already has an [mcp_servers.{NAME}] of its own", codex.display()))
-        } else {
-            match ensure_bin(a).and_then(|()| write(a, &codex, &with_block(&text, &codex_block(a)))) {
-                Ok(()) => done("agents", format!("Codex: MCP server {NAME} (stdio) in {}", codex.display())),
-                Err(e) => fail("agents", format!("Codex: {e}")),
+        steps.push(match read_config(&codex) {
+            Err(e) => fail("agents", format!("Codex: {e}")),
+            Ok(text) if without_block(&text).contains(&format!("[mcp_servers.{NAME}]")) => {
+                skip("agents", format!("Codex: {} already has an [mcp_servers.{NAME}] of its own", codex.display()))
+            }
+            Ok(text) => {
+                let new = with_block(&text, &codex_block(a));
+                if new == text {
+                    skip("agents", "Codex: already set up".into())
+                } else {
+                    match ensure_bin(a).and_then(|()| backup(a, &codex, &text)).and_then(|()| write(a, &codex, &new)) {
+                        Ok(()) => done("agents", format!("Codex: MCP server {NAME} (stdio) in {}", codex.display())),
+                        Err(e) => fail("agents", format!("Codex: {e}")),
+                    }
+                }
             }
         });
     }
@@ -311,13 +425,16 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
         }
     }
     let codex = a.home.join(".codex/config.toml");
-    if let Ok(text) = fs::read_to_string(&codex)
-        && text.contains(crate::install::MARK_BEGIN) {
-            steps.push(match write(a, &codex, &without_block(&text)) {
+    match read_config(&codex) {
+        Err(e) => steps.push(fail("agents", format!("Codex: {e}"))),
+        Ok(text) if text.contains(crate::install::MARK_BEGIN) => {
+            steps.push(match backup(a, &codex, &text).and_then(|()| write(a, &codex, &without_block(&text))) {
                 Ok(()) => done("agents", format!("Codex: removed from {}", codex.display())),
                 Err(e) => fail("agents", format!("Codex: {e}")),
             });
         }
+        Ok(_) => {}
+    }
     if steps.is_empty() {
         steps.push(skip("agents", "not installed".into()));
     }
@@ -406,7 +523,8 @@ mod tests {
         let cursor: Value = serde_json::from_str(&fs::read_to_string(home.join(".cursor/mcp.json")).unwrap()).unwrap();
         assert_eq!(cursor["mcpServers"]["github"]["url"], "https://x");
         assert_eq!(cursor["mcpServers"]["glint"]["url"], "http://127.0.0.1:23600/mcp");
-        assert!(home.join(".cursor/mcp.json.glint-backup").exists());
+        let backups = || fs::read_dir(home.join(".cursor")).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("mcp.json.glint-backup-")).count();
+        assert_eq!(backups(), 1);
         let gemini: Value = serde_json::from_str(&fs::read_to_string(home.join(".gemini/settings.json")).unwrap()).unwrap();
         assert_eq!(gemini["mcpServers"]["glint"]["httpUrl"], "http://127.0.0.1:23600/mcp");
         assert!(!home.join(".codeium").exists(), "agents that are not installed are not touched");
@@ -414,6 +532,7 @@ mod tests {
         uninstall(&a);
         let cursor: Value = serde_json::from_str(&fs::read_to_string(home.join(".cursor/mcp.json")).unwrap()).unwrap();
         assert_eq!(cursor, serde_json::json!({"mcpServers":{"github":{"url":"https://x"}}}));
+        assert_eq!(backups(), 2, "one backup per change");
         assert_eq!(fs::read_to_string(home.join(".gemini/settings.json")).unwrap().trim(), "{}");
         fs::remove_dir_all(&home).unwrap();
     }
@@ -446,5 +565,125 @@ mod tests {
         uninstall(&a);
         assert_eq!(fs::read_to_string(home.join(".codex/config.toml")).unwrap(), "model = \"o4\"\n");
         fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn unreadable_config_is_not_overwritten() {
+        let home = sandbox("unreadable");
+        fs::create_dir_all(home.join(".cursor")).unwrap();
+        // Not UTF-8: read_to_string fails with InvalidData, which must not count as empty.
+        fs::write(home.join(".cursor/mcp.json"), [0xff, 0xfe, b'{', b'}']).unwrap();
+        let steps = install(&args(&home));
+        assert!(steps.iter().any(|s| s.result.as_ref().is_err_and(|e| e.contains("cannot read"))), "{:?}", steps.iter().map(|s| &s.result).collect::<Vec<_>>());
+        assert_eq!(fs::read(home.join(".cursor/mcp.json")).unwrap(), [0xff, 0xfe, b'{', b'}']);
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn writes_replace_the_file_whole_and_follow_symlinks() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = sandbox("atomic");
+        let real = home.join("dotfiles/mcp.json");
+        fs::create_dir_all(real.parent().unwrap()).unwrap();
+        fs::write(&real, r#"{"a":1}"#).unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o600)).unwrap();
+        let link = home.join("mcp.json");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert!(edit_json(&args(&home), &link, |r| put_server(r, "mcpServers", json!({"url": "u"}))).unwrap());
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "the link stays a link");
+        let v: Value = serde_json::from_str(&fs::read_to_string(&real).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["glint"]["url"], "u");
+        assert_eq!(fs::metadata(&real).unwrap().permissions().mode() & 0o777, 0o600);
+        assert!(!fs::read_dir(real.parent().unwrap()).unwrap().flatten().any(|e| e.file_name().to_string_lossy().contains("glint-tmp")));
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn backups_are_capped() {
+        let home = sandbox("backups");
+        let a = args(&home);
+        let f = home.join("x.json");
+        for i in 0..8 {
+            fs::write(&f, format!("{{\"n\":{i}}}")).unwrap();
+            assert!(edit_json(&a, &f, |r| { r.insert("m".into(), json!(i)); true }).unwrap());
+            std::thread::sleep(std::time::Duration::from_millis(3));
+        }
+        let n = fs::read_dir(&home).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("x.json.glint-backup-")).count();
+        assert_eq!(n, BACKUPS_KEPT);
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn hook_command_quotes_a_home_with_spaces_and_upgrades_old_entries() {
+        assert_eq!(shell_quote("/Users/me/.glint/bin/glint"), "/Users/me/.glint/bin/glint");
+        assert_eq!(shell_quote("/Users/Jo Doe/.glint/bin/glint"), "'/Users/Jo Doe/.glint/bin/glint'");
+        assert_eq!(shell_quote("/a/it's"), r"'/a/it'\''s'");
+        let ours: Value = serde_json::from_str(&crate::hook::claude_code_config("/Users/Jo Doe/.glint/bin/glint")).unwrap();
+        let cmd = ours["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap();
+        assert_eq!(cmd, "'/Users/Jo Doe/.glint/bin/glint' hook");
+        // The quoted command runs in a real shell.
+        let home = sandbox("quote dir");
+        let bin = home.join("bin dir/glint");
+        fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        fs::write(&bin, "#!/bin/sh\necho ran \"$1\"\n").unwrap();
+        fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let line = format!("{} hook", shell_quote(&bin.display().to_string()));
+        let out = Command::new("sh").args(["-c", &line]).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "ran hook");
+        // An old unquoted entry is recognised as ours and replaced, not duplicated.
+        let mut root: Map<String, Value> = serde_json::from_str(r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/Users/Jo Doe/.glint/bin/glint hook"}]}]}}"#).unwrap();
+        assert!(add_hooks(&mut root, &ours));
+        assert_eq!(root["hooks"]["Stop"].as_array().unwrap().len(), 1);
+        assert_eq!(root["hooks"]["Stop"][0]["hooks"][0]["command"], "'/Users/Jo Doe/.glint/bin/glint' hook");
+        assert!(is_glint_hook(&json!({"command": "'/x y/glint' hook"})) && !is_glint_hook(&json!({"command": "rtk hook"})));
+        assert!(remove_hooks(&mut root));
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn claude_mcp_is_never_left_without_a_glint_entry() {
+        use std::cell::RefCell;
+        let url = "http://127.0.0.1:23600/mcp";
+        // A fake `claude`: `exists` is the current entry's URL, `add_works` whether add succeeds.
+        let fake = |exists: Option<&'static str>, add_works: bool| {
+            let state = RefCell::new((exists.map(str::to_owned), Vec::<String>::new()));
+            move |args: &[&str]| -> Ran {
+                let mut s = state.borrow_mut();
+                s.1.push(args.join(" "));
+                match args[1] {
+                    "add" if s.0.is_some() => Some((false, String::new(), "MCP server glint already exists in user config".into())),
+                    "add" if add_works || args.contains(&"http://old/mcp") => {
+                        s.0 = Some(args.last().unwrap().to_string());
+                        Some((true, String::new(), String::new()))
+                    }
+                    "add" => Some((false, String::new(), "boom".into())),
+                    "get" => s.0.clone().map(|u| (true, format!("glint:\n  Scope: User config\n  Type: http\n  URL: {u}\n"), String::new())),
+                    "remove" => {
+                        s.0 = None;
+                        Some((true, String::new(), String::new()))
+                    }
+                    _ => None,
+                }
+            }
+        };
+        // Fresh: one add, nothing removed.
+        let f = fake(None, true);
+        assert!(register_claude_mcp(url, &f).is_ok());
+        // Same URL already there: left alone.
+        let f = fake(Some(url), true);
+        assert!(register_claude_mcp(url, &f).unwrap().contains("already registered"));
+        // An old URL: replaced.
+        let f = fake(Some("http://old/mcp"), true);
+        assert!(register_claude_mcp(url, &f).unwrap().contains("replaced"));
+        // The new add fails after the old was removed: the old one is put back.
+        let calls = RefCell::new(Vec::new());
+        let inner = fake(Some("http://old/mcp"), false);
+        let f = |a: &[&str]| {
+            calls.borrow_mut().push(a.join(" "));
+            inner(a)
+        };
+        let e = register_claude_mcp(url, &f).unwrap_err();
+        assert!(e.contains("old entry was put back"), "{e}");
+        assert_eq!(calls.borrow().last().unwrap(), "mcp add --scope user --transport http glint http://old/mcp");
     }
 }

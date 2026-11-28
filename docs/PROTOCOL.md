@@ -142,7 +142,18 @@ the same tools over stdio. Agent annotations are `core.update` events with `meta
 
 The answer to `initialize` carries an `Mcp-Session-Id` of the form `glint-<n>-<client name>`;
 clients send it back, and every tool call is recorded in the agent activity log (§7) under that
-client. `glint mcp` also sends `X-Glint-Project` (its working directory's project).
+client.
+
+Tools that take `project` default to the caller's project, and every reply starts with
+`Project: <name> (<how it is known>)`. The caller's project comes from, in order: the tool's
+`project` argument (`"*"` means all projects); the `X-Glint-Project` header (`glint mcp` sends its
+working directory's project); the `project` query parameter (`/mcp?project=shop`); the client's
+workspace roots. For the last, the first tool call of a session whose project is unknown is
+answered as `text/event-stream` when the client accepts it: first a `roots/list` request (id
+`glint-roots-<n>`), then the tool's reply once the client has POSTed its answer (or after 2 s).
+The first root's git repository (else its folder name) is the project, kept per session until
+`notifications/roots/list_changed`. With no project known and events from several projects, read
+tools answer with the list of recent projects instead of mixing their events.
 
 ## 6. Blobs
 

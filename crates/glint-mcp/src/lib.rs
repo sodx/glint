@@ -9,8 +9,9 @@
 mod project;
 mod tools;
 
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use glint_core::Hub;
@@ -18,13 +19,16 @@ use glint_core::agents::{self, Activity};
 use serde_json::{Value, json};
 
 pub use project::{line, summary};
+pub use tools::Ctx;
 
 /// Protocol revisions this server speaks, newest first.
 pub const PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 const INSTRUCTIONS: &str = "Glint records what programs on this machine actually did: dumped values, logs, \
 SQL queries, exceptions, timings, LLM calls. Use it instead of guessing or adding print statements:\n\
-- glint_last_error first when something failed; glint_events / glint_runs to look around.\n\
+- glint_last_error first when something failed; glint_events / glint_runs to look around. Tools \
+read the project this agent works in (every reply names it); pass project=<name> for another one, \
+or project=\"*\" for all.\n\
 - To inspect a value, add glint(value) to the code instead of print/var_dump/console.log: after \
 `glint install` it is a global in PHP, Python and Node (no import; off in production), then run \
 and read it back with glint_wait_for or glint_events. Remove those calls when done. Uncaught \
@@ -46,7 +50,25 @@ when you need its full payload.";
 pub struct McpServer {
     hub: Hub,
     sessions: Arc<AtomicU64>,
+    roots: Arc<Mutex<Roots>>,
 }
+
+/// What clients said about their workspace (MCP `roots`), per MCP session.
+#[derive(Default)]
+struct Roots {
+    /// Sessions already asked, so a client that has no roots is asked only once.
+    asked: HashSet<String>,
+    /// Session id → (project, root folder it came from).
+    known: HashMap<String, (String, String)>,
+    /// Our `roots/list` request id → (session, who waits for the answer).
+    pending: HashMap<String, (String, tokio::sync::oneshot::Sender<()>)>,
+}
+
+/// Bounds the per-session maps: sessions are cheap to ask again.
+const ROOTS_MAX: usize = 1000;
+
+/// How long a tool call waits for the client to answer `roots/list`.
+pub const ROOTS_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Who is calling, as far as the transport knows.
 #[derive(Debug, Clone, Default)]
@@ -69,7 +91,70 @@ pub struct Outcome {
 
 impl McpServer {
     pub fn new(hub: Hub) -> Self {
-        Self { hub, sessions: Arc::new(AtomicU64::new(0)) }
+        Self { hub, sessions: Arc::new(AtomicU64::new(0)), roots: Arc::default() }
+    }
+
+    /// Whether to ask the client for its workspace roots before answering `msg`: a tool call
+    /// from a session whose project nothing has told us yet, asked once per session. The HTTP
+    /// transport then answers over SSE: first the [`Self::roots_request`], then the reply.
+    pub fn wants_roots(&self, msg: &Value, caller: &Caller) -> bool {
+        let Some(session) = caller.session.as_deref() else { return false };
+        if caller.project.is_some() || msg.get("method").and_then(Value::as_str) != Some("tools/call") {
+            return false;
+        }
+        if msg["params"]["arguments"]["project"].as_str().is_some_and(|p| !p.is_empty()) {
+            return false;
+        }
+        let r = self.roots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        !r.asked.contains(session) && !r.known.contains_key(session)
+    }
+
+    /// A `roots/list` request for the client of `session`, and a receiver that fires when its
+    /// answer has been handled (by [`Self::handle_from`], from the client's next POST).
+    pub fn roots_request(&self, session: &str) -> (Value, tokio::sync::oneshot::Receiver<()>) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let id = format!("glint-roots-{}", self.sessions.fetch_add(1, Ordering::Relaxed));
+        let mut r = self.roots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if r.asked.len() >= ROOTS_MAX {
+            r.asked.clear();
+        }
+        if r.pending.len() >= ROOTS_MAX {
+            r.pending.clear();
+        }
+        r.asked.insert(session.to_owned());
+        r.pending.insert(id.clone(), (session.to_owned(), tx));
+        (json!({ "jsonrpc": "2.0", "id": id, "method": "roots/list" }), rx)
+    }
+
+    /// The client answered one of our requests (only `roots/list` so far).
+    fn take_response(&self, msg: &Value) {
+        let Some(id) = msg.get("id").and_then(Value::as_str) else { return };
+        let mut r = self.roots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some((session, tx)) = r.pending.remove(id) else { return };
+        let roots = msg["result"]["roots"].as_array().cloned().unwrap_or_default();
+        let found = roots.iter().filter_map(|x| x["uri"].as_str()).filter_map(root_path).find_map(|dir| {
+            let p = glint_core::project::resolve(&dir).map(|r| r.project).or_else(|| glint_core::project::folder_name(&dir))?;
+            Some((p, dir))
+        });
+        if let Some(f) = found {
+            if r.known.len() >= ROOTS_MAX {
+                r.known.clear();
+            }
+            r.known.insert(session, f);
+        }
+        let _ = tx.send(());
+    }
+
+    /// The project this caller works in, and how we know.
+    fn ctx(&self, caller: &Caller) -> Ctx {
+        if let Some(p) = &caller.project {
+            return Ctx { project: Some(p.clone()), source: Some("named by the connection".into()) };
+        }
+        let r = self.roots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match caller.session.as_deref().and_then(|s| r.known.get(s)) {
+            Some((p, dir)) => Ctx { project: Some(p.clone()), source: Some(format!("the agent's workspace {dir}")) },
+            None => Ctx::default(),
+        }
     }
 
     /// Handles a JSON-RPC request, notification or batch. `None` means nothing to send back
@@ -103,6 +188,18 @@ impl McpServer {
         let id = msg.get("id").cloned();
         let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
         let params = msg.get("params").cloned().unwrap_or(Value::Null);
+        // A client's answer to a request of ours: nothing to reply.
+        if method.is_empty() && (msg.get("result").is_some() || msg.get("error").is_some()) {
+            self.take_response(&msg);
+            return Outcome::default();
+        }
+        if method == "notifications/roots/list_changed"
+            && let Some(s) = &caller.session
+        {
+            let mut r = self.roots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            r.asked.remove(s);
+            r.known.remove(s);
+        }
         // Notifications (no id) never get a reply, not even an error.
         let Some(id) = id else { return Outcome::default() };
         let mut session = None;
@@ -124,11 +221,12 @@ impl McpServer {
                 let name = params.get("name").and_then(Value::as_str).unwrap_or("");
                 let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
                 let started = Instant::now();
-                let answer = tools::call(&self.hub, name, args.clone()).await;
+                let ctx = self.ctx(caller);
+                let answer = tools::call(&self.hub, name, args.clone(), &ctx).await;
                 let mut a = Activity::new(client_of(caller.session.as_deref()), agents::MCP_CALL);
                 a.duration_ms = u64::try_from(started.elapsed().as_millis()).ok();
                 a.session.clone_from(&caller.session);
-                a.project = args["project"].as_str().map(str::to_owned).filter(|p| !p.is_empty()).or_else(|| caller.project.clone());
+                a.project = args["project"].as_str().map(str::to_owned).filter(|p| !p.is_empty()).or_else(|| ctx.project.clone());
                 a.tool = Some(name.to_owned());
                 let (Ok(text) | Err(text)) = &answer;
                 a.result_bytes = Some(text.len() as u64);
@@ -169,6 +267,33 @@ impl McpServer {
         let safe: String = client.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')).take(60).collect();
         format!("glint-{:x}{n:x}-{safe}", std::process::id())
     }
+}
+
+/// The local folder of a `file://` root URI.
+fn root_path(uri: &str) -> Option<String> {
+    let rest = uri.strip_prefix("file://")?;
+    // file:///Users/x or file://localhost/Users/x
+    let path = rest.strip_prefix("localhost").unwrap_or(rest);
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && let Some(h) = path.get(i + 1..i + 3).and_then(|h| u8::from_str_radix(h, 16).ok())
+        {
+            out.push(h);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    let mut p = String::from_utf8(out).ok()?;
+    // file:///C:/x on Windows
+    if p.len() > 2 && p.starts_with('/') && p.as_bytes()[2] == b':' {
+        p.remove(0);
+    }
+    (!p.is_empty()).then_some(p)
 }
 
 /// The client name a session id carries; `unknown` without one.

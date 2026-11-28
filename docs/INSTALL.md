@@ -93,8 +93,8 @@ removes them again, even if the PHP or Python they belong to is no longer on you
   ZDOTDIR), so Node has `glint()` and the `glint` command is on your PATH. Node gets `glint()`
   only while `~/.glint` is there.
 - the MCP server entry for the coding agents it finds (Claude Code, Cursor, VS Code, Windsurf,
-  Gemini CLI, Codex), and hooks in `~/.claude/settings.json` for Claude Code. Each file gets a
-  one-time `.glint-backup` copy before the first change.
+  Gemini CLI, Codex), and hooks in `~/.claude/settings.json` for Claude Code. Before each change
+  a file gets a timestamped `.glint-backup-<time>` copy (the newest five are kept).
 
 Glint never sends anything off your Mac. SDKs send nothing when `APP_ENV` or `NODE_ENV` is
 `production`, so a production deployment stays untouched even with the same code. WordPress sites

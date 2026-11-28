@@ -337,14 +337,40 @@ async fn resume(State(hub): State<Hub>, Path(id): Path<String>, body: Bytes) -> 
     }
 }
 
-/// MCP over Streamable HTTP: JSON in, JSON out (no SSE stream needed for these tools).
-async fn mcp(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
+#[derive(serde::Deserialize)]
+struct McpParams {
+    /// `/mcp?project=shop`: a per-project server entry for clients that name no workspace.
+    project: Option<String>,
+}
+
+/// MCP over Streamable HTTP: JSON in, JSON out. The exception is the first tool call of a
+/// session whose project is unknown: if the client takes SSE, the reply is a stream that first
+/// asks the client for its workspace roots (`roots/list`, answered by its next POST), then
+/// carries the tool's answer, scoped to that workspace's project.
+async fn mcp(State(s): State<AppState>, QueryParams(p): QueryParams<McpParams>, headers: HeaderMap, body: Bytes) -> Response {
     let msg: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => return (StatusCode::BAD_REQUEST, Json(glint_mcp::error(serde_json::Value::Null, -32700, &format!("parse error: {e}")))).into_response(),
     };
     let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_owned).filter(|v| !v.is_empty());
-    let caller = glint_mcp::Caller { session: header("mcp-session-id"), project: header("x-glint-project") };
+    let project = header("x-glint-project").or(p.project.filter(|p| !p.is_empty()));
+    let caller = glint_mcp::Caller { session: header("mcp-session-id"), project };
+    let takes_sse = header("accept").is_some_and(|a| a.contains("text/event-stream"));
+    if takes_sse
+        && s.mcp.wants_roots(&msg, &caller)
+        && let Some(session) = caller.session.clone()
+    {
+        use axum::response::sse::{Event, Sse};
+        let (ask, answered) = s.mcp.roots_request(&session);
+        let mcp = s.mcp.clone();
+        let first = futures_util::stream::iter([Ok::<_, std::convert::Infallible>(Event::default().event("message").data(ask.to_string()))]);
+        let reply = futures_util::stream::once(async move {
+            let _ = tokio::time::timeout(glint_mcp::ROOTS_WAIT, answered).await;
+            let out = mcp.handle_from(msg, &caller).await;
+            Ok(Event::default().event("message").data(out.reply.unwrap_or_default().to_string()))
+        });
+        return Sse::new(first.chain(reply)).into_response();
+    }
     let out = s.mcp.handle_from(msg, &caller).await;
     match out.reply {
         Some(reply) => {

@@ -853,15 +853,16 @@ export default { plugins: [glint()] };</code></pre>
 <h2>Coding agents</h2>
 <p><code>glint install</code> registers Glint's MCP server with the agents it finds. Claude Code also gets hooks, so its session shows up here next to your program and Glint can tell it things:</p>
 <ul>
-<li>At session start it learns that Glint records this project, that <code>glint()</code> needs no import, and which failures happened in the last day.</li>
+<li>At session start it learns that Glint records this project, that <code>glint()</code> needs no import, and which failures happened in the last day. When glintd is not running it still learns all that, plus that Glint is off and how to start it.</li>
 <li>With each of your prompts it gets the failures that are new since the previous one. When you write "it's broken", it already has <code>TypeError … cart.js:11</code>.</li>
-<li>When it wants to finish a turn during which your programs failed, it is sent back once to fix them or explain why they are expected. Failures in files it edited afterwards don't count.</li>
+<li>When it wants to finish a turn during which your programs failed, it is sent back once to fix them or explain why they are expected. A failure in a file it edited afterwards is left out once a later run of the same program passed; until then it is listed as possibly fixed.</li>
 </ul>
 <p>Both can be turned off in Settings.</p>
+<p>The tools read the project the agent works in, and every answer starts with the project it covers. <code>glint mcp</code> (Codex) sends its folder's project; Claude Code, VS Code and Cursor report their workspace folder when Glint asks. For another client, add <code>?project=shop</code> to the server's URL or pass <code>project</code> to a tool. When Glint cannot tell and several projects have events, the answer lists them instead of mixing them; <code>project="*"</code> reads all.</p>
 <table class="ref">
 <tr><td><code>glint_last_error</code></td><td>the newest failure with its stack and values</td></tr>
 <tr><td><code>glint_events</code>, <code>glint_event</code>, <code>glint_runs</code></td><td>filter events, read one in full, list recent runs</td></tr>
-<tr><td><code>glint_wait_for</code></td><td>wait for the next matching event after an edit</td></tr>
+<tr><td><code>glint_wait_for</code></td><td>the matching event of the last 10 seconds, or the next one to arrive after an edit</td></tr>
 <tr><td><code>glint_expect</code></td><td>check that markers arrived with the right values and nothing failed</td></tr>
 <tr><td><code>glint_pauses</code>, <code>glint_resume</code></td><td>answer a program stopped at <code>pause()</code></td></tr>
 <tr><td><code>glint_annotate</code>, <code>glint_show</code></td><td>leave a note on an event; show you markdown or a diagram</td></tr>
