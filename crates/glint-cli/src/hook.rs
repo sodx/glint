@@ -380,13 +380,15 @@ pub fn claude_code_config(binary: &str) -> String {
         "PreCompact",
         "SessionEnd",
     ];
+    // Claude Code runs it through a shell: a HOME with spaces must stay one word.
+    let command = format!("{} hook", crate::agents::shell_quote(binary));
     let mut hooks = serde_json::Map::new();
     for e in events {
         let needs_matcher = matches!(e, "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest");
         let entry = if needs_matcher {
-            serde_json::json!([{ "matcher": "*", "hooks": [{ "type": "command", "command": format!("{binary} hook"), "timeout": 5 }] }])
+            serde_json::json!([{ "matcher": "*", "hooks": [{ "type": "command", "command": command, "timeout": 5 }] }])
         } else {
-            serde_json::json!([{ "hooks": [{ "type": "command", "command": format!("{binary} hook"), "timeout": 5 }] }])
+            serde_json::json!([{ "hooks": [{ "type": "command", "command": command, "timeout": 5 }] }])
         };
         hooks.insert(e.into(), entry);
     }

@@ -153,7 +153,22 @@ pub(crate) fn write(a: &Args, path: &Path, contents: &str) -> Result<(), String>
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
     }
-    fs::write(path, contents).map_err(|e| format!("writing {}: {e}", path.display()))
+    // Replaced in one step (temp file + rename), so a reader never sees half a file and a full
+    // disk leaves the old one intact. A symlinked config (dotfiles) is written where it points,
+    // and keeps its permissions.
+    let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+    let name = target.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+    let tmp = target.with_file_name(format!(".{name}.glint-tmp-{}", std::process::id()));
+    let result = fs::write(&tmp, contents)
+        .and_then(|()| match fs::metadata(&target) {
+            Ok(m) => fs::set_permissions(&tmp, m.permissions()),
+            Err(_) => Ok(()),
+        })
+        .and_then(|()| fs::rename(&tmp, &target));
+    result.map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("writing {}: {e}", path.display())
+    })
 }
 
 fn write_sdk(a: &Args, files: &[(&str, &str)], strip: &str, dest: &Path) -> Result<(), String> {
