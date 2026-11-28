@@ -4,6 +4,17 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+/// An HTTP agent for glintd: every request carries `X-Glint: 1`, which glintd wants on everything
+/// but sending events (a web page cannot add it, see glint-server's guard).
+pub fn builder() -> ureq::AgentBuilder {
+    ureq::AgentBuilder::new().middleware(glint_header)
+}
+
+#[allow(clippy::result_large_err)] // ureq's middleware signature
+fn glint_header(req: ureq::Request, next: ureq::MiddlewareNext) -> Result<ureq::Response, ureq::Error> {
+    next.handle(req.set("X-Glint", "1"))
+}
+
 pub struct Client {
     agent: ureq::Agent,
     url: String,
@@ -34,7 +45,7 @@ impl std::fmt::Display for ClientError {
 
 impl Client {
     pub fn new(base: &str) -> Self {
-        let agent = ureq::AgentBuilder::new()
+        let agent = builder()
             .timeout_connect(Duration::from_secs(1))
             .timeout(Duration::from_secs(10))
             .build();

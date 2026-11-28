@@ -32,7 +32,7 @@ fn glint(url: &str, args: &[&str], stdin: &str) -> Output {
 }
 
 fn events(addr: SocketAddr, query: &str) -> Vec<Value> {
-    let v: Value = ureq::get(&format!("http://{addr}/v1/events?{query}")).call().unwrap().into_json().unwrap();
+    let v: Value = ureq::get(&format!("http://{addr}/v1/events?{query}")).set("X-Glint", "1").call().unwrap().into_json().unwrap();
     v["events"].as_array().unwrap().clone()
 }
 

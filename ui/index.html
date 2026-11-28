@@ -1005,7 +1005,8 @@ function pathParts(file, line, e) {
   const i = p.search(/[^\\/]*$/);
   return `<span class="pdir">${esc(p.slice(0, i))}</span><span class="pbase">${esc(p.slice(i))}${line ? ":" + line : ""}</span>`;
 }
-async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.json(); }
+/* Every call carries X-Glint: glintd serves reads and changes only to Glint's own clients. */
+async function api(path, opts = {}) { const r = await fetch(path, { ...opts, headers: { "x-glint": "1", ...opts.headers } }); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.json(); }
 function copy(text) { try { navigator.clipboard?.writeText(text).catch(() => {}); } catch {} }
 let toastT;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1800); }

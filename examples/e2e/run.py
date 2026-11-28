@@ -21,7 +21,7 @@ SHOP, API = "http://127.0.0.1:8091", "http://127.0.0.1:8092"
 
 def http(method, url, body=None, timeout=10):
     data = None if body is None else json.dumps(body).encode()
-    req = urllib.request.Request(url, data=data, method=method, headers={"content-type": "application/json"})
+    req = urllib.request.Request(url, data=data, method=method, headers={"content-type": "application/json", "x-glint": "1"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode()

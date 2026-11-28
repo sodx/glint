@@ -63,7 +63,7 @@ def tasks(names):
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=10) as r:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"x-glint": "1"}), timeout=10) as r:
         return json.loads(r.read())
 
 

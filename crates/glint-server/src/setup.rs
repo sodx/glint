@@ -6,12 +6,14 @@
 //!
 //! `POST /v1/report` ("Send diagnostics") runs `glint report` the same way (see `report`).
 //!
-//! Only this server's own pages can call these (the origin guard lets other origins send events
-//! and nothing else).
+//! Only this server's own pages and the CLI can call these: the guard wants Glint's origin or the
+//! `X-Glint` header. Each one starts shells, so they also take turns (one at a time, see
+//! `SHELLS`), and `GET /v1/setup` answers from a recent check instead of starting another one.
 
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -21,6 +23,13 @@ use serde_json::{Value, json};
 use crate::report::login_shell;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Held while a login shell runs for any of these routes, so at most one runs at a time. It keeps
+/// the last `glint doctor` answer and when it was taken.
+static SHELLS: LazyLock<tokio::sync::Mutex<Option<(Instant, Value)>>> = LazyLock::new(|| tokio::sync::Mutex::new(None));
+
+/// A check this recent is answered again instead of starting another shell.
+const CHECK_FRESH: Duration = Duration::from_secs(5);
 
 /// The glint CLI: next to this glintd (a build, ~/.glint/bin), inside Glint.app, or installed.
 fn cli() -> Option<PathBuf> {
@@ -142,10 +151,27 @@ fn describe(cli: &std::path::Path, args: &str, text: &str) -> String {
 
 /// `GET /v1/setup` → `{steps: [{name, status: ok|skip|fail, detail}], shell}`.
 pub async fn status() -> Response {
-    match run("doctor", Duration::from_secs(40)).await {
-        Ok((steps, _)) => Json(json!({ "steps": steps, "shell": login_shell() })).into_response(),
+    let doctor = || async { run("doctor", Duration::from_secs(40)).await.map(|(steps, _)| json!({ "steps": steps, "shell": login_shell() })) };
+    match checked(doctor).await {
+        Ok(body) => Json(body).into_response(),
         Err(e) => crate::routes::error(StatusCode::SERVICE_UNAVAILABLE, e),
     }
+}
+
+/// Runs `doctor` unless a check finished within `CHECK_FRESH`. Requests that arrive while a check
+/// (or setup, or a report) runs wait for it, and then share that answer.
+async fn checked<F, Fut>(doctor: F) -> Result<Value, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Value, String>>,
+{
+    let mut last = SHELLS.lock().await;
+    if let Some((_, body)) = last.as_ref().filter(|(at, _)| at.elapsed() < CHECK_FRESH) {
+        return Ok(body.clone());
+    }
+    let body = doctor().await?;
+    *last = Some((Instant::now(), body.clone()));
+    Ok(body)
 }
 
 /// `POST /v1/setup` → `{steps, log}`; the log also goes to ~/.glint/setup.log.
@@ -153,7 +179,11 @@ pub async fn install() -> Response {
     if RUNNING.swap(true, Ordering::SeqCst) {
         return crate::routes::error(StatusCode::CONFLICT, "setup is already running".into());
     }
-    let result = run("install", Duration::from_secs(180)).await;
+    let result = {
+        let mut last = SHELLS.lock().await;
+        *last = None; // what was checked before is out of date now
+        run("install", Duration::from_secs(180)).await
+    };
     RUNNING.store(false, Ordering::SeqCst);
     match result {
         Ok((steps, log)) => {
@@ -175,7 +205,10 @@ pub async fn report() -> Response {
     if let Some(b) = &bundle {
         args.push_str(&format!(" --app '{}'", b.display().to_string().replace('\'', "'\\''")));
     }
-    let ran = run(&args, Duration::from_secs(90)).await;
+    let ran = {
+        let _turn = SHELLS.lock().await;
+        run(&args, Duration::from_secs(90)).await
+    };
     let from_cli = match &ran {
         Ok((v, _)) => v.get("path").and_then(Value::as_str).map(PathBuf::from).filter(|p| p.is_file()),
         Err(_) => None,
@@ -209,6 +242,27 @@ pub async fn report() -> Response {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn checks_at_once_share_one_shell() {
+        let runs = Arc::new(AtomicUsize::new(0));
+        let calls: Vec<_> = (0..12)
+            .map(|_| {
+                let runs = runs.clone();
+                tokio::spawn(super::checked(move || async move {
+                    runs.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    Ok(serde_json::json!({ "steps": [] }))
+                }))
+            })
+            .collect();
+        for c in calls {
+            assert!(c.await.unwrap().is_ok());
+        }
+        assert_eq!(runs.load(Ordering::SeqCst), 1, "twelve checks at once started more than one shell");
+    }
     #[test]
     fn exact_file_ignores_a_name_that_only_matches_without_case() {
         let dir = std::env::temp_dir().join(format!("glint-exact-{}", std::process::id()));

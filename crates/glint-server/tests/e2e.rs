@@ -19,13 +19,22 @@ async fn start() -> SocketAddr {
     addr
 }
 
+/// Glint's own clients (the window, the CLI) send `X-Glint: 1`.
+fn client() -> reqwest::Client {
+    let mut h = reqwest::header::HeaderMap::new();
+    h.insert("x-glint", "1".parse().unwrap());
+    reqwest::Client::builder().default_headers(h).build().unwrap()
+}
+
 #[tokio::test]
 async fn posted_events_stream_live_and_are_queryable() {
     let addr = start().await;
-    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/v1/stream?kind=core.*"))
+    let mut ws_req = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(format!("ws://{addr}/v1/stream?kind=core.*")).unwrap();
+    ws_req.headers_mut().insert("x-glint", "1".parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(ws_req)
         .await
         .unwrap();
-    let http = reqwest::Client::new();
+    let http = client();
 
     let res = http
         .post(format!("http://{addr}/v1/events"))
@@ -70,7 +79,7 @@ async fn posted_events_stream_live_and_are_queryable() {
 #[tokio::test]
 async fn ndjson_is_accepted() {
     let addr = start().await;
-    let res = reqwest::Client::new()
+    let res = client()
         .post(format!("http://{addr}/v1/events"))
         .header("content-type", "application/x-ndjson")
         .body("{\"kind\":\"core.log\",\"payload\":{\"message\":\"a\"}}\n{\"kind\":\"core.log\",\"payload\":{\"message\":\"b\"}}\n")
@@ -80,14 +89,14 @@ async fn ndjson_is_accepted() {
     let ack: Value = res.json().await.unwrap();
     assert_eq!(ack["accepted"], 2);
     // Read-your-writes: a GET right after the POST sees the events.
-    let list: Value = reqwest::get(format!("http://{addr}/v1/events?kind=core.log")).await.unwrap().json().await.unwrap();
+    let list: Value = client().get(format!("http://{addr}/v1/events?kind=core.log")).send().await.unwrap().json().await.unwrap();
     assert_eq!(list["events"].as_array().unwrap().len(), 2);
 }
 
 #[tokio::test]
 async fn bad_bodies_hosts_and_origins_are_refused() {
     let addr = start().await;
-    let http = reqwest::Client::new();
+    let http = client();
     let url = format!("http://{addr}/v1/events");
 
     let bad = http.post(&url).body("not json").send().await.unwrap();
@@ -118,7 +127,7 @@ async fn bad_bodies_hosts_and_origins_are_refused() {
 #[tokio::test]
 async fn serves_ui_and_info() {
     let addr = start().await;
-    let http = reqwest::Client::new();
+    let http = client();
     let page = http.get(format!("http://{addr}/")).send().await.unwrap().text().await.unwrap();
     assert!(page.contains("<title>Glint</title>"));
     let info: Value = http.get(format!("http://{addr}/v1/info")).send().await.unwrap().json().await.unwrap();
@@ -128,7 +137,7 @@ async fn serves_ui_and_info() {
 #[tokio::test]
 async fn native_pause_long_poll_and_resume() {
     let addr = start().await;
-    let http = reqwest::Client::new();
+    let http = client();
     http.post(format!("http://{addr}/v1/events"))
         .json(&json!({"id": "pz", "kind": "ctl.pause", "payload": {"reason": "inspect"}}))
         .send()
@@ -156,7 +165,7 @@ async fn native_pause_long_poll_and_resume() {
 #[tokio::test]
 async fn mcp_over_http() {
     let addr = start().await;
-    let http = reqwest::Client::new();
+    let http = client();
     let url = format!("http://{addr}/mcp");
     let init = http
         .post(&url)
@@ -194,7 +203,7 @@ async fn mcp_over_http() {
 #[tokio::test]
 async fn claude_code_hooks_become_agent_events() {
     let addr = start().await;
-    let http = reqwest::Client::new();
+    let http = client();
     let url = format!("http://{addr}/v1/hooks/claude-code");
     let common = json!({"session_id": "S9", "transcript_path": "/t.jsonl", "cwd": "/Users/me/src/shop"});
     let with = |extra: Value| {
@@ -225,7 +234,7 @@ async fn claude_code_hooks_become_agent_events() {
 #[tokio::test]
 async fn runs_are_listed_newest_first() {
     let addr = start().await;
-    let http = reqwest::Client::new();
+    let http = client();
     http.post(format!("http://{addr}/v1/events"))
         .json(&json!([
             {"kind": "core.log", "payload": {"message": "a"}, "run": "r1", "project": "shop"},
@@ -241,4 +250,37 @@ async fn runs_are_listed_newest_first() {
     let shop: Value = http.get(format!("http://{addr}/v1/runs?project=shop")).send().await.unwrap().json().await.unwrap();
     assert_eq!(shop["runs"][0]["errors"], 1);
     assert_eq!(shop["runs"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn only_glints_own_clients_read_or_change_anything() {
+    let addr = start().await;
+    let bare = reqwest::Client::new();
+    // Programs send events and wait for their pause with no header.
+    let sent = bare.post(format!("http://{addr}/v1/events")).json(&json!({"kind": "core.value", "payload": 1})).send().await.unwrap();
+    assert_eq!(sent.status(), 202);
+    assert_eq!(bare.get(format!("http://{addr}/")).send().await.unwrap().status(), 200);
+    // Reading and changing need the header.
+    for (method, path) in [("GET", "/v1/events"), ("GET", "/v1/info"), ("GET", "/v1/setup"), ("POST", "/v1/data/clear"), ("GET", "/v1/ctl")] {
+        let req = bare.request(method.parse().unwrap(), format!("http://{addr}{path}"));
+        let res = req.send().await.unwrap();
+        assert_eq!(res.status(), 403, "{method} {path}");
+        assert!(res.text().await.unwrap().contains("X-Glint"), "{method} {path}");
+    }
+    assert_eq!(client().get(format!("http://{addr}/v1/events")).send().await.unwrap().status(), 200);
+    // A page's `<img src=".../v1/setup">` (no Origin, Sec-Fetch-Site: cross-site) is refused,
+    // also when it is sent to a route that would otherwise take the header.
+    for site in ["cross-site", "same-site"] {
+        let img = bare.get(format!("http://{addr}/v1/setup")).header("sec-fetch-site", site).header("sec-fetch-mode", "no-cors").send().await.unwrap();
+        assert_eq!(img.status(), 403, "{site}");
+        assert!(img.text().await.unwrap().contains("another site"));
+    }
+    // A no-cors POST from another origin carries that Origin and is refused.
+    let form = bare.post(format!("http://{addr}/v1/setup")).header("origin", "https://evil.example").header("sec-fetch-site", "cross-site").send().await.unwrap();
+    assert_eq!(form.status(), 403);
+    let mcp = bare.post(format!("http://{addr}/mcp")).header("origin", "http://localhost:5173").json(&json!({"jsonrpc": "2.0", "id": 1, "method": "ping"})).send().await.unwrap();
+    assert_eq!(mcp.status(), 403);
+    // Coding agents reach /mcp without the header.
+    let ping = bare.post(format!("http://{addr}/mcp")).json(&json!({"jsonrpc": "2.0", "id": 1, "method": "ping"})).send().await.unwrap();
+    assert_eq!(ping.status(), 200);
 }

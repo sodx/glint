@@ -475,7 +475,7 @@ pub fn uninstall(a: &Args) -> Vec<Step> {
 
 pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
     let mut steps = Vec::new();
-    let info = ureq::get(&format!("{}/v1/info", base_url.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(1)).call();
+    let info = crate::client::builder().build().get(&format!("{}/v1/info", base_url.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(1)).call();
     steps.push(match info {
         Ok(r) => {
             let v: serde_json::Value = r.into_json().unwrap_or_default();

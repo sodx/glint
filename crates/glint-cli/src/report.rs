@@ -30,7 +30,7 @@ pub fn run(a: Args) -> Result<(), String> {
         url: a.url.clone(),
         probe: true,
     };
-    let info = ureq::get(&format!("{}/v1/info", a.url.trim_end_matches('/'))).timeout(Duration::from_secs(2)).call();
+    let info = crate::client::builder().build().get(&format!("{}/v1/info", a.url.trim_end_matches('/'))).timeout(Duration::from_secs(2)).call();
     let glintd = match info {
         Ok(r) => {
             let v: serde_json::Value = r.into_json().unwrap_or_default();

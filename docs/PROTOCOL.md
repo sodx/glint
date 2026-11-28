@@ -15,6 +15,18 @@ The key words MUST, SHOULD and MAY are used as defined in RFC 2119.
 - No auth on loopback. When the server binds beyond loopback, it requires
   `Authorization: Bearer <token>` (token from `GLINT_TOKEN`).
 - Requests with an `Origin` header that is not on the server allowlist are rejected with `403`.
+  Pages of local dev servers (`localhost`, `127.0.0.1`, `*.localhost`, `*.test`) may send events and
+  wait for their own pause, and nothing else.
+- Everything except sending events (`POST /v1/events`, OTLP), waiting for one's own pause
+  (`GET /v1/ctl/<id>`), the browser script, the window's page and `/mcp` needs the header
+  `X-Glint: 1` (or the window's own `Origin`). A web page cannot add that header to a request to
+  another origin, so it cannot read events or start anything (setup, editors) behind the user's
+  back. A request a browser marks as made by another site (`Sec-Fetch-Site: cross-site` or
+  `same-site`) is refused even with the header. From a terminal:
+
+  ```bash
+  curl -H 'X-Glint: 1' 'http://127.0.0.1:23600/v1/events?level=error&limit=5'
+  ```
 
 ## 2. Sending events
 
@@ -150,6 +162,8 @@ client. `glint mcp` also sends `X-Glint-Project` (its working directory's projec
 Renderers fetch `GET /v1/blobs/sha256:<hex>`.
 
 ## 7. Reading
+
+Each of these needs `X-Glint: 1` (§1).
 
 | Endpoint | Purpose |
 |----------|---------|
