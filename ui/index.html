@@ -64,7 +64,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
 /* Read by screen readers, not shown. */
 .vh { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-header { display: flex; align-items: center; gap: 12px; height: 56px; }
+header { display: flex; align-items: center; gap: 8px; height: 56px; }
 .crumb { color: var(--muted); }
 .spacer { flex: 1; }
 .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
@@ -193,6 +193,20 @@ th { color: var(--muted); font-weight: 500; }
 .tree .j.shut > .fold { display: inline; }
 .tree .j.shut > .in, .tree .j.shut > .close { display: none; }
 .tree .close { color: var(--muted); }
+.tree .jl.jhit { background: var(--accent-soft); border-radius: 4px; box-shadow: inset 2px 0 var(--accent); }
+.tree mark { background: color-mix(in oklch, var(--spark) 70%, transparent); color: var(--text); border-radius: 2px; }
+.jpath { position: sticky; top: 8px; z-index: 3; box-shadow: 0 0 0 6px var(--bg); display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+/* A big value's pane: clip, not hidden, so the path bar sticks to the window; long lines scroll
+   inside the tree instead of widening the pane past the window. */
+.detail > div:has(> .pane > .jpath) { overflow: clip; min-width: 0; }
+.pane:has(> .jpath) { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.pane:has(> .jpath) > .tree { overflow-x: auto; }
+.jpath:focus-within { border-color: var(--line-strong); }
+.jpath svg { color: var(--faint); }
+.jpath input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: 12.5px var(--mono); color: var(--text); }
+.jpath input::placeholder { color: var(--faint); }
+.jpath .jmsg { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.jpath .jmsg.err { color: var(--red); }
 .tree > .j > .jt::before { display: none; }
 .field { display: flex; gap: 6px; }
 .field input { flex: 1; height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; background: var(--surface); color: var(--text); font: 13px var(--mono); }
@@ -353,11 +367,33 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
 .btn kbd { margin-left: 8px; border-color: currentColor; color: inherit; opacity: .55; }
 @media (max-width: 560px) { .btn kbd { display: none; } }
 
+/* Header and run-head controls: one treatment. 36 px, bordered, icon first; the short text label
+   shows where the width allows, else the tooltip and aria-label name it. */
+.hbtn { height: 36px; min-width: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 9px; border-radius: 8px;
+  color: var(--muted); font: 500 13px var(--sans); border: 1px solid var(--line); background: var(--surface); white-space: nowrap; transition: color .12s, border-color .12s, background-color .12s; }
+.hbtn:hover { color: var(--text); border-color: var(--line-strong); }
+.hbtn:active { transform: scale(.97); }
+.hbtn .lbl { display: none; }
+.hbtn kbd { font-size: 11px; line-height: 16px; }
+.hbtn .kk { font: 500 12px var(--mono); letter-spacing: -.02em; }
+.cmdk-btn kbd { display: none; }
+@media (min-width: 800px) {
+  .hbtn .lbl { display: inline; }
+  .hbtn { padding: 0 11px 0 9px; }
+  .cmdk-btn .kk { display: none; } .cmdk-btn kbd { display: inline; }
+}
+.search-btn { margin-left: auto; }
+.search-btn kbd { display: inline; }
+.searching .search-btn { display: none; }
+@media (min-width: 640px) { .search-btn .lbl { display: inline; } .search-btn { padding: 0 9px; } }
+/* Native selects in sheets, drawn like the controls above. */
+.sel { position: relative; display: inline-flex; align-items: center; }
+.sel select { appearance: none; -webkit-appearance: none; height: 36px; padding: 0 30px 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  color: var(--text); font: 500 13px var(--sans); cursor: pointer; }
+.sel select:hover { border-color: var(--line-strong); }
+.sel select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sel svg { position: absolute; right: 9px; width: 14px; height: 14px; color: var(--faint); pointer-events: none; }
 /* command palette */
-.cmdk-btn { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px 0 10px; border-radius: 8px; color: var(--faint); border: 1px solid var(--line); background: var(--surface); font-size: 13px; }
-.cmdk-btn:hover { color: var(--muted); border-color: var(--line-strong); }
-.cmdk-btn span { min-width: 120px; text-align: left; }
-@media (max-width: 560px) { .cmdk-btn span, .cmdk-btn kbd { display: none; } .cmdk-btn { border: 0; background: none; padding: 0 8px; } }
 .palette { position: fixed; inset: 0; z-index: 20; display: none; align-items: flex-start; justify-content: center; padding-top: 16vh;
   background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(3px); }
 .palette.open { display: flex; }
@@ -367,10 +403,11 @@ dialog.confirm .row-btns { display: flex; justify-content: flex-end; gap: 8px; }
 .palette input { width: 100%; height: 52px; border: 0; outline: 0; padding: 0 18px; font: 16px var(--sans); color: var(--text); background: none; border-bottom: 1px solid var(--line); }
 .palette input::placeholder { color: var(--faint); }
 .palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
-.palette .grp { padding: 10px 12px 4px; font-size: 12px; color: var(--faint); }
+.palette .grp { padding: 12px 12px 5px; font: 600 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 .palette li[role="option"] { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 8px; cursor: pointer; }
 .palette li[aria-selected="true"] { background: var(--hover); }
-.palette li .hint { margin-left: auto; color: var(--faint); font-size: 12px; }
+.palette li .hint { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--faint); font-size: 12px; white-space: nowrap; }
+.palette li .hint kbd { color: var(--muted); }
 .palette li svg { color: var(--muted); }
 .palette .none { padding: 18px 12px; color: var(--muted); }
 
@@ -419,15 +456,6 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .entry[data-color="gray"] .node { color: var(--faint); }
 
 /* ---------------- docs ---------------- */
-.docs-btn { width: 30px; height: 30px; border-radius: 8px; color: var(--muted); font: 600 14px var(--sans); border: 1px solid var(--line); background: var(--surface); }
-.docs-btn:hover { color: var(--text); border-color: var(--line-strong); }
-.docs-btn .lbl { display: none; }
-/* Wide windows have room to name the header buttons. */
-@media (min-width: 1200px) {
-  .docs-btn { width: auto; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; font-weight: 500; font-size: 13px; }
-  .docs-btn .lbl { display: inline; }
-  .docs-btn .q { width: 16px; text-align: center; font-weight: 600; font-size: 14px; }
-}
 .docs { position: fixed; inset: 0; z-index: 25; background: var(--bg); overflow: hidden; }
 .docs[hidden] { display: none; }
 .docs-shell { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
@@ -527,6 +555,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .redacted-note { font-size: 12px; color: var(--muted); margin: 0; }
 .set-ctl input:focus-visible, .set-ctl select:focus-visible, .set-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .set-ctl input:disabled, .set-ctl select:disabled, .set-row input:disabled { opacity: .6; }
+.set-ctl .sel select { height: 36px; padding: 0 30px 0 11px; background: var(--surface); border-color: var(--line); font: 500 13.5px var(--sans); }
 .set-row.toggle { grid-template-columns: 1fr auto; }
 .set-row.toggle label { display: grid; gap: 3px; }
 .set-row.toggle b { font-weight: 500; }
@@ -537,15 +566,31 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .set-row input[type="checkbox"]:checked::after { transform: translateX(16px); }
 .set-row .locked { grid-column: 2; font-size: 12px; color: var(--amber); }
 .set-row.toggle .locked { grid-column: 1; }
-.set-actions { display: flex; gap: 8px; padding: 12px 0 8px; border-top: 1px solid var(--line); }
+.set-actions { display: flex; gap: 12px; align-items: center; padding: 12px 0 8px; border-top: 1px solid var(--line); }
+.set-danger { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin: 16px 0 8px; padding: 14px 0 6px; border-top: 1px solid var(--line); }
+.set-danger b { font-weight: 500; font-size: 14px; display: block; }
+.set-danger .btn { flex: none; border-color: color-mix(in oklch, var(--red) 45%, var(--line-strong)); }
+.set-loading [data-key], .set-loading [data-act^="data-"] { pointer-events: none; }
+.set-loading .set-group { opacity: .6; }
 .btn.danger { color: var(--red); }
 /* ---------------- agents ---------------- */
 .read-by { font-size: 11.5px; color: var(--faint); margin-right: 10px; }
 .read-by.mcp { color: var(--muted); }
 .read-by.quiet { display: none; }
 .open > .row .read-by.quiet { display: inline; }
-.ag-ctl { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); margin: 0 0 16px; flex-wrap: wrap; }
-.ag-ctl select { font: 13.5px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 8px; }
+.ag-ctl { display: flex; gap: 8px 16px; align-items: center; font-size: 13.5px; color: var(--muted); margin: 0 0 16px; flex-wrap: wrap; }
+.ag-ctl label { display: inline-flex; align-items: center; gap: 8px; }
+.ag-open { all: unset; cursor: pointer; color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; border-radius: 3px; }
+.ag-open:hover { text-decoration-color: currentColor; }
+.ag-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ag-fails { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ag-fail { all: unset; cursor: pointer; font-size: 12.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+.ag-fail:hover { color: var(--text); border-color: var(--line-strong); }
+.ag-fail:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ag-fail b { font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.ag-empty { padding-bottom: 16px; }
+#setLoading { margin: -8px 0 14px; }
+.ag-empty p { margin: 0 0 12px; font-size: 14px; color: var(--muted); }
 .ag-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 16px; margin: 0 0 8px; }
 .ag-num b { display: block; font: 600 20px var(--sans); color: var(--text); font-variant-numeric: tabular-nums; }
 .ag-num span { font-size: 12.5px; color: var(--muted); }
@@ -554,8 +599,8 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 .ag-tools { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
 .ag-tool { font: 12px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--muted); }
 .ag-tool i { font-style: normal; color: var(--text); margin-left: 4px; }
-.ag-day { font: 500 12.5px var(--sans); color: var(--faint); margin: 22px 0 8px; letter-spacing: .02em; }
-@media (max-width: 560px) { .ag-nums { grid-template-columns: 1fr 1fr; } .set-row { grid-template-columns: 1fr; } .set-row .set-help, .set-row .locked { grid-column: 1; } }
+.ag-day { font: 600 11px var(--sans); color: var(--muted); margin: 22px 0 8px; letter-spacing: .07em; text-transform: uppercase; }
+@media (max-width: 560px) { .ag-nums { grid-template-columns: 1fr 1fr; } .set-danger { flex-wrap: wrap; } .set-row { grid-template-columns: 1fr; } .set-row .set-help, .set-row .locked { grid-column: 1; } }
 </style>
 </head>
 <body>
@@ -582,6 +627,8 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <symbol id="k-table" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M10 10v9"/></symbol>
   <symbol id="k-job" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></symbol>
   <symbol id="k-prompt" viewBox="0 0 24 24"><path d="M5 6h14v9H10l-4 3.5V15H5z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7M12 16.9v.1"/></symbol>
+  <symbol id="i-jump" viewBox="0 0 24 24"><path d="M5 6v5a3 3 0 0 0 3 3h11M15 10l4 4-4 4"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M7 7l2 2M15 15l2 2M17 7l-2 2M9 15l-2 2"/></symbol>
 </svg>
 
@@ -592,10 +639,10 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="menu" id="projMenu" role="menu" aria-label="Projects"></div></div>
     <span class="spacer"></span>
     <span class="live" id="live" title="Connected to glintd"><svg class="mark" id="liveMark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l1.9 8.6 8.6 1.9-8.6 1.9L12 22.5l-1.9-8.6L1.5 12l8.6-1.9z"/></svg><span id="liveText">Live</span></span>
-    <button class="docs-btn" id="agentsBtn" data-act="agents" aria-label="Agents (g)" title="What coding agents did with Glint (g)"><svg class="i"><use href="#k-prompt"/></svg><span class="lbl" aria-hidden="true">Agents</span></button>
-    <button class="docs-btn" id="settingsBtn" data-act="settings" aria-label="Settings (,)" title="Settings (,)"><svg class="i"><use href="#i-gear"/></svg><span class="lbl" aria-hidden="true">Settings</span></button>
-    <button class="docs-btn" id="docsBtn" data-act="docs" aria-label="Docs (?)" title="Docs (?)"><span class="q" aria-hidden="true">?</span><span class="lbl" aria-hidden="true">Docs</span></button>
-    <button class="cmdk-btn" id="cmdkBtn" aria-label="Jump to a run or action (⌘K)"><svg class="i"><use href="#i-search"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
+    <button class="hbtn" id="agentsBtn" data-act="agents" aria-label="Agents (g)" aria-keyshortcuts="g" title="Agents: what coding agents did with Glint (g)"><svg class="i" aria-hidden="true"><use href="#k-prompt"/></svg><span class="lbl" aria-hidden="true">Agents</span></button>
+    <button class="hbtn" id="settingsBtn" data-act="settings" aria-label="Settings (,)" aria-keyshortcuts="," title="Settings (,)"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg><span class="lbl" aria-hidden="true">Settings</span></button>
+    <button class="hbtn" id="docsBtn" data-act="docs" aria-label="Docs (?)" aria-keyshortcuts="?" title="Docs (?)"><svg class="i" aria-hidden="true"><use href="#i-help"/></svg><span class="lbl" aria-hidden="true">Docs</span></button>
+    <button class="hbtn cmdk-btn" id="cmdkBtn" aria-label="Jump to a run or action (⌘K)" aria-keyshortcuts="Meta+K" title="Jump to a run or action (⌘K)"><span class="kk" aria-hidden="true">⌘K</span><svg class="i lbl" aria-hidden="true"><use href="#i-jump"/></svg><span class="lbl" aria-hidden="true">Jump to</span><kbd aria-hidden="true">⌘K</kbd></button>
   </header>
 
   <main id="main">
@@ -605,6 +652,7 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 
   <div class="run-head" id="runHead">
     <button class="run-switch" id="runSwitch" aria-haspopup="menu" aria-expanded="false" aria-controls="runMenu"></button>
+    <button class="hbtn search-btn" id="searchBtn" data-act="search-open" aria-label="Search events (/)" aria-keyshortcuts="/" title="Search events (/)"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl" aria-hidden="true">Search</span><kbd aria-hidden="true">/</kbd></button>
     <label class="search"><svg class="i" style="color:var(--faint)"><use href="#i-search"/></svg><input id="q" placeholder="Search: text, kind:sql, level:warn" aria-label="Search this run"><select id="qScope" aria-label="Search in"><option value="run">This run</option><option value="project">This project</option><option value="all">Every project</option></select><kbd>esc</kbd></label>
     <span class="stale-note" id="staleNote"></span>
     <div class="menu" id="runMenu" role="menu" aria-label="Runs"></div>
@@ -622,6 +670,12 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
   <div class="sheet-body">
     <div class="sheet-head"><h1 id="setTitle">Settings</h1><span class="sheet-saved" id="setSaved" aria-live="polite"></span><button class="link" data-act="settings-close">Close <kbd>esc</kbd></button></div>
     <p class="sheet-lead">Changes apply right away and are saved to <code id="setPath">~/.glint/config.toml</code>.</p>
+    <p class="set-help" id="setLoading" role="status">Loading settings…</p>
+    <section class="set-group">
+      <h2>Editor</h2>
+      <div class="set-row"><label for="s-editor">Open files in</label><div class="set-ctl"><span class="sel"><select id="s-editor" data-key="editor"><option>Loading…</option></select><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span></div><p class="set-help">Used when you click a file:line in an event.</p></div>
+    </section>
+
     <div id="setMac"></div>
 
     <section class="set-group">
@@ -630,12 +684,8 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
       <div class="set-row"><label for="s-keep_days">Keep events for</label><div class="set-ctl"><input type="number" id="s-keep_days" data-key="keep_days" min="0" max="3650" step="1"><span>days</span></div><p class="set-help">Older ones are deleted every 10 minutes. 0 keeps everything.</p></div>
       <div class="set-row"><label for="s-max_events">Keep at most</label><div class="set-ctl"><input type="number" id="s-max_events" data-key="max_events" min="0" step="1000"><span>events</span></div><p class="set-help">The oldest go first. 0 means no limit. 100,000 events take a few hundred MB at most.</p></div>
       <div class="set-row"><label for="s-max_db_bytes">Database size at most</label><div class="set-ctl"><input type="number" id="s-max_db_bytes" data-key="max_db_bytes" data-scale="1048576" min="0" step="50"><span>MB</span></div><p class="set-help">Checked every 10 seconds; the oldest events go first. 0 means no limit.</p></div>
-      <div class="set-actions"><button class="btn" data-act="data-prune">Clean up now</button><button class="btn danger" data-act="data-clear">Delete all events…</button></div>
-    </section>
-
-    <section class="set-group">
-      <h2>Editor</h2>
-      <div class="set-row"><label for="s-editor">Open files in</label><div class="set-ctl"><select id="s-editor" data-key="editor"></select></div><p class="set-help">Used when you click a file:line in an event.</p></div>
+      <div class="set-actions"><button class="btn" data-act="data-prune">Clean up now</button><span class="set-help">Applies the limits above right away.</span></div>
+      <div class="set-danger"><div><b>Delete all events</b><p class="set-help">Every event of every project. This cannot be undone.</p></div><button class="btn danger" data-act="data-clear">Delete all events…</button></div>
     </section>
 
     <section class="set-group">
@@ -665,10 +715,10 @@ iframe.html { width: 100%; min-height: 120px; border: 1px solid var(--line); bor
 <div class="docs sheet" id="agents" role="dialog" aria-modal="true" aria-labelledby="agTitle" hidden>
   <div class="sheet-body">
     <div class="sheet-head"><h1 id="agTitle">Agents</h1><button class="link" data-act="agents-close">Close <kbd>esc</kbd></button></div>
-    <p class="sheet-lead">What coding agents did with Glint: who connected, which tools they called, and how soon a failure reached them. Recorded on this machine only and kept as long as events. <code>glint stats</code> prints the same.</p>
-    <div class="ag-ctl"><label>Last <select id="agDays"><option value="1">day</option><option value="7" selected>7 days</option><option value="30">30 days</option></select></label>
-      <label>in <select id="agProj"><option value="">every project</option></select></label>
-      <label>read in time means within <select id="agWithin"><option>5</option><option selected>10</option><option>30</option><option>60</option></select> min</label></div>
+    <p class="sheet-lead">What coding agents did with Glint: which agents connected, what they asked for, and how soon they read a failure. Recorded on this machine only and kept as long as events. <code>glint stats</code> prints the same.</p>
+    <div class="ag-ctl"><label>Show <span class="sel"><select id="agDays"><option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option></select><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span></label>
+      <label>in <span class="sel"><select id="agProj"><option value="">every project</option></select><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span></label>
+      <label>A failure counts as read in time within <span class="sel"><select id="agWithin"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="30">30 min</option><option value="60">60 min</option></select><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span></label></div>
     <div id="agBody">…</div>
   </div>
 </div>
@@ -966,7 +1016,7 @@ export default { plugins: [glint()] };</code></pre>
 <tr><td><kbd>⌘K</kbd></td><td>jump to a run, project or action; it also finds what events say, in every project, and opens a match in its run</td></tr>
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
-<tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
+<tr><td><kbd>/</kbd></td><td>search this run, this project or every project (the menu in the search field): words, <code>kind:sql</code>, <code>level:warn</code>. Words also match inside values: opening a match unfolds the value to it. A big value has a path field: type <code>orders[3].sku</code> to go there</td></tr>
 <tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events (the arrow keys do too), between runs</td></tr>
 <tr><td><kbd>o</kbd>, <kbd>⌘C</kbd></td><td>open the focused event's file in your editor; copy the event as text</td></tr>
 <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>fold or unfold what happened inside the focused event</td></tr>
@@ -1329,7 +1379,122 @@ function jfill(j) {
   const got = LAZY.get(z); inn.removeAttribute("data-z"); if (got) inn.innerHTML = jkids(got.v, got.d, true);
 }
 function tree(v) {
-  return `<div class="tree">${jnode(v, 0, jsonLen(v) > BIG_JSON)}</div>`;
+  const big = jsonLen(v) > BIG_JSON, z = lazy(v), eg = big ? samplePath(v) : "";
+  const bar = big && !isPrim(v) ? `<div class="jpath"><svg class="i" aria-hidden="true"><use href="#i-jump"/></svg><input type="text" spellcheck="false" autocomplete="off" data-jpath aria-label="Go to a path in this value" placeholder="Go to a path${eg ? ", as in " + esc(eg) : ""}"><span class="jmsg" role="status"></span></div>` : "";
+  return `${bar}<div class="tree" data-z="${z}">${jnode(v, 0, big)}</div>`;
+}
+/* ---------------- search inside values ----------------
+   In-run search also looks inside payloads (a SKU deep in a 1 MB export). Opening a row that
+   matched inside its value unfolds the tree down to the first match and marks it; the path bar of
+   a big value does the same for a typed path such as orders[1700].sku. */
+const SX = new WeakMap();
+function payloadText(e) { // lowercased JSON of the payload, kept per event version
+  const v = e._v || 0, c = SX.get(e); if (c && c.v === v) return c.t;
+  let t = ""; try { t = JSON.stringify(e.payload ?? null).toLowerCase(); } catch {}
+  SX.set(e, { v, t }); return t;
+}
+const pathText = p => p.map((k, i) => typeof k === "number" ? `[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? (i ? "." : "") + k : `[${JSON.stringify(k)}]`).join("");
+function parsePath(t) {
+  t = String(t).trim().replace(/^\$\.?/, ""); const out = [], re = /\[\s*(\d+)\s*\]|\[\s*"((?:[^"\\]|\\.)*)"\s*\]|\[\s*'([^']*)'\s*\]|([^.[\]]+)/g; let m;
+  while ((m = re.exec(t))) out.push(m[1] !== undefined ? +m[1] : m[2] !== undefined ? JSON.parse(`"${m[2]}"`) : m[3] !== undefined ? m[3] : m[4].trim());
+  return out;
+}
+// A path to show as an example: the first branch down to a scalar.
+function samplePath(v) {
+  const p = []; let x = v;
+  for (let d = 0; d < 4 && x && typeof x === "object"; d++) {
+    const ks = Object.keys(x); if (!ks.length) break;
+    const k = Array.isArray(x) ? 0 : ks.find(k => x[k] && typeof x[k] === "object") ?? ks[0];
+    p.push(Array.isArray(x) ? Math.min(3, ks.length - 1) : k); x = x[Array.isArray(x) ? Math.min(3, ks.length - 1) : k];
+  }
+  return p.length > 1 ? pathText(p) : "";
+}
+// The first key or scalar, depth first in display order, whose text contains needle.
+function findPath(v, needle) {
+  const stack = [[v, [], false]]; let n = 0;
+  while (stack.length && n++ < 400000) {
+    const [x, p, keyHit] = stack.pop();
+    if (keyHit) return p;
+    if (x === null || typeof x !== "object") { if (p.length && String(x).toLowerCase().includes(needle)) return p; continue; }
+    const arr = Array.isArray(x), ks = Object.keys(x);
+    for (let i = ks.length - 1; i >= 0; i--) {
+      const kp = [...p, arr ? i : ks[i]];
+      stack.push([x[ks[i]], kp, false]);
+      if (!arr && ks[i].toLowerCase().includes(needle)) stack.push([null, kp, true]);
+    }
+  }
+  return null;
+}
+function jopen(j) {
+  if (!j.classList.contains("shut")) return;
+  j.classList.remove("shut"); jfill(j); j.querySelector(":scope > .jt")?.setAttribute("aria-expanded", "true");
+}
+/* Unfolds the drawn tree along path (keys or indexes) and returns the line of its last step, or
+   null when the value has no such path. Draws more items of a long list when the step is past
+   the drawn ones. */
+function jreveal(treeEl, root, path) {
+  let v = root, node = treeEl.firstElementChild, line = null;
+  for (const seg of path) {
+    if (v === null || typeof v !== "object" || !node?.classList.contains("j")) return null;
+    const ks = Object.keys(v), idx = Array.isArray(v) ? (/^\d+$/.test(String(seg)) ? +seg : -1) : ks.indexOf(String(seg));
+    if (idx < 0 || idx >= ks.length) return null;
+    jopen(node);
+    const inn = node.querySelector(":scope > .in");
+    const lines = () => [...inn.children].filter(x => !x.querySelector(':scope > [data-act="jmore"]'));
+    let got = lines();
+    while (got.length <= idx) {
+      const more = inn.querySelector(':scope > .jl > [data-act="jmore"]'), z = more && LAZY.get(more.dataset.z);
+      if (!z) return null;
+      more.parentElement.outerHTML = jkids(z.v, z.d, z.big, z.from); got = lines();
+    }
+    line = got[idx]; v = v[ks[idx]]; node = line.querySelector(":scope > .j");
+  }
+  return line;
+}
+function jmark(treeEl, line, needle) {
+  treeEl.querySelectorAll(".jhit").forEach(x => x.classList.remove("jhit"));
+  treeEl.querySelectorAll("mark").forEach(m => m.replaceWith(m.textContent));
+  if (!line) return;
+  line.classList.add("jhit");
+  if (!needle) return;
+  const more = line.querySelector(':scope > [data-act="jstr"]');
+  const has = () => [...line.querySelectorAll(":scope > .k, :scope > .s, :scope > .n")].find(x => x.textContent.toLowerCase().includes(needle));
+  if (!has() && more) more.click(); // the match is past the start of a long string
+  const el = has(); if (!el) return;
+  const t = el.textContent, i = t.toLowerCase().indexOf(needle);
+  el.innerHTML = esc(t.slice(0, i)) + `<mark>${esc(t.slice(i, i + needle.length))}</mark>` + esc(t.slice(i + needle.length));
+}
+function jshow(line) {
+  const r = line?.getBoundingClientRect();
+  if (r && (r.top < 60 || r.bottom > innerHeight - 40)) scrollBy(0, r.top - innerHeight / 2); // vertical only: a long line must not scroll the page sideways
+}
+let pendingReveal = null; // { id, run, q }: a search hit opened in its run shows where it matched, while that run is shown
+const freeWords = q => String(q || "").trim().toLowerCase().split(/\s+/).filter(w => w && !/^(kind|level):/.test(w));
+function revealInPanes() {
+  const runQ = S.scope === "run" ? S.q : "";
+  document.querySelectorAll("#entries .entry.open .pane .tree[data-z]").forEach(t => {
+    const id = t.closest(".entry")?.dataset.id, fromHit = pendingReveal?.id === id && pendingReveal.run === S.run, q = fromHit ? pendingReveal.q : runQ;
+    if (t.dataset.rq === q) return; t.dataset.rq = q;
+    const words = freeWords(q).sort((a, b) => b.length - a.length), root = LAZY.get(t.dataset.z);
+    const bar = t.previousElementSibling?.classList.contains("jpath") ? t.previousElementSibling : null;
+    if (bar?.querySelector(".jmsg").textContent === "first match") { bar.querySelector(".jmsg").textContent = ""; bar.querySelector("input").value = ""; }
+    if (!words.length || root === undefined) return jmark(t, null);
+    let path = null, needle = "";
+    for (const w of words) { path = findPath(root, w); if (path) { needle = w; break; } }
+    if (!path) return jmark(t, null);
+    const line = jreveal(t, root, path); jmark(t, line, needle);
+    if (bar && line) { bar.querySelector("input").value = pathText(path); bar.querySelector(".jmsg").textContent = "first match"; bar.querySelector(".jmsg").classList.remove("err"); }
+    if (fromHit) jshow(line);
+  });
+}
+function goPath(input) {
+  const bar = input.closest(".jpath"), t = bar.nextElementSibling, msg = bar.querySelector(".jmsg"), root = LAZY.get(t?.dataset.z);
+  const path = parsePath(input.value);
+  msg.classList.remove("err");
+  if (!path.length || root === undefined) { msg.textContent = ""; return jmark(t, null); }
+  const line = jreveal(t, root, path);
+  if (!line) { msg.textContent = `No ${pathText(path)} here`; msg.classList.add("err"); return; }
+  jmark(t, line); msg.textContent = ""; jshow(line);
 }
 
 /* ---------------- expanded panes ---------------- */
@@ -1542,7 +1707,7 @@ function matches(e, tokens) {
     if (key === "kind") return e.kind.includes(val);
     if (key === "level") return LEVELS[Math.max(0, levelOf(e))].startsWith(val) || rowLevel(e).startsWith(val);
     const s = summary(e);
-    return [s.tag, s.lead, s.body, loc(e), e.meta?.note].join(" ").toLowerCase().includes(val);
+    return [s.tag, s.lead, s.body, loc(e), e.meta?.note].join(" ").toLowerCase().includes(val) || payloadText(e).includes(val);
   });
 }
 /* The list is drawn row by row: each row keeps its element while what it shows is unchanged (its
@@ -1697,6 +1862,8 @@ function placeQa(li) {
   QA.innerHTML = `<button data-qa="copy" tabindex="-1" aria-label="Copy as text" title="Copy (⌘C)"><svg class="i"><use href="#i-copy"/></svg></button>${isAbs(e.origin?.file) ? `<button data-act="open" tabindex="-1" data-id="${esc(e.id)}" aria-label="Open ${esc(l)} in editor" title="Open in ${esc(EDITORS[S.editor] || "editor")} (o)"><svg class="i"><use href="#i-open"/></svg></button>` : ""}`;
   li.querySelector(":scope > .row").after(QA);
 }
+$("entries").addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-jpath]")) { ev.preventDefault(); goPath(ev.target); } });
+$("entries").addEventListener("input", ev => { if (ev.target.matches("[data-jpath]") && !ev.target.value.trim()) goPath(ev.target); });
 ["mouseover", "focusin"].forEach(t => $("entries").addEventListener(t, ev => { if (!QA.contains(ev.target)) placeQa(ev.target.closest(".entry")); }));
 /* "Showing the newest N of M events": what the run holds beyond what is drawn (more loaded rows
    than ROWS) or beyond what was fetched (more stored than EVENTS_PAGE). */
@@ -1852,6 +2019,7 @@ function draw() {
   // not for every event of another run.
   const key = JSON.stringify([S.run, S.ver, S.entries.length, S.q, S.rowCap, [...S.open], [...S.collapsed], S.full.size, [...S.tableRows], S.loadingEarlier, S.moreEvents, S.pauses.map(p => p.id), S.editor, S.loaded, S.switchSlow, S.scope, S.hits && [S.hits.key, S.hits.loading, S.hits.events.length], S.reads.size, S.runInfo.size]);
   if (key !== listKey || !$("entries").children.length) { listKey = key; entries(); }
+  revealInPanes();
   chrome();
 }
 let listKey = "";
@@ -2025,7 +2193,7 @@ async function showFailure(which) {
   return openEvent(f);
 }
 /* Opens an event where it happened: its project, its run, its row unfolded and in view. */
-async function openEvent(e) {
+async function openEvent(e, q) {
   if (!e) return;
   closeSearch(true);
   if (e.project && e.project !== S.project) await goProject(e.project, e.run);
@@ -2036,7 +2204,7 @@ async function openEvent(e) {
   for (let i = 0; !holderOf() && S.moreEvents && i < 4; i++) await loadEarlier();
   const holder = holderOf() || e.id, at = S.entries.findIndex(x => x.id === holder);
   if (at >= 0) S.rowCap = Math.max(S.rowCap, S.entries.length - at);
-  S.open.add(holder); pickFail(); draw();
+  S.open.add(holder); pendingReveal = q ? { id: holder, run: S.run, q } : null; pickFail(); draw();
   const li = document.querySelector(`#entries [data-id="${CSS.escape(holder)}"]`);
   li?.scrollIntoView({ block: "center", behavior: motionOK ? "smooth" : "auto" }); li?.querySelector(".row").focus({ preventScroll: true });
 }
@@ -2094,7 +2262,7 @@ function setScope(sc) {
   $("q").setAttribute("aria-label", SCOPES[S.scope]);
   searchHits(); render();
 }
-function openSearch(sc) { document.body.classList.add("searching"); if (sc) setScope(sc); else setScope(S.scope); $("q").focus(); }
+function openSearch(sc) { pendingReveal = null; document.body.classList.add("searching"); if (sc) setScope(sc); else setScope(S.scope); $("q").focus(); }
 function closeSearch(quiet) { document.body.classList.remove("searching"); S.q = ""; S.hits = null; $("q").value = ""; if (!quiet) render(); }
 
 document.addEventListener("click", ev => {
@@ -2108,6 +2276,7 @@ document.addEventListener("click", ev => {
   if (act === "show") return showFailure(b.dataset.again ? S.seen : null);
   if (act === "goto-pause") { const pz = S.pauses.find(p => p.id === b.dataset.id); if (!pz) return; return pz.project !== S.project ? goProject(pz.project, pz.run) : goRun(pz.run); }
   if (act === "scope") return openSearch(b.dataset.scope);
+  if (act === "search-open") return openSearch();
   if (act === "continue") return answer(b.dataset.id, "continue");
   if (act === "stop") return answer(b.dataset.id, "stop");
   if (act === "copyexc") return copyException(b.dataset.id);
@@ -2143,7 +2312,7 @@ document.addEventListener("click", ev => {
   if (act === "jstr") { const v = LAZY.get(b.dataset.z); if (v != null) { b.previousElementSibling.textContent = '"' + v; b.remove(); } return; }
   if (b.hasAttribute("data-cc")) { const c = b.parentElement.cloneNode(true); c.querySelector(".cc").remove(); copy(c.textContent.trim()); return toast("Command copied"); }
   if (b.dataset.qa === "copy") return copyRow(b.closest(".entry").dataset.id);
-  if (b.classList.contains("row") && b.closest(".hit")) return openEvent(S.hitsById?.get(b.closest(".hit").dataset.hit));
+  if (b.classList.contains("row") && b.closest(".hit")) return openEvent(S.hitsById?.get(b.closest(".hit").dataset.hit), S.q);
   if (b.classList.contains("row")) {
     const id = b.closest(".entry").dataset.id; if (!S.byId.has(id)) return;
     S.open.has(id) ? S.open.delete(id) : S.open.add(id); draw();
@@ -2276,43 +2445,87 @@ async function openAgents() {
   $("agDays").focus();
 }
 function closeAgents() { if ($("agents").hidden) return; $("agents").hidden = true; restoreFocus("agents", "agentsBtn"); }
+/* Plain sentences with their sample sizes: "1 failure, read by Claude Code after 3 min", never a
+   percentage of one. Counts link to the events behind them. */
+const failBtn = (f, text, cls = "ag-open") => `<button class="${cls}" data-act="ag-open" data-id="${esc(f.id)}" data-run="${esc(f.run || "")}" data-agent="${esc(f.read_by || "")}">${text}</button>`;
+function agReads(g, within) {
+  const l = g.failed || [], who = [...new Set(l.filter(f => f.read_by).map(f => agentName(f.read_by)))].join(" and ") || "an agent";
+  if (!g.failures) return `<p class="ag-line">No failures while an agent was working here.</p>`;
+  if (g.failures === 1 && l.length === 1) {
+    const f = l[0];
+    const read = f.read_by ? `read by ${esc(agentName(f.read_by))} ${f.read_s <= within * 60 ? `within ${within} min` : "later"} (after ${secs(f.read_s)})` : "not read by an agent yet";
+    return `<p class="ag-line">${failBtn(f, "1 failure")}, ${read}.${f.told ? " Glint also listed it with a prompt." : ""}</p>`;
+  }
+  const head = l.length ? failBtn(l[l.length - 1], plural(g.failures, "failure")) : `<b>${plural(g.failures, "failure")}</b>`;
+  const read = g.read ? `${g.read} read by ${esc(who)}, ${g.read_in_time} of them within ${within} min${g.read >= 3 && g.median_read_s != null ? ` (half within ${secs(g.median_read_s)})` : ""}` : "none read by an agent yet";
+  const told = g.told ? ` Glint listed ${g.told} of them with a prompt.` : "";
+  const chips = l.slice(-6).reverse().map(f => failBtn(f, `<b>${clock(f.ts).slice(0, 5)}</b> ${f.read_by ? `read after ${secs(f.read_s)}` : "not read"}`, "ag-fail")).join("");
+  return `<p class="ag-line">${head}: ${read}.${told}${chips ? `<span class="ag-fails">${chips}</span>` : ""}</p>`;
+}
 function agGroup(g, within) {
-  const agents = Object.entries(g.agents).map(([n, u]) => `<b>${esc(agentName(n))}</b> ${[plural(u.sessions, "session"), u.calls ? plural(u.calls, "call") : "", u.hooks ? plural(u.hooks, "hook") : ""].filter(Boolean).join(", ")}`).join(" · ");
+  const agents = Object.entries(g.agents).map(([n, u]) => `<b>${esc(agentName(n))}</b> ${[plural(u.sessions, "session"), u.calls ? plural(u.calls, "tool call") : "", u.hooks ? plural(u.hooks, "prompt hook") : ""].filter(Boolean).join(", ")}`).join(" · ");
   const tools = Object.entries(g.tools).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<span class="ag-tool">${esc(t.replace(/^glint_/, ""))}<i>${n}</i></span>`).join("");
-  const calls = g.calls ? `<p class="ag-line"><b>${plural(g.calls, "tool call")}</b>${g.call_errors ? `, ${g.call_errors} answered with an error` : ""}${g.calls_with_failures ? `, ${g.calls_with_failures} showed a failure` : ""}<span class="ag-tools">${tools}</span></p>` : `<p class="ag-line">No tool calls.</p>`;
-  const hooks = g.hook_context + g.stop_guard ? `<p class="ag-line">Hooks gave context <b>${g.hook_context}</b> ${g.hook_context === 1 ? "time" : "times"} and listed ${plural(g.hook_failures, "failure")}${g.stop_guard ? `. The stop guard sent it back <b>${g.stop_guard}</b> ${g.stop_guard === 1 ? "time" : "times"}: fixed ${g.stop_fixed}, explained ${g.stop_explained}` : ""}.</p>` : "";
-  const fails = g.failures ? `<p class="ag-line"><b>${plural(g.failures, "failure")}</b> while an agent was around: ${g.read} read by an agent, ${g.read_in_time} within ${within} min${g.median_read_s != null ? `, median ${secs(g.median_read_s)} after it happened` : ""}. A hook told it about ${g.told}.</p>` : `<p class="ag-line">No failures while an agent was around.</p>`;
-  return `<p class="ag-line" style="border-top:0">${agents || "No agent"}</p>${calls}${hooks}${fails}`;
+  const calls = g.calls ? `<p class="ag-line"><b>${plural(g.calls, "tool call")}</b>${g.call_errors ? `, ${g.call_errors} answered with an error` : ""}${g.calls_with_failures ? `, ${g.calls_with_failures} returned a failure` : ""}<span class="ag-tools">${tools}</span></p>` : `<p class="ag-line">No tool calls.</p>`;
+  const hooks = g.hook_context + g.stop_guard ? `<p class="ag-line">Glint added what failed to <b>${plural(g.hook_context, "prompt")}</b>${g.hook_failures ? `, ${plural(g.hook_failures, "failure")} in all` : ""}${g.stop_guard ? `. It sent the agent back <b>${g.stop_guard === 1 ? "once" : g.stop_guard + " times"}</b> when it tried to finish with failures: ${g.stop_fixed} fixed, ${g.stop_explained} explained` : ""}.</p>` : "";
+  return `<p class="ag-line" style="border-top:0">${agents || "No agent"}</p>${calls}${hooks}${agReads(g, within)}`;
 }
 async function drawAgents() {
-  const days = $("agDays").value, proj = $("agProj").value, within = $("agWithin").value;
+  const days = $("agDays").value, proj = $("agProj").value, within = +$("agWithin").value;
   let st;
   try { st = await api(`/v1/agents/stats?days=${days}&within_min=${within}${proj ? "&project=" + encodeURIComponent(proj) : ""}`); }
   catch (err) { $("agBody").innerHTML = `<p class="set-help">Could not load: ${esc(err.message)}</p>`; return; }
-  if (!st.groups.length) { $("agBody").innerHTML = `<section class="set-group"><p class="set-help" style="padding-bottom:10px">No coding agent has used Glint in this period. Once one connects over MCP or its hooks run, its calls show up here.</p></section>`; return; }
-  const t = st.totals, pct = (a, b) => b ? Math.round(a / b * 100) + "%" : "n/a";
+  if (!st.groups.length) {
+    const when = $("agDays").selectedOptions[0].textContent.toLowerCase();
+    $("agBody").innerHTML = `<section class="set-group ag-empty"><p>No coding agent used Glint ${proj ? `in ${esc(proj)} ` : ""}in the ${esc(when)}.</p>${proj
+      ? `<button class="btn" data-act="ag-all">Show every project</button>`
+      : `<button class="btn" data-act="docs" data-hash="#d-agents">Connect a coding agent</button>`}</section>`;
+    return;
+  }
+  const t = st.totals, nAgents = Object.keys(t.agents).length;
+  const timeVal = t.read ? secs(t.median_read_s ?? 0) : "none";
+  const timeLbl = !t.read ? "failures read by an agent" : t.read === 1 ? "to read the one failure it read" : t.read < 3 ? `median of ${t.read} reads` : "median time to read a failure";
   const nums = [
-    [t.calls, "tool calls"],
-    [Object.keys(t.agents).length, Object.keys(t.agents).length === 1 ? "agent" : "agents"],
-    [pct(t.read_in_time, t.failures), `of failures read within ${within} min`],
-    [t.median_read_s != null ? secs(t.median_read_s) : "n/a", "median time to read a failure"],
+    [t.calls.toLocaleString("en-US"), t.calls === 1 ? "tool call" : "tool calls"],
+    [nAgents, nAgents === 1 ? "agent" : "agents"],
+    [t.failures ? `${t.read_in_time} of ${t.failures}` : "0", t.failures ? `${t.failures === 1 ? "failure" : "failures"} read within ${within} min` : "failures while agents worked"],
+    [timeVal, timeLbl],
   ];
   let html = `<section class="set-group"><div class="ag-nums">${nums.map(([v, l]) => `<div class="ag-num"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>${agGroup(t, within)}</section>`;
   let day = "";
   st.groups.forEach(g => {
-    if (g.day !== day) { day = g.day; html += `<h2 class="ag-day">${esc(new Date(day + "T12:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }))}</h2>`; }
+    // The UI is in English, so dates are too, whatever the system's language.
+    if (g.day !== day) { day = g.day; html += `<h2 class="ag-day">${esc(new Date(day + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }))}</h2>`; }
     html += `<section class="set-group"><h3>${esc(g.project || "no project")}</h3>${agGroup(g, within)}</section>`;
   });
   $("agBody").innerHTML = html;
 }
+/* A count opens the failure in its run; with the rows' "read by" view (openReadBy), the run opens
+   showing what that agent read. */
+async function agOpen(b) {
+  const { id, run, agent } = b.dataset;
+  closeAgents();
+  if (agent && run && typeof openReadBy === "function") return openReadBy(run, agent);
+  try { return await openEvent(await api(`/v1/events/${encodeURIComponent(id)}`)); }
+  catch { if (run) return goRun(run); }
+}
+$("agBody").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.act === "ag-open") { ev.stopPropagation(); agOpen(b); }
+  if (b.dataset.act === "ag-all") { ev.stopPropagation(); $("agProj").value = ""; drawAgents(); }
+});
 ["agDays", "agProj", "agWithin"].forEach(id => $(id).addEventListener("change", drawAgents));
 
 /* ---------------- settings ---------------- */
 let setInfo = null, setTimer = null;
 async function openSettings() {
   rememberOpener("settings"); const d = $("settings"); d.hidden = false;
-  try { setInfo = await api("/v1/settings"); } catch (err) { $("setData").textContent = `Settings are not available: ${err.message}`; return; }
-  drawSettings(); d.querySelector("[data-key]")?.focus();
+  // Until glintd answers, the controls show "Loading…" and take no input: a blank field read as empty.
+  const body = d.querySelector(".sheet-body"), busy = !setInfo;
+  if (busy) { body.classList.add("set-loading"); body.setAttribute("aria-busy", "true"); $("setLoading").hidden = false; $("setLoading").textContent = "Loading settings…"; d.querySelectorAll("[data-key]").forEach(el => { el.disabled = true; }); }
+  d.querySelector(".sheet-head .link")?.focus();
+  try { setInfo = await api("/v1/settings"); } catch (err) { $("setLoading").hidden = false; $("setLoading").textContent = `Settings are not available: ${err.message}`; $("setData").textContent = ""; body.removeAttribute("aria-busy"); return; }
+  body.classList.remove("set-loading"); body.removeAttribute("aria-busy"); $("setLoading").hidden = true;
+  drawSettings(); if (busy || !d.contains(document.activeElement) || document.activeElement.matches(".sheet-head .link")) d.querySelector("[data-key]:not(:disabled)")?.focus();
   drawSetMac(); if (!S.setup || S.setup.error) loadSetup().then(drawSetMac);
 }
 function drawSetMac() { const el = $("setMac"); if (el && !$("settings").hidden) el.innerHTML = setupCard(true); }
@@ -2427,19 +2640,19 @@ $("docs").addEventListener("click", ev => {
 let pSel = 0, pItems = [];
 function commands() {
   const c = [];
-  if (S.fail && !S.ack.has(S.fail.id)) c.push({ g: "Needs you", label: `Show the failure in ${runTitle(S.fail.run)}`, hint: "E", ico: "x", run: showFailure });
+  if (S.fail && !S.ack.has(S.fail.id)) c.push({ g: "Needs you", label: `Show the failure in ${runTitle(S.fail.run)}`, key: "e", word: "show", ico: "x", run: showFailure });
   S.pauses.forEach((p, i) => {
-    c.push({ g: "Needs you", label: `Continue ${runTitle(p.run)}`, hint: i === 0 ? "C" : "", ico: "play", run: () => answer(p.id, "continue") });
+    c.push({ g: "Needs you", label: `Continue ${runTitle(p.run)}`, ...(i === 0 ? { key: "c", word: "continue" } : {}), ico: "play", run: () => answer(p.id, "continue") });
     c.push({ g: "Needs you", label: `Stop ${runTitle(p.run)}`, ico: "pause", run: () => answer(p.id, "stop") });
   });
   S.runs.slice(0, 30).forEach(r => c.push({ g: "Runs", label: runTitle(r.run) + (runTitle(r.run) !== r.run ? ` (${r.run})` : ""), hint: rel(r.last), ico: "run", run: () => goRun(r.run) }));
   S.projects.filter(p => p !== S.project).forEach(p => c.push({ g: "Projects", label: `Switch to ${p}`, ico: "run", run: () => goProject(p) }));
-  c.push({ g: "Actions", label: "Search this run", hint: "/", ico: "search", run: () => openSearch("run") });
+  c.push({ g: "Actions", label: "Search this run", key: "/", word: "search", ico: "search", run: () => openSearch("run") });
   if (S.project) c.push({ g: "Actions", label: `Search all of ${S.project}`, ico: "search", run: () => openSearch("project") });
   c.push({ g: "Actions", label: "Search every project", ico: "search", run: () => openSearch("all") });
-  c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", hint: "?", ico: "run", run: () => openDocs() });
-  c.push({ g: "Actions", label: "Settings: data, editor, agents", hint: ",", ico: "run", run: () => openSettings() });
-  c.push({ g: "Actions", label: "Agents: what coding agents did with Glint", hint: "G", ico: "run", run: () => openAgents() });
+  c.push({ g: "Actions", label: "Docs: how Glint works, commands, languages", key: "?", word: "docs", ico: "run", run: () => openDocs() });
+  c.push({ g: "Actions", label: "Settings: editor, stored events, agents", key: ",", word: "settings", ico: "run", run: () => openSettings() });
+  c.push({ g: "Actions", label: "Agents: what coding agents did with Glint", key: "g", word: "agents", ico: "run", run: () => openAgents() });
   c.push({ g: "Actions", label: "Set up this Mac: glint() in PHP, Python, Node and coding agents", ico: "run", run: () => runSetup() });
   c.push({ g: "Actions", label: "Show me an example run", ico: "run", run: () => sendSample() });
   if (S.fail) c.push({ g: "Actions", label: "Copy the last failure for your agent", ico: "copy", run: () => copyException(S.fail.id) });
@@ -2459,7 +2672,7 @@ function paletteHits(q) {
     }).catch(() => { pHits = { q, events: [] }; }).finally(() => { if ($("palette").classList.contains("open") && $("pq").value.trim().toLowerCase() === q) drawPalette(); }), 160);
     return [{ g: "Events", label: "Searching what events say…", ico: "search", wait: true }];
   }
-  return pHits.events.map(e => { const s = summary(e); return { g: "Events", label: clip([s.tag, s.lead, s.body].filter(Boolean).join(" "), 90), hint: runTitle(e.run) + (e.project !== S.project ? " · " + e.project : ""), ico: "search", run: () => openEvent(e) }; });
+  return pHits.events.map(e => { const s = summary(e); return { g: "Events", label: clip([s.tag, s.lead, s.body].filter(Boolean).join(" "), 90), hint: runTitle(e.run) + (e.project !== S.project ? " · " + e.project : ""), ico: "search", run: () => openEvent(e, q) }; });
 }
 function drawPalette() {
   const q = $("pq").value.trim().toLowerCase();
@@ -2468,7 +2681,9 @@ function drawPalette() {
   let g = "", html = "";
   pItems.forEach((c, i) => {
     if (c.g !== g) { g = c.g; html += `<li class="grp" role="presentation">${esc(g)}</li>`; }
-    html += `<li role="option" id="po${i}" data-i="${i}" aria-selected="${i === pSel}"><svg class="i"><use href="#i-${c.ico}"/></svg>${esc(c.label)}${c.hint ? `<span class="hint">${esc(c.hint)}</span>` : ""}</li>`;
+    // A shortcut reads like the key strip: the key, then what it does.
+    const hint = c.key ? `<span class="hint" aria-hidden="true"><kbd>${esc(c.key)}</kbd>${esc(c.word)}</span>` : c.hint ? `<span class="hint">${esc(c.hint)}</span>` : "";
+    html += `<li role="option" id="po${i}" data-i="${i}" aria-selected="${i === pSel}"${c.key ? ` aria-keyshortcuts="${c.key === "/" ? "Slash" : esc(c.key)}"` : ""}><svg class="i" aria-hidden="true"><use href="#i-${c.ico}"/></svg>${esc(c.label)}${hint}</li>`;
   });
   $("plist").innerHTML = html || `<li class="none">No run, action or event matches.</li>`;
   $("pq").setAttribute("aria-activedescendant", "po" + pSel);
