@@ -189,10 +189,10 @@ Each of these needs `X-Glint: 1` (§1).
 | `POST /v1/open?event=&frame=&editor=` | opens that place in the editor (vscode, cursor, windsurf, zed, phpstorm, idea, webstorm, pycharm, sublime; default `GLINT_EDITOR`, else the first installed) |
 | `POST /v1/expect` | `{expect: [..], ordered?, no_errors?, project?, run?, after?, lookback_s?, timeout_s?}` returns `{pass, steps: [{expect, met, matched, needed, events}], failure?, events_seen, report}`. It waits until decided or timeout (syntax: `crates/glint-core/src/expect.rs`). |
 | `GET /v1/editors` | editors found on this machine, the default first |
-| `GET /v1/events?run=&kind=&level=&q=&since=&limit=` | query |
+| `GET /v1/events?run=&kind=&level=&q=&since=&limit=` | query; `q` is full text over the kind, label, source file and every distinct key, string and number in the payload (the first 256 KB of that text) |
 | `GET /v1/events/<id>` | one envelope |
 | `GET /v1/stream?filter=` (WebSocket) | live envelopes |
-| `GET /v1/agents/stats?days=7&project=&within_min=10` | what coding agents did with Glint (`glint-core/src/agents.rs`): `{since, within_min, totals, groups: [{day, project, agents: {name: {sessions, calls, hooks}}, tools: {tool: n}, calls, call_errors, calls_with_failures, result_bytes, hook_context, hook_failures, stop_guard, stop_fixed, stop_explained, failures, read, read_in_time, told, median_read_s?}]}` |
+| `GET /v1/agents/stats?days=7&project=&within_min=10` | what coding agents did with Glint (`glint-core/src/agents.rs`): `{since, within_min, totals, groups: [{day, project, agents: {name: {sessions, calls, hooks}}, tools: {tool: n}, calls, call_errors, calls_with_failures, result_bytes, hook_context, hook_failures, stop_guard, stop_fixed, stop_explained, failures, read, read_in_time, told, median_read_s?, failed?: [{id, run, ts, read_by?, read_s?, told}]}]}` (`failed` lists the newest 20 failures behind `failures`, so a view can link the count to them) |
 | `GET /v1/agents/reads?run=` | which events of a run agents saw: `{reads: [{event, agent, ts, via}]}`, `via` is `mcp` (asked) or `hook` (told) |
 | `POST /v1/agents/activity` | `glint hook` reports what it told the agent: `{agent, session?, project?, action: hook.context \| hook.stop_guard \| hook.stop_outcome, events?: [ids], detail?}` |
 

@@ -110,7 +110,29 @@ pub struct Failure {
     pub id: String,
     pub ts: DateTime<Utc>,
     pub project: String,
+    #[serde(default)]
+    pub run: String,
 }
+
+/// One failure in a [`Group`], so a view can link a count to the events behind it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FailureSeen {
+    pub id: String,
+    pub run: String,
+    pub ts: DateTime<Utc>,
+    /// The agent that read it first over MCP, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_by: Option<String>,
+    /// Seconds from the failure to that first read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_s: Option<f64>,
+    /// A hook listed it to an agent.
+    #[serde(default)]
+    pub told: bool,
+}
+
+/// At most this many [`FailureSeen`] per group (the newest).
+pub const FAILURES_LISTED: usize = 20;
 
 /// An agent saw this event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -168,6 +190,9 @@ pub struct Group {
     /// Median seconds from a failure to an agent first reading it over MCP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub median_read_s: Option<f64>,
+    /// The failures counted in `failures`, newest last, at most [`FAILURES_LISTED`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failed: Vec<FailureSeen>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -184,12 +209,19 @@ pub fn stats(activity: &[Activity], failures: &[Failure], since: Option<DateTime
     let wanted = |p: &str| project.is_none_or(|w| w == p);
 
     // First MCP read and first hook mention of each event, per agent-agnostic event id.
-    let mut first_read: HashMap<&str, DateTime<Utc>> = HashMap::new();
+    let mut first_read: HashMap<&str, (DateTime<Utc>, &str)> = HashMap::new();
     let mut told: BTreeSet<&str> = BTreeSet::new();
     for a in activity {
         for id in &a.events {
             if a.action == MCP_CALL {
-                first_read.entry(id).and_modify(|t| *t = (*t).min(a.ts)).or_insert(a.ts);
+                first_read
+                    .entry(id)
+                    .and_modify(|t| {
+                        if a.ts < t.0 {
+                            *t = (a.ts, &a.agent);
+                        }
+                    })
+                    .or_insert((a.ts, &a.agent));
             } else if a.action == HOOK_CONTEXT || a.action == HOOK_STOP_GUARD {
                 told.insert(id);
             }
@@ -248,15 +280,20 @@ pub fn stats(activity: &[Activity], failures: &[Failure], since: Option<DateTime
     for f in failures {
         let Some(g) = groups.get_mut(&(day(&f.ts), f.project.clone())) else { continue };
         g.failures += 1;
-        g.told += u64::from(told.contains(f.id.as_str()));
-        if let Some(t) = first_read.get(f.id.as_str()) {
+        let was_told = told.contains(f.id.as_str());
+        g.told += u64::from(was_told);
+        let mut seen = FailureSeen { id: f.id.clone(), run: f.run.clone(), ts: f.ts, read_by: None, read_s: None, told: was_told };
+        if let Some((t, agent)) = first_read.get(f.id.as_str()) {
             g.read += 1;
             let d = (*t - f.ts).max(chrono::Duration::zero());
             g.read_in_time += u64::from(d <= within);
             let s = d.num_milliseconds() as f64 / 1000.0;
             delays.entry((day(&f.ts), f.project.clone())).or_default().push(s);
             all_delays.push(s);
+            seen.read_by = Some((*agent).to_string());
+            seen.read_s = Some(s);
         }
+        g.failed.push(seen);
     }
     for (k, mut v) in delays {
         if let Some(g) = groups.get_mut(&k) {
@@ -288,12 +325,20 @@ pub fn stats(activity: &[Activity], failures: &[Failure], since: Option<DateTime
         totals.read += g.read;
         totals.read_in_time += g.read_in_time;
         totals.told += g.told;
+        totals.failed.extend(g.failed.iter().cloned());
     }
     totals.median_read_s = median(&mut all_delays);
+    let newest = |l: &mut Vec<FailureSeen>| {
+        l.sort_by_key(|f| f.ts);
+        let extra = l.len().saturating_sub(FAILURES_LISTED);
+        l.drain(..extra);
+    };
+    newest(&mut totals.failed);
 
     let mut list: Vec<Group> = groups
         .into_iter()
         .map(|((d, p), mut g)| {
+            newest(&mut g.failed);
             g.day = Some(d);
             g.project = Some(p);
             g
@@ -447,10 +492,10 @@ mod tests {
             call(31, "glint_runs", &[], None),
         ];
         let fails = vec![
-            Failure { id: "F1".into(), ts: at(0), project: "shop".into() },
-            Failure { id: "F2".into(), ts: at(5), project: "shop".into() },
-            Failure { id: "F3".into(), ts: at(6), project: "shop".into() },
-            Failure { id: "B1".into(), ts: at(6), project: "blog".into() },
+            Failure { id: "F1".into(), ts: at(0), project: "shop".into(), run: "r1".into() },
+            Failure { id: "F2".into(), ts: at(5), project: "shop".into(), run: "r1".into() },
+            Failure { id: "F3".into(), ts: at(6), project: "shop".into(), run: "r1".into() },
+            Failure { id: "B1".into(), ts: at(6), project: "blog".into(), run: "r1".into() },
         ];
         let st = stats(&act, &fails, None, 10, None);
         let t = &st.totals;
@@ -463,6 +508,9 @@ mod tests {
         assert_eq!(t.agents["claude-code"].sessions, 1, "one session across projects");
         assert!(st.groups.iter().all(|g| g.agents["claude-code"].sessions == 1));
         assert_eq!(st.groups.len(), 2);
+        let ids: Vec<_> = t.failed.iter().map(|f| (f.id.as_str(), f.read_by.as_deref(), f.told)).collect();
+        assert_eq!(ids, [("F1", Some("claude-code"), true), ("F2", Some("claude-code"), false), ("F3", None, false)]);
+        assert_eq!(t.failed[0].read_s, Some(180.0));
         let text = render(&st);
         assert!(text.contains("Claude Code"), "{text}");
         assert!(text.contains("read by an agent 2 (1 within 10 min)"), "{text}");

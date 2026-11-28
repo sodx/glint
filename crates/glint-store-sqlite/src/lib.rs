@@ -61,8 +61,9 @@ CREATE INDEX IF NOT EXISTS agent_reads_activity ON agent_reads (activity);
 const FAILURE: &str = "e.level >= 4 AND e.kind NOT IN ('core.update', 'ctl.resume')
     AND COALESCE(json_extract(e.body, '$.origin.lang'), '') <> 'agent'";
 
-/// Most text indexed per event.
-const FTS_TEXT_MAX: usize = 64 * 1024;
+/// Most text indexed per event. Each distinct key and string is indexed once, so a big value of
+/// repeated records (a 1 MB export of 2,000 orders) fits with every distinct value in it.
+const FTS_TEXT_MAX: usize = 256 * 1024;
 
 pub struct SqliteStore {
     writer: Mutex<Connection>,
@@ -531,7 +532,7 @@ impl Store for SqliteStore {
         let since = since.to_rfc3339_opts(SecondsFormat::Micros, true);
         self.read(|conn| {
             let mut st = conn
-                .prepare_cached(&format!("SELECT e.id, e.ts, e.project FROM events e WHERE e.ts >= ?1 AND {FAILURE} ORDER BY e.seq"))
+                .prepare_cached(&format!("SELECT e.id, e.ts, e.project, e.run FROM events e WHERE e.ts >= ?1 AND {FAILURE} ORDER BY e.seq"))
                 .map_err(backend)?;
             let rows = st
                 .query_map([&since], |r| {
@@ -540,6 +541,7 @@ impl Store for SqliteStore {
                         id: r.get(0)?,
                         ts: DateTime::parse_from_rfc3339(&ts).map(|t| t.with_timezone(&Utc)).unwrap_or_default(),
                         project: r.get(2)?,
+                        run: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
                     })
                 })
                 .map_err(backend)?;
@@ -618,7 +620,7 @@ fn searchable_text(e: &Envelope) -> String {
         out.push(' ');
         out.push_str(s);
     }
-    collect_strings(&e.payload, &mut out);
+    collect_strings(&e.payload, &mut out, &mut std::collections::HashSet::new());
     if out.len() > FTS_TEXT_MAX {
         let mut cut = FTS_TEXT_MAX;
         while !out.is_char_boundary(cut) {
@@ -629,24 +631,26 @@ fn searchable_text(e: &Envelope) -> String {
     out
 }
 
-fn collect_strings(v: &Value, out: &mut String) {
+fn collect_strings<'a>(v: &'a Value, out: &mut String, seen: &mut std::collections::HashSet<&'a str>) {
     if out.len() > FTS_TEXT_MAX {
         return;
     }
-    match v {
-        Value::String(s) => {
+    fn push<'a>(s: &'a str, out: &mut String, seen: &mut std::collections::HashSet<&'a str>) {
+        if seen.insert(s) {
             out.push(' ');
             out.push_str(s);
         }
+    }
+    match v {
+        Value::String(s) => push(s, out, seen),
         Value::Number(n) => {
             out.push(' ');
             out.push_str(&n.to_string());
         }
-        Value::Array(items) => items.iter().for_each(|i| collect_strings(i, out)),
+        Value::Array(items) => items.iter().for_each(|i| collect_strings(i, out, seen)),
         Value::Object(map) => map.iter().for_each(|(k, v)| {
-            out.push(' ');
-            out.push_str(k);
-            collect_strings(v, out);
+            push(k, out, seen);
+            collect_strings(v, out, seen);
         }),
         Value::Bool(_) | Value::Null => {}
     }
@@ -734,6 +738,19 @@ mod tests {
         assert_eq!(kinds(&s.query(&q(r#"{"q":"undefined func"}"#)).unwrap()), ["core.exception"]);
         // FTS5 syntax characters must not cause errors.
         assert!(s.query(&q(r#"{"q":"\"AND( * NEAR"}"#)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_finds_a_value_deep_in_a_big_payload() {
+        // About 1 MB of repeated records: keys repeat, values differ. The last record's SKU sits
+        // far past the first 64 KB of the payload's text.
+        let orders: Vec<_> = (0..2000)
+            .map(|i| serde_json::json!({ "id": i, "sku": format!("SKU-{i:05}"), "customer": { "name": format!("Customer {i}"), "note": "x".repeat(400) } }))
+            .collect();
+        let batch = serde_json::json!([{ "kind": "core.value", "payload": { "value": { "orders": orders } } }]).to_string();
+        let s = SqliteStore::open_in_memory().unwrap();
+        s.insert(&events(&batch)).unwrap();
+        assert_eq!(s.query(&q(r#"{"q":"SKU-01999"}"#)).unwrap().len(), 1);
     }
 
     #[test]
