@@ -9,7 +9,7 @@ which editor files open in, and whether agents hear about failures. It saves to
 `~/.glint/config.toml`, which you can also edit by hand; an environment variable of the same name
 wins over both.
 
-When something does not work, **Send diagnostics** in Settings (or `glint report`) writes one file
+When something does not work, **Save diagnostics report** in Settings (or `glint report`) writes one file
 to your Downloads folder with versions, what setup found, its log and glintd's log. Nothing is
 sent anywhere; you pass the file on yourself.
 

@@ -20,7 +20,7 @@ This build runs on Macs with Apple silicon (M1 or newer) and macOS 11 or later.
              python3 -c 'glint("hello from Python")'
              node -e 'glint("hello from Node")'
 
-6. Something not working? Click "Send diagnostics" in the Glint window (Settings > This Mac).
+6. Something not working? Click "Save diagnostics report" in the Glint window (Settings > This Mac).
    It saves a report to Downloads and shows it in Finder; send that file to whoever gave you
    Glint. Nothing is sent by itself.
 

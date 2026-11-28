@@ -198,13 +198,13 @@ pub fn definitions() -> Value {
         {
             "name": "glint_pauses",
             "title": "Paused programs",
-            "description": "Programs currently paused at a glint pause() call, waiting for someone to resume them.",
+            "description": "Programs currently paused at a glint pause() call, waiting for someone to continue them.",
             "inputSchema": { "type": "object", "properties": {} },
             "annotations": { "readOnlyHint": true }
         },
         {
             "name": "glint_resume",
-            "title": "Resume a paused program",
+            "title": "Continue a paused program",
             "description": "Let a paused program continue, optionally handing it a JSON value (SDKs return it from pause()), or ask it to stop.",
             "inputSchema": { "type": "object", "required": ["id"], "properties": {
                 "id": { "type": "string", "description": "Pause id from glint_pauses." },
@@ -539,7 +539,7 @@ fn pauses(hub: &Hub) -> String {
             x.run
         ));
     }
-    out.push_str("Resume with glint_resume id=<pause id> (optionally value=… or stop=true).\n");
+    out.push_str("Continue it with glint_resume id=<pause id> (optionally value=… or stop=true).\n");
     out
 }
 
@@ -556,8 +556,8 @@ async fn resume(hub: &Hub, a: ResumeArgs) -> Result<String, String> {
     let info = hub.resume(&a.id, r.clone(), "mcp").await.map_err(|e| e.to_string())?;
     Ok(match r {
         Resolution::Stop => format!("Asked {} to stop (run {}).", info.id, info.run),
-        Resolution::Continue { value: None } => format!("Resumed {} (run {}).", info.id, info.run),
-        Resolution::Continue { value: Some(v) } => format!("Resumed {} with value {} (run {}).", info.id, v, info.run),
+        Resolution::Continue { value: None } => format!("Continued {} (run {}).", info.id, info.run),
+        Resolution::Continue { value: Some(v) } => format!("Continued {} with value {} (run {}).", info.id, v, info.run),
     })
 }
 

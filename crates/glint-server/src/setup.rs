@@ -4,7 +4,7 @@
 //! checked and set up, the same as in their terminal. glintd itself often runs with a bare PATH
 //! (started at login, or by the desktop app).
 //!
-//! `POST /v1/report` ("Send diagnostics") runs `glint report` the same way (see `report`).
+//! `POST /v1/report` ("Save diagnostics report") runs `glint report` the same way (see `report`).
 //!
 //! Only this server's own pages and the CLI can call these: the guard wants Glint's origin or the
 //! `X-Glint` header. Each one starts shells, so they also take turns (one at a time, see
@@ -199,7 +199,7 @@ pub async fn install() -> Response {
     }
 }
 
-/// `POST /v1/report` → `{path, complete}`: "Send diagnostics" in the window. Runs `glint report` in
+/// `POST /v1/report` → `{path, complete}`: "Save diagnostics report" in the window. Runs `glint report` in
 /// the login shell; when the CLI cannot run (quarantine, a broken profile), writes what glintd can
 /// see itself, with the reason. Either way the file is in ~/Downloads and shown in Finder.
 pub async fn report() -> Response {

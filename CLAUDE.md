@@ -50,7 +50,7 @@ never run by tests).
 `scripts/clean-mac-check.sh` (CI: `.github/workflows/clean-mac.yml`) installs the DMG like a new
 tester (quarantine flag on), runs setup through glintd and checks PHP, Python, Node, Claude Code,
 agent detection, `glint report` and uninstall; locally it runs in a sandbox HOME on a spare port.
-"Send diagnostics" (`POST /v1/report`) and `glint report` share `glint-server::report`.
+"Save diagnostics report" (`POST /v1/report`) and `glint report` share `glint-server::report`.
 
 Framework integrations with no code, hooked in by the global shims: Laravel (`sdks/php/src/Laravel.php`,
 via an `env()` defined before Laravel's), Django, Flask, FastAPI, SQLAlchemy, requests and httpx

@@ -343,10 +343,13 @@ def sections():
     s.append(("d-start", "Start", f"""
 <h1>Glint shows what your programs did</h1>
 <p class="lead">Values, logs, SQL, exceptions, timings and LLM calls from PHP, Python, Node and the browser arrive here as they happen, grouped by project and run. Your coding agent reads the same events.</p>
-<h3>Install once</h3>
-{cmd("cargo build --release -p glintd -p glint-cli && target/release/glint install")}
+<h2>Install once</h2>
+<p>Open the Glint app and click <b>Set up this Mac</b> (on the first screen, or in Settings under This Mac). The same from a terminal:</p>
+{cmd("/Applications/Glint.app/Contents/Resources/bin/glint install")}
 <p>This starts <code>glintd</code> at login, makes <code>glint()</code> a global in every PHP, Python and Node program, reports their uncaught errors, and tells the coding agents it finds (Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex) about Glint. Open a new terminal, then check that everything answers:</p>
 {cmd("glint doctor")}
+<p>Building from source instead:</p>
+{cmd("cargo build --release -p glintd -p glint-cli && target/release/glint install")}
 <p class="aside">SDKs send nothing in production: when <code>APP_ENV</code> or <code>NODE_ENV</code> is <code>production</code>, or <code>GLINT_ENABLED=0</code>. Events never leave this machine.</p>
 """))
     s.append(("d-api", "Methods", """
@@ -578,7 +581,9 @@ export default { plugins: [glint()] };""", "js")}
 <tr><td><kbd>E</kbd>, <kbd>C</kbd></td><td>show the failure; continue a paused program</td></tr>
 <tr><td><kbd>G</kbd></td><td>what coding agents did with Glint</td></tr>
 <tr><td><kbd>/</kbd></td><td>search this run: words, <code>kind:sql</code>, <code>level:warn</code></td></tr>
-<tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events, between runs</td></tr>
+<tr><td><kbd>j</kbd> <kbd>k</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>move between events (the arrow keys do too), between runs</td></tr>
+<tr><td><kbd>o</kbd>, <kbd>⌘C</kbd></td><td>open the focused event's file in your editor; copy the event as text</td></tr>
+<tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>fold or unfold what happened inside the focused event</td></tr>
 <tr><td><kbd>?</kbd>, <kbd>,</kbd></td><td>these docs, Settings</td></tr>
 </table>
 <p>Click an event to open it: values as foldable JSON, the code around a failing line, the stack. Click a <code>file:line</code> to open it in your editor. In the desktop app, <kbd>⌥⌘G</kbd> shows and hides the window from anywhere, and the menu-bar spark turns red on a failure (its menu names the run and counts today's failures), amber when a program waits, and is struck through when glintd is not running. If glintd stops, this window says so, marks what it shows as out of date, and picks up again when glintd is back.</p>

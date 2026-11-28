@@ -1027,14 +1027,14 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
         Some(bin) => match (check(&bin, &[], PHP_CHECK), php_probe(&bin, &a.home)) {
             (_, Some(p)) if p.version_id < 80000 => skip("php", format!("PHP {} is older than 8.0, which Glint's PHP SDK needs", p.version)),
             (Some(true), _) => done("php", "glint() available without setup".into()),
-            _ => fail("php", "glint() not available: run `glint install --only php`".into()),
+            _ => fail("php", "not set up yet: run `glint install --only php`".into()),
         },
     });
     steps.push(match which("python3") {
         None => skip("python", "python3 not found".into()),
         Some(bin) => match check(&bin, PY_CHECK, "") {
             Some(true) => done("python", "glint() available without setup".into()),
-            _ => fail("python", "glint() not available: run `glint install --only python`".into()),
+            _ => fail("python", "not set up yet: run `glint install --only python`".into()),
         },
     });
     steps.push(match which("node") {
@@ -1046,7 +1046,7 @@ pub fn doctor(a: &Args, base_url: &str) -> Vec<Step> {
             } else {
                 match check(&bin, &["-e", "console.log(typeof glint === 'function' ? 'yes' : 'no')"], "") {
                     Some(true) => done("node", "glint() available without setup".into()),
-                    _ => fail("node", "glint() not available: run `glint install --only node`, then open a new shell".into()),
+                    _ => fail("node", "not set up yet: run `glint install --only node`, then open a new shell".into()),
                 }
             }
         }

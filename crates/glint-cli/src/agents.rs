@@ -464,7 +464,7 @@ pub fn doctor(a: &Args) -> Vec<Step> {
     vec![match (found.is_empty(), missing.is_empty()) {
         (true, true) => skip("agents", "no coding agent found; Glint works with Claude Code, Cursor, VS Code, Windsurf, Gemini CLI and Codex".into()),
         (_, true) => done("agents", format!("Glint's MCP server is set up in {}", found.join(", "))),
-        (_, false) => fail("agents", format!("not set up in {} — run `glint install --only agents`{}", missing.join(", "), if found.is_empty() { String::new() } else { format!(" (set up: {})", found.join(", ")) })),
+        (_, false) => fail("agents", format!("not set up in {}{}: run `glint install --only agents`", missing.join(", "), if found.is_empty() { String::new() } else { format!(" (set up: {})", found.join(", ")) })),
     }]
 }
 

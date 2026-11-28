@@ -79,9 +79,9 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
         Err(ureq::Error::Transport(_)) if event == "SessionStart" => {
             let text = format!(
                 "{}\nGlint is not running right now (nothing answers at {base}), so nothing is being recorded and the \
-                 glint_* MCP tools will fail. Start it: open the Glint app, or run `glintd` (`glint install --only service` \
+                 glint_* MCP tools will fail until it runs. Start it: open the Glint app, or run `glintd` (`glint install --only service` \
                  keeps it running at login). `glint doctor` checks the setup.",
-                intro(base, &project)
+                intro(base, &project, false)
             );
             return Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string());
         }
@@ -117,7 +117,7 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     let listed: Vec<(&Envelope, Option<String>)> = fails.iter().map(|e| (*e, None)).collect();
     let more = more_line(fails.len(), capped, &project, if event == "UserPromptSubmit" { last_seen.as_deref() } else { None });
     let text = if event == "SessionStart" {
-        let mut t = intro(base, &project);
+        let mut t = intro(base, &project, true);
         if !fails.is_empty() {
             t.push_str(&format!("\nRecent failures in {project} (last 24 h):\n{}{more}", list(&listed)));
         }
@@ -139,10 +139,13 @@ fn context(http: &ureq::Agent, base: &str, hook: &Value) -> Option<String> {
     Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string())
 }
 
-/// What a session learns at its start, whether or not Glint is running.
-fn intro(base: &str, project: &str) -> String {
+/// What a session learns at its start, whether or not Glint is running. Offline, it says what Glint
+/// records when it runs, so the next sentence (that it is not running) does not contradict it.
+fn intro(base: &str, project: &str, running: bool) -> String {
+    let records = if running { "is recording" } else { "records" };
+    let when = if running { "" } else { " while it runs" };
     format!(
-        "Glint (local debug desk, MCP server `glint`) is recording what programs in project `{project}` do: \
+        "Glint (local debug desk, MCP server `glint`) {records} what programs in project `{project}` do{when}: \
          values sent with glint(), logs, SQL, exceptions, timings, LLM calls. glint(value) works in PHP, Python \
          and Node without an import; prefer it over print/var_dump/console.log to inspect values, read them \
          back with glint_wait_for or glint_events, and remove those calls when done. Uncaught errors of \

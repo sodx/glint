@@ -132,7 +132,7 @@ delete `~/.glint` if you also want the stored events and settings gone.
 
 ## Sending diagnostics
 
-When something still does not work, click Send diagnostics in the Glint window (Settings > This
+When something still does not work, click Save diagnostics report in the Glint window (Settings > This
 Mac, or the first-run card when a step failed), or run `glint report` in Terminal. Glint writes
 one text file to your Downloads folder and shows it in Finder. Nothing is sent anywhere: send the
 file yourself to whoever helps you.
