@@ -2,8 +2,9 @@
 
     python3 app/icons/make.py      # writes app/icons/*.png and icon.icns (macOS iconutil)
 
-App icon: a graphite rounded square with the lime spark. Tray icons: 22 pt @2x — a black
-template spark (macOS tints it), and coloured ones for "failed" and "waiting".
+App icon: a graphite rounded square with the lime spark. Tray icons: 22 pt @2x: a black
+template spark (macOS tints it), coloured ones for "failed" and "waiting", and a struck-through
+template spark for "glintd is not running", so offline never looks like all quiet.
 """
 import math, os, shutil, struct, subprocess, sys, zlib
 
@@ -29,8 +30,14 @@ def rounded(size, r, x, y, pad):
     return pad <= x <= size - pad and pad <= y <= size - pad and (x - cx) ** 2 + (y - cy) ** 2 <= r * r
 
 
-def render(size, bg=None, fg=(0, 0, 0), spark_scale=1.0, ss=4):
-    """RGBA rows. bg: (r,g,b) rounded square or None; fg: spark colour."""
+def slash_dist(size, x, y):
+    """Distance from the top-left to bottom-right diagonal, in pixels."""
+    return abs(x - y) / math.sqrt(2) if 0.12 * size <= (x + y) / 2 <= 0.88 * size else 1e9
+
+
+def render(size, bg=None, fg=(0, 0, 0), spark_scale=1.0, ss=4, slash=0):
+    """RGBA rows. bg: (r,g,b) rounded square or None; fg: spark colour; slash: width of a
+    diagonal stroke through the spark (with a clear gap on both sides), 0 for none."""
     k = size / 24 * spark_scale
     off = size * (1 - spark_scale) / 2
     poly = [(off + px * k, off + py * k) for px, py in SPARK]
@@ -44,7 +51,8 @@ def render(size, bg=None, fg=(0, 0, 0), spark_scale=1.0, ss=4):
             for sy in range(ss):
                 for sx in range(ss):
                     x, y = i + (sx + 0.5) / ss, j + (sy + 0.5) / ss
-                    if inside(poly, x, y):
+                    d = slash_dist(size, x, y) if slash else 1e9
+                    if d <= slash / 2 or (inside(poly, x, y) and d > slash / 2 + slash * 0.8):
                         spark += 1
                     if bg and rounded(size, radius, x, y, pad):
                         square += 1
@@ -86,6 +94,7 @@ def main():
     png(os.path.join(HERE, "128x128@2x.png"), render(256, bg=GRAPHITE, fg=SPARK_LIME, spark_scale=0.5))
     for name, col in (("tray", (0, 0, 0)), ("tray-fail", FAIL), ("tray-wait", WAIT)):
         png(os.path.join(HERE, f"{name}.png"), render(44, fg=col, spark_scale=0.92))
+    png(os.path.join(HERE, "tray-offline.png"), render(44, spark_scale=0.92, slash=3.5))
 
     if sys.platform == "darwin" and shutil.which("iconutil"):
         iconset = os.path.join(HERE, "icon.iconset")
