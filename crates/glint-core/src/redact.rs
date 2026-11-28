@@ -7,8 +7,11 @@
 //!   at any depth of `payload`, `meta` and `origin`, including `{"name": "Cookie", "value": ...}`
 //!   pairs, `["Authorization", "..."]` pairs and SQL bindings whose column looks secret.
 //! - Shapes: well-known token shapes (Bearer, JWT, AWS, GitHub, Slack, Stripe, OpenAI/Anthropic,
-//!   Google, PEM private keys, `user:pass@` in URLs, `password=...` in text) are replaced inside
-//!   any string.
+//!   Google, PEM private keys, `user:pass@` in URLs, `password=...` / `session=...` / `sig=...` in
+//!   text, card numbers that pass the Luhn check) are replaced inside any string.
+//!
+//! Card keys (`card`, `cc`) hide only a value that looks like a card number: a Stripe `card`
+//! object (brand, last4) and an email's `cc` list stay.
 //!
 //! Not secret by design: counters and sizes (`token_count`, `max_tokens`, `password_length`),
 //! pagination cursors (`next_token`, `page_token`) and ids (`session_id`, `request_id`). Ids are
@@ -51,6 +54,8 @@ struct Rule {
     marker: &'static str,
     /// The match has a group `k` (a key name) that must look secret.
     check_key: bool,
+    /// The match is a card number only when its digits pass the Luhn check.
+    luhn: bool,
 }
 
 pub struct Redactor {
@@ -70,15 +75,27 @@ impl std::fmt::Debug for Redactor {
 }
 
 /// Key-name fragments that make a key secret wherever they appear in it.
-const CONTAINS: &[&str] = &["password", "passwd", "passphrase", "secret", "apikey", "authorization", "cookie", "privatekey", "accesskey", "credential"];
+const CONTAINS: &[&str] = &[
+    "password", "passwd", "passphrase", "secret", "apikey", "authorization", "cookie", "privatekey", "accesskey", "credential",
+    "cardnum", "ccnum", "csrf", "xsrf",
+];
 /// Fragments that make a key secret only at its end: `access_token` but not `token_count`.
 const SUFFIX: &[&str] = &["token", "dsn"];
 /// Whole names that are secret.
-const EXACT: &[&str] = &["pass", "pwd"];
+const EXACT: &[&str] = &["pass", "pwd", "otpcode", "pincode", "securitycode", "cardcode", "sessid", "phpsessid", "jsessionid"];
+/// Short names that are secret as the last word of a key (`user_pin`, `userPin`, `x-amz-signature`),
+/// but not inside one (`shipping`, `session_id`, `signature_method`).
+const LAST_WORD: &[&str] = &["pin", "otp", "ssn", "cvv", "cvv2", "cvc", "cvc2", "csc", "session", "sig", "signature"];
+/// Keys that hold a card number, or something else (`cc` of an email, a Stripe `card` object).
+const CARD_WORDS: &[&str] = &["card", "cc", "creditcard", "debitcard"];
 /// Endings that describe a secret rather than hold one: `password_length`, `token_type`.
 const NOT_SECRET_SUFFIX: &[&str] = &["count", "length", "len", "size", "ttl", "expires", "expiresat", "expiresin", "type", "policy", "required", "enabled"];
 /// Pagination cursors end in `token` but are not credentials.
 const NOT_SECRET: &[&str] = &["nexttoken", "pagetoken", "nextpagetoken", "continuationtoken", "cursortoken", "synctoken"];
+
+/// A card number: 13 to 19 digits with optional single spaces or dashes, starting like a card
+/// does (2 to 6; millisecond timestamps start with 1). Replaced only when the Luhn check passes.
+const CARD: &str = r"\b(?P<s>[2-6]\d{3}(?:[ \-]?\d){9,15})\b";
 
 /// Built-in shapes: (pattern, marker, check_key). Each has a group `s`, the part replaced.
 const SHAPES: &[(&str, &str, bool)] = &[
@@ -104,7 +121,10 @@ const SHAPES: &[(&str, &str, bool)] = &[
 
 /// `password=...`, `"api_key": "..."`, `token: ...` in text; the key alternation is filled in.
 const KEY_VALUE: &str = r#"(?i)(?P<k>[A-Za-z0-9_.\-]*(?:WORDS)[A-Za-z0-9_\-]*)["']?[ \t]*[:=][ \t]*["']?(?P<s>[^\s"'&,;(){}\[\]<>]+)"#;
-const KEY_WORDS: &[&str] = &["password", "passwd", "passphrase", "secret", r"api[_\-]?key", "token", r"private[_\-]?key", r"access[_\-]?key", "credential", "dsn", "pass", "pwd"];
+const KEY_WORDS: &[&str] = &[
+    "password", "passwd", "passphrase", "secret", r"api[_\-]?key", "token", r"private[_\-]?key", r"access[_\-]?key", "credential", "dsn", "pass", "pwd",
+    "session", "sessid", "csrf", "xsrf", "otp", "pin", "ssn", "cvv", "cvc", "sig", "signature",
+];
 
 static DEFAULT: LazyLock<Arc<Redactor>> = LazyLock::new(|| Arc::new(Redactor::new(&RedactConfig::default()).expect("built-in redaction patterns compile")));
 
@@ -112,10 +132,51 @@ fn norm(k: &str) -> String {
     k.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect()
 }
 
+/// The last word of a key: `user_pin` → `pin`, `userPin` → `pin`, `X-Amz-Signature` → `signature`.
+fn last_word(k: &str) -> String {
+    let mut start = 0;
+    let mut prev_lower = false;
+    for (i, c) in k.char_indices() {
+        if !c.is_ascii_alphanumeric() {
+            start = i + c.len_utf8();
+            prev_lower = false;
+            continue;
+        }
+        if c.is_ascii_uppercase() && prev_lower {
+            start = i;
+        }
+        prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+    }
+    k[start..].to_ascii_lowercase()
+}
+
+/// Whether `v` looks like a card number: a number or text of 12 to 19 digits, spaces and dashes.
+fn card_like(v: &Value) -> bool {
+    let text = match v {
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => s.clone(),
+        _ => return false,
+    };
+    let digits = text.chars().filter(char::is_ascii_digit).count();
+    (12..=19).contains(&digits) && text.chars().all(|c| c.is_ascii_digit() || c == ' ' || c == '-')
+}
+
+/// The Luhn check over the digits of `s`, 13 to 19 of them.
+fn luhn(s: &str) -> bool {
+    let digits: Vec<u32> = s.chars().filter_map(|c| c.to_digit(10)).collect();
+    if !(13..=19).contains(&digits.len()) {
+        return false;
+    }
+    let sum: u32 = digits.iter().rev().enumerate().map(|(i, &d)| if i % 2 == 1 { if d * 2 > 9 { d * 2 - 9 } else { d * 2 } } else { d }).sum();
+    sum.is_multiple_of(10)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Class {
     Plain,
     Secret,
+    /// Secret when the value looks like a card number.
+    Card,
     Allowed,
 }
 
@@ -139,15 +200,17 @@ impl Redactor {
         words.extend(cfg.keys.iter().map(|k| k.trim()).filter(|k| !k.is_empty()).map(regex::escape));
         let mut rules = Vec::new();
         for (p, marker, check_key) in SHAPES {
-            rules.push(Rule { re: Regex::new(p).map_err(|e| e.to_string())?, marker, check_key: *check_key });
+            rules.push(Rule { re: Regex::new(p).map_err(|e| e.to_string())?, marker, check_key: *check_key, luhn: false });
         }
-        rules.push(Rule { re: Regex::new(&KEY_VALUE.replace("WORDS", &words.join("|"))).map_err(|e| e.to_string())?, marker: MARKER, check_key: true });
+        rules.push(Rule { re: Regex::new(&KEY_VALUE.replace("WORDS", &words.join("|"))).map_err(|e| e.to_string())?, marker: MARKER, check_key: true, luhn: false });
+        rules.push(Rule { re: Regex::new(CARD).map_err(|e| e.to_string())?, marker: MARKER, check_key: false, luhn: true });
+        let built_in = rules.len();
         for p in cfg.patterns.iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
             let re = Regex::new(p).map_err(|e| format!("redact pattern `{p}`: {e}"))?;
-            rules.push(Rule { re, marker: MARKER, check_key: false });
+            rules.push(Rule { re, marker: MARKER, check_key: false, luhn: false });
         }
         let set = RegexSet::new(rules.iter().map(|r| r.re.as_str())).map_err(|e| e.to_string())?;
-        let min_len = if rules.len() > SHAPES.len() + 1 { 1 } else { 6 };
+        let min_len = if rules.len() > built_in { 1 } else { 6 };
         Ok(Self { enabled: cfg.enabled, keys, allow, set, rules, min_len })
     }
 
@@ -171,6 +234,13 @@ impl Redactor {
         }
         if EXACT.contains(&k.as_str()) || CONTAINS.iter().any(|c| k.contains(c)) || SUFFIX.iter().any(|s| k.ends_with(s)) {
             return Class::Secret;
+        }
+        let last = last_word(key);
+        if LAST_WORD.contains(&last.as_str()) {
+            return Class::Secret;
+        }
+        if CARD_WORDS.contains(&last.as_str()) || CARD_WORDS.contains(&k.as_str()) {
+            return Class::Card;
         }
         Class::Plain
     }
@@ -224,8 +294,9 @@ impl Redactor {
                 {
                     match self.class(&k) {
                         Class::Secret => return hide(&mut a[1], n, self, &k),
+                        Class::Card if card_like(&a[1]) => return hide(&mut a[1], n, self, &k),
                         Class::Allowed => return,
-                        Class::Plain => {}
+                        Class::Plain | Class::Card => {}
                     }
                 }
                 for x in a {
@@ -244,8 +315,10 @@ impl Redactor {
             match self.class(k) {
                 Class::Allowed => {}
                 Class::Secret => hide(v, n, self, k),
-                Class::Plain => match &named {
+                Class::Card if card_like(v) => hide(v, n, self, k),
+                Class::Plain | Class::Card => match &named {
                     Some((Class::Secret, name)) if k == "value" => hide(v, n, self, name),
+                    Some((Class::Card, name)) if k == "value" && card_like(v) => hide(v, n, self, name),
                     Some((Class::Allowed, _)) if k == "value" => {}
                     _ => self.walk(v, n),
                 },
@@ -268,7 +341,7 @@ impl Redactor {
             let out = rule.re.replace_all(s, |c: &Captures| {
                 let whole = c.get(0).map_or("", |m| m.as_str());
                 let Some(secret) = c.name("s").or_else(|| c.get(0)) else { return whole.to_owned() };
-                if secret.as_str().contains(MARKER) || (rule.check_key && !self.key_value_is_secret(c, secret.as_str())) {
+                if secret.as_str().contains(MARKER) || (rule.check_key && !self.key_value_is_secret(c, secret.as_str())) || (rule.luhn && !luhn(secret.as_str())) {
                     return whole.to_owned();
                 }
                 count += 1;
@@ -304,8 +377,9 @@ impl Redactor {
         let cols = placeholder_columns(sql);
         let Some(Value::Array(b)) = payload.get_mut("bindings") else { return };
         for (i, col) in cols {
-            if self.class(&col) == Class::Secret
-                && let Some(v) = b.get_mut(i)
+            let class = self.class(&col);
+            if let Some(v) = b.get_mut(i)
+                && (class == Class::Secret || (class == Class::Card && card_like(v)))
             {
                 hide(v, n, self, &col);
             }
@@ -460,6 +534,100 @@ mod tests {
         });
         let (w, n) = value(v.clone());
         assert_eq!((w, n), (v, 0));
+    }
+
+    #[test]
+    fn payment_identity_and_session_keys() {
+        // One case per key the audit named, written the ways programs write them.
+        for key in [
+            "card_number", "cardNumber", "cc_number", "ccnum", "cvv", "CVV2", "cvc", "card_cvc", "ssn", "user_ssn", "otp", "otp_code",
+            "pin", "userPin", "pin_code", "session", "user_session", "PHPSESSID", "csrf", "_csrf", "csrfmiddlewaretoken", "X-XSRF-TOKEN",
+            "xsrf", "sig", "signature", "X-Amz-Signature", "webhookSignature",
+        ] {
+            let (v, n) = value(json!({ key: "s3cr3t-value-1" }));
+            assert_eq!((v[key].as_str(), n), (Some(MARKER), 1), "{key}");
+        }
+    }
+
+    #[test]
+    fn card_keys_hide_card_numbers_only() {
+        let (v, n) = value(json!({
+            "card": "4111 1111 1111 1111", "cc": 4_000_056_655_665_556_u64, "credit_card": "5555-5555-5555-4444",
+            "payment": {"card": {"brand": "visa", "last4": "4242", "exp_month": 12}},
+            "mail": {"to": ["a@b.c"], "cc": ["boss@b.c"]}, "dashboard_card": "Sales"
+        }));
+        assert_eq!(v["card"], MARKER);
+        assert_eq!(v["cc"], MARKER);
+        assert_eq!(v["credit_card"], MARKER);
+        assert_eq!(v["payment"]["card"]["last4"], "4242");
+        assert_eq!(v["mail"]["cc"][0], "boss@b.c");
+        assert_eq!(v["dashboard_card"], "Sales");
+        assert_eq!(n, 3);
+        let (v, n) = value(json!({"headers": [["cc", "4111111111111111"]], "fields": [{"name": "card", "value": "4111111111111111"}]}));
+        assert_eq!((v["headers"][0][1].as_str(), v["fields"][0]["value"].as_str(), n), (Some(MARKER), Some(MARKER), 2));
+    }
+
+    #[test]
+    fn new_names_keep_their_lookalikes_visible() {
+        let v = json!({
+            "session_id": "s1", "sessionId": "s2", "session_count": 3, "pinned": true, "shipping": "express", "mapping": "a",
+            "pin_length": 4, "signature_method": "HMAC-SHA256", "csrf_enabled": true, "card_type": "visa", "card_count": 2,
+            "discard": "x", "opinion": "fine", "class_name": "Foo", "cardinality": 10, "otp_expires_in": 30, "token_count": 5
+        });
+        let (w, n) = value(v.clone());
+        assert_eq!((w, n), (v, 0));
+    }
+
+    #[test]
+    fn session_csrf_and_signatures_in_text() {
+        let cases = [
+            ("Cookie-less: session=abc123def456; path=/", "Cookie-less: session=[redacted]; path=/"),
+            ("PHPSESSID=9f8e7d6c5b4a", "PHPSESSID=[redacted]"),
+            ("csrf_token=Zx81kLq0 sent", "csrf_token=[redacted] sent"),
+            ("_csrf: \"a1b2c3d4\"", "_csrf: \"[redacted]\""),
+            ("GET /f.png?sv=2024&sig=AbC%2Fdef123&se=1", "GET /f.png?sv=2024&sig=[redacted]&se=1"),
+            ("X-Amz-Signature=deadbeefcafe0123", "X-Amz-Signature=[redacted]"),
+            ("otp: 492817", "otp: [redacted]"),
+            ("pin=1234 ok", "pin=[redacted] ok"),
+            ("ssn=078-05-1120", "ssn=[redacted]"),
+            ("cvv: 123", "cvv: [redacted]"),
+        ];
+        for (input, want) in cases {
+            assert_eq!(text(input).0, want, "{input}");
+        }
+        // Ids and placeholders stay.
+        for keep in ["session_id=abc123def456", "signature: required", "session: null", "spinning: 3 workers"] {
+            assert_eq!(text(keep), (keep.to_owned(), 0), "{keep}");
+        }
+    }
+
+    #[test]
+    fn card_numbers_in_text_pass_the_luhn_check() {
+        for (input, want) in [
+            ("paid with 4111 1111 1111 1111 today", "paid with [redacted] today"),
+            ("card=4242424242424242", "card=[redacted]"),
+            ("amex 3782-822463-10005", "amex [redacted]"),
+            ("{\"pan\":\"5555555555554444\"}", "{\"pan\":\"[redacted]\"}"),
+        ] {
+            assert_eq!(text(input).0, want, "{input}");
+        }
+        for keep in [
+            "4111111111111112",        // fails Luhn
+            "at 1732800000000 ms",     // a millisecond timestamp starts with 1
+            "order 42",                 // too short
+            "id 41111111111111111111",  // too long
+            "tel 2025550143",           // a phone number
+        ] {
+            assert_eq!(text(keep), (keep.to_owned(), 0), "{keep}");
+        }
+        assert!(luhn("4111111111111111") && !luhn("4111111111111112") && !luhn("4111"));
+    }
+
+    #[test]
+    fn card_bindings_in_sql() {
+        let mut payload = json!({"sql": "insert into payments (cc, cvv, note) values (?, ?, ?)", "bindings": ["4111111111111111", "123", "gift"]});
+        r().redact("sql.query", &mut payload, &mut Meta::default(), &mut Origin::default());
+        assert_eq!(payload["bindings"], json!([MARKER, MARKER, "gift"]));
     }
 
     #[test]

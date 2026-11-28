@@ -309,7 +309,7 @@ impl Settings {
              \n\
              # Secrets (passwords, tokens, keys) are replaced before events are stored.    GLINT_REDACT\n\
              redact = {}\n\
-             # More key names whose values are secret, e.g. [\"ssn\", \"pin\"].                GLINT_REDACT_KEYS\n\
+             # More key names whose values are secret, e.g. [\"tax_id\"].                       GLINT_REDACT_KEYS\n\
              redact_keys = {}\n\
              # More regular expressions; a group named s marks the part to hide.          GLINT_REDACT_PATTERNS\n\
              redact_patterns = {}\n\
