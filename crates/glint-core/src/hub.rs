@@ -166,6 +166,13 @@ impl Hub {
             .map_err(|e| StoreError::Backend(e.to_string()))?
     }
 
+    pub async fn projects(&self) -> Result<Vec<crate::ProjectSummary>, StoreError> {
+        let store = self.inner.store.clone();
+        tokio::task::spawn_blocking(move || store.projects())
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?
+    }
+
     /// Records agent activity. Never fails the caller: losing a statistic is fine.
     pub async fn record_activity(&self, activity: Vec<crate::agents::Activity>) {
         if activity.is_empty() {

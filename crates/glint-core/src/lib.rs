@@ -31,6 +31,11 @@ pub trait Store: Send + Sync + 'static {
     fn get(&self, id: &str) -> Result<Option<Envelope>, StoreError>;
     /// The most recently active runs, newest first.
     fn runs(&self, project: Option<&str>, limit: usize) -> Result<Vec<RunSummary>, StoreError>;
+    /// Every project with stored events, most recently active first. Stores that can't list them
+    /// cheaply return none, and callers fall back to the projects of recent runs.
+    fn projects(&self) -> Result<Vec<ProjectSummary>, StoreError> {
+        Ok(Vec::new())
+    }
 
     /// Records what agents did with Glint (see [`agents`]). Stores that don't keep it ignore it.
     fn record_activity(&self, _activity: &[agents::Activity]) -> Result<(), StoreError> {
@@ -68,6 +73,16 @@ pub struct RunSummary {
     /// The run's first log line (e.g. `GET /checkout/8`), when it starts with one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub head: Option<String>,
+}
+
+/// One project at a glance: how many runs it has, how many of them failed, when it was last active.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ProjectSummary {
+    pub project: String,
+    pub runs: u64,
+    /// Runs with at least one error.
+    pub failing: u64,
+    pub last: String,
 }
 
 #[derive(Debug, thiserror::Error)]

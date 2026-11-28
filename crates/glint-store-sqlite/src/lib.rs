@@ -9,7 +9,7 @@ use std::sync::Mutex;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use glint_core::agents::{Activity, EventRead, Failure};
-use glint_core::{Query, RunSummary, Store, StoreError};
+use glint_core::{ProjectSummary, Query, RunSummary, Store, StoreError};
 use glint_protocol::Envelope;
 use rusqlite::{Connection, OpenFlags, params_from_iter, types::Value as Sql};
 use serde_json::Value;
@@ -332,6 +332,32 @@ impl Store for SqliteStore {
         })
     }
 
+    fn projects(&self) -> Result<Vec<ProjectSummary>, StoreError> {
+        // A run belongs to one project, as in `runs`. Grouping by run walks the run index; grouping by
+        // (project, run) sorted every row and took ten times as long on 100,000 events.
+        let sql = "SELECT project, COUNT(*), SUM(errors), MAX(last)
+                   FROM (SELECT MAX(project) AS project, MAX(ts) AS last, MAX(level >= 4) AS errors
+                         FROM events
+                         WHERE kind NOT IN ('core.update', 'ctl.resume')
+                         GROUP BY run)
+                   GROUP BY project
+                   ORDER BY MAX(last) DESC";
+        self.read(|conn| {
+            let mut stmt = conn.prepare_cached(sql).map_err(backend)?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok(ProjectSummary {
+                        project: r.get(0)?,
+                        runs: r.get::<_, i64>(1)?.try_into().unwrap_or(0),
+                        failing: r.get::<_, Option<i64>>(2)?.unwrap_or(0).try_into().unwrap_or(0),
+                        last: r.get(3)?,
+                    })
+                })
+                .map_err(backend)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(backend)
+        })
+    }
+
     fn record_activity(&self, activity: &[Activity]) -> Result<(), StoreError> {
         let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
         let tx = conn.transaction().map_err(backend)?;
@@ -635,6 +661,13 @@ mod tests {
         assert_eq!(s.runs(Some("shop"), 10).unwrap().len(), 1);
         let all = s.query(&Query::default()).unwrap();
         assert_eq!(runs[0].last_id, all[2].id);
+    }
+
+    #[test]
+    fn projects_list_every_project_newest_first() {
+        let s = sample();
+        let p = s.projects().unwrap();
+        assert_eq!(p.iter().map(|x| (x.project.as_str(), x.runs, x.failing)).collect::<Vec<_>>(), [("blog", 1, 1), ("shop", 1, 0)]);
     }
 
     #[test]
